@@ -2,7 +2,7 @@
 */
 
 # But keep this folder
-!Kmaps/
+!kmap_algorithm/
 
 # And keep its contents
-!Kmaps/*
+!kmap_algorithm/*
