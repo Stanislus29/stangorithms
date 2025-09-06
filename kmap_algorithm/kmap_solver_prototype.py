@@ -1,3 +1,5 @@
+#Initial protype of the framework
+
 # Define your K-map (replace with your own map if needed)
 kmap = [
     [0, 0, 0, 0],

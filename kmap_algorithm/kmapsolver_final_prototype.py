@@ -1,5 +1,5 @@
 # ------------------------------
-# Flexible K-map solver prototype
+# Flexible K-map solver prototype (final prototype)
 # Supports: 2, 3, and 4 variables
 # Handles don't-care conditions (d)
 # ------------------------------
