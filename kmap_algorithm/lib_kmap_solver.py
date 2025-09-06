@@ -1,4 +1,4 @@
-# kmap_solver.py
+# kmap_solver.py, library to easily solve 2-4 variable kmaps
 from collections import defaultdict
 
 class KMapSolver:
