@@ -1,0 +1,8 @@
+# Ignore everything
+*/
+
+# But keep this folder
+!Kmaps/
+
+# And keep its contents
+!Kmaps/*
