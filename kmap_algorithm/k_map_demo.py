@@ -1,5 +1,7 @@
 #Demo program using the library "lib_kmap_solver.py"
 
+#Author: Somtochukwu Stanislus Emeka-Onwuneme 
+
 from lib_kmap_solver import KMapSolver
 
 # Example: 3-variable K-map with don't cares

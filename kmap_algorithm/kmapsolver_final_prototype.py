@@ -2,6 +2,9 @@
 # Flexible K-map solver prototype (final prototype)
 # Supports: 2, 3, and 4 variables
 # Handles don't-care conditions (d)
+
+#Author: Somtochukwu Stanisulus Emeka-Onwuneme
+#Publication Date: 8th September, 2025
 # ------------------------------
 
 # --- USER SETUP --- #
@@ -26,10 +29,10 @@ elif num_vars == 4:
     col_labels = ["00", "01", "11", "10"]  # x1x2 (Gray-coded)
     # Define your K-map (replace with your own map if needed)
     kmap = [
-        [0, 1, 'd', 0],
-        [0, 1, 'd', 0],
-        [0, 0, 'd', 0],
-        [1, 1, 'd', 1]
+        [0, 0, 0, 0],
+        [0, 0, 1, 1],
+        [1, 0, 0, 1],
+        [1, 0, 0, 1]
     ]
 else:
     raise ValueError("Only 2, 3, or 4 variables are supported.")
@@ -222,7 +225,7 @@ for idx, cover in enumerate(prime_covers):
     # minterms covered by one prime implicant.
     # prime_covers = [
     # [0,1,2,3],   # prime implicant (idx) 0 covers minterms 0–3
-    # [4,6],       # prime implicant 1 covers minterms 4 and 6
+    # [2,4,6],       # prime implicant 1 covers minterms 4 and 6
     # [5,7]        # prime implicant 2 covers minterms 5 and 7
     # ]
     for m in cover:

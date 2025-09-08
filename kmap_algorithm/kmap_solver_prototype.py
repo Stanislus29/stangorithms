@@ -1,6 +1,9 @@
 #Initial protype of the framework
 
 # Define your K-map (replace with your own map if needed)
+
+#Author: Somtochukwu Stanislus Emeka-Onwuneme 
+#Publication Date: 8th September, 2025
 kmap = [
     [0, 0, 0, 0],
     [0, 0, 1, 1],
