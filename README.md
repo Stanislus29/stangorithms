@@ -10,3 +10,6 @@ The repo contains frameworks for automating solving process in various domains;
 - Digital Electronics
 - Neural Networks
 - Embedded Systems
+
+---
+Copyright © 2025 Somtochukwu Stanislus Emeka-Onwuneme
