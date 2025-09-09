@@ -1,8 +1,12 @@
-<p align="center">
-  <img src="kmap_algorithm/images/St_logo.png" alt="logo" width="300"/>
-</p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="kmap_algorithm\images\St_logo_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="kmap_algorithm\images\St_logo_light.png">
+  
+  <img alt="Project logo" src="kmap_algorithm\images\St_logo_light.png">
 
-<h1 align="center">STANGORITHMS</h1>
+  <h1 align="center">STANGORITHMS</h1>
+
+</picture>
 
 
 ```stangorithms``` is a repository which contains algorithmic implementations of mathematical processes used in electronics engineering and computer science. The repo was created to provide students 
