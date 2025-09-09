@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kmap_algorithm_4var"
+version = "0.1.2"
+authors = [
+  { name="Somtochukwu Stanislus Emeka-Onwuneme", email="somtochukwueo@outlook.com" }
+]
+description = "A Python package for solving Karnaugh maps up to 4 variables"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+
+[tool.setuptools.packages.find]
+where = ["."]
