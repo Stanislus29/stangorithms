@@ -5,7 +5,7 @@
     <img alt="Project logo" src="kmap_algorithm/images/St_logo_light.png" width="300">
   </picture>
 
-  <h1>STANGORITHMS</h1>
+  <h1 style="margin-top: 0;">STANGORITHMS</h1>
 </div>
 
 
