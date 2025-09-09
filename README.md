@@ -2,10 +2,10 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="kmap_algorithm/images/St_logo_dark.png">
     <source media="(prefers-color-scheme: light)" srcset="kmap_algorithm/images/St_logo_light.png">
-    <img alt="Project logo" src="kmap_algorithm/images/St_logo_light.png" width="300">
+    <img alt="Stan's technologies" src="kmap_algorithm/images/St_logo_light.png" width="400">
   </picture>
 
-  <h1 style="margin-top: 0;">STANGORITHMS</h1>
+  <h1>STANGORITHMS</h1>
 </div>
 
 
