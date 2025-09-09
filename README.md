@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/St_logo.png" alt="logo" width="300"/>
+  <img src="images/kmap_algorithm\images\St_logo.png" alt="logo" width="300"/>
 </p>
 
 <h1 align="center">STANGORITHMS</h1>
