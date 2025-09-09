@@ -3,6 +3,8 @@
 
 # But keep this folder
 !kmap_algorithm/
+# But keep README.md
+!README.md
 
 # And keep its contents
 !kmap_algorithm/*
