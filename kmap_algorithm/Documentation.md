@@ -2,7 +2,7 @@
 
 Author: Somtochukwu Stanislus Emeka-Onwuneme
 
-Date: 5th August, 2025
+Publication Date: 8th August, 2025
 
 ---
 
@@ -110,34 +110,34 @@ The SOP (sum-of-products) expression is obtained by considering the minterms i.e
 e.g if m16 (minterm 16) = 1, the inputs x1,x2....xN nominally equate to 1. However, if any of the variables in the bitstring does not equate to one, it is represented as a complement.
 
 **Example**
-The function \( f(x_1, x_2, x_3) \) is defined by the following truth table:  
+The function $( f(x_1, x_2, x_3) $) is defined by the following truth table:  
 
-| Row | \(x_1\) | \(x_2\) | \(x_3\) | \(f\) | Minterm       |
+| Row | $(x_1$) | $(x_2$) | $(x_3$) | $(f$) | Minterm       |
 |-----|---------|---------|---------|-------|---------------|
 | 0   | 0       | 0       | 0       | 0     | –             |
-| 1   | 0       | 0       | 1       | 1     | \(m_1 = x_1'x_2'x_3\) |
+| 1   | 0       | 0       | 1       | 1     | $(m_1 = x_1'x_2'x_3$) |
 | 2   | 0       | 1       | 0       | 0     | –             |
 | 3   | 0       | 1       | 1       | 0     | –             |
-| 4   | 1       | 0       | 0       | 1     | \(m_4 = x_1x_2'x_3'\) |
-| 5   | 1       | 0       | 1       | 1     | \(m_5 = x_1x_2'x_3\)  |
-| 6   | 1       | 1       | 0       | 1     | \(m_6 = x_1x_2x_3'\)  |
+| 4   | 1       | 0       | 0       | 1     | $(m_4 = x_1x_2'x_3'$) |
+| 5   | 1       | 0       | 1       | 1     | $(m_5 = x_1x_2'x_3$)  |
+| 6   | 1       | 1       | 0       | 1     | $(m_6 = x_1x_2x_3'$)  |
 | 7   | 1       | 1       | 1       | 0     | –             |
 
 ---
 
 **Step 1: Canonical SOP** 
 
-Collect all rows where \( f = 1 \):  
+Collect all rows where $( f = 1 $):  
 
-\[
+$[
 f(x_1, x_2, x_3) = m_1 + m_4 + m_5 + m_6
-\]  
+$]  
 
 Substitute the minterms:  
 
-\[
+$[
 f(x_1, x_2, x_3) = x_1'x_2'x_3 + x_1x_2'x_3' + x_1x_2'x_3 + x_1x_2x_3'
-\]  
+$]  
 
 ---
 
@@ -145,25 +145,25 @@ f(x_1, x_2, x_3) = x_1'x_2'x_3 + x_1x_2'x_3' + x_1x_2'x_3 + x_1x_2x_3'
 
 Factor and reduce using boolean properties:  
 
-\[
+$[
 f = (x_1' + x_1)x_2'x_3 + x_1(x_2' + x_2)x_3'
-\]  
+$]  
 
-\[
+$[
 f = (1)x_2'x_3 + x_1(1)x_3'
-\]  
+$]  
 
-\[
+$[
 f = x_2'x_3 + x_1x_3'
-\]  
+$]  
 
 ---
 
 The final minimal SOP is:  
 
-\[
+$[
 f(x_1, x_2, x_3) = x_2'x_3 + x_1x_3'
-\]  
+$]  
 
 ---
 
@@ -206,9 +206,9 @@ The rules for clustering are:
 
 **Clusters formed:**
 
-1. **Cluster A:** (m₄, m₅) → \(x_1x_2'\)  
-2. **Cluster B:** (m₄, m₆) → \(x_1x_3'\)  
-3. **Cluster C:** (m₁, m₅) → \(x_2'x_3\)  
+1. **Cluster A:** (m₄, m₅) → $(x_1x_2'$)  
+2. **Cluster B:** (m₄, m₆) → $(x_1x_3'$) 
+3. **Cluster C:** (m₁, m₅) → $(x_2'x_3$)  
 
 ---
 
@@ -216,9 +216,9 @@ The rules for clustering are:
 
 Now we combine all clusters:
 
-\[
+$[
 f(x_1,x_2,x_3) = x_1x_2' + x_1x_3' + x_2'x_3
-\]
+$]
 
 ---
 
@@ -274,9 +274,9 @@ This reduces the number of product terms significantly.
 
 **Step 3: Resulting SOP**
 The simplified expression (for this example) would look like:
-f(x1​,x2​,x3​,x4​)=x2​+x3​x4′​
+$[f(x_1​,x_2​,x_3​,x4​)=x_2​ + x_3​x_4′$]​
 
-Thus, don;t cares allow us to merge more cells. leading to smaller and cheaper logic implementations. 
+Thus, don't cares allow us to merge more cells. leading to smaller and cheaper logic implementations. 
 
 ## 3. Methodology
 
@@ -1006,4 +1006,4 @@ The algorithm implemented above produced accurate results upon testing, and the 
 4. R. Rudell, Espresso Logic Minimizer.https://www2.eecs.berkeley.edu/Pubs/TechRpts/1987/CSD-87-290.pdf 
 
 ---
-© Stanislus Emeka-Onwuneme 2025
+Copyright © 2025 Somtochukwu Stanislus Emeka-Onwuneme

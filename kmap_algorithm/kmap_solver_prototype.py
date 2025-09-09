@@ -1,9 +1,11 @@
-#Initial protype of the framework
+"""Initial prototype of the framework for automating the solving of kmaps"""
+
+# Author: Somtochukwu Stanislus Emeka-Onwuneme 
+# Publication Date: 8th September, 2025
+# Copyright © 2025 Somtochukwu Stanislus Emeka-Onwuneme
+#---------------------------------------------------------
 
 # Define your K-map (replace with your own map if needed)
-
-#Author: Somtochukwu Stanislus Emeka-Onwuneme 
-#Publication Date: 8th September, 2025
 kmap = [
     [0, 0, 0, 0],
     [0, 0, 1, 1],
