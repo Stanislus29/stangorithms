@@ -837,6 +837,8 @@ N --> O[End]
 
 #### Installation and Usage
 
+**A. CLONING THE REPOSITORY**
+
 Clone the repositiory 
 
 ```bash 
@@ -911,6 +913,54 @@ Output
 
 Minimal SOP terms: ['x1x2'', 'x1x3'', "x2'x3"]
 Minimal SOP expression: x1x2' + x1x3' + x2'x3
+```
+
+**B. USING THE PACKAGE**
+A package exists on ```PyPI.org``` which can be installed using the follwing command
+
+```powershell
+pip install kmap_algorithm_4var
+```
+The ```4var``` indicates its support for up to 4 variables only. 
+
+**Test Program**
+Run this program to confirm installation
+
+```python
+import kmap_algorithm
+print(kmap_algorithm.__version__)   # should show 0.1.1
+```
+
+Example usage: 
+```python
+##Test program to verify installation of the package kmap_algorithm_4var
+
+from kmap_algorithm import KMapSolver
+
+# Example: 3-variable K-map with don't cares
+kmap4 = [
+    [0, 1, 'd', 0],
+    [0, 1, 'd', 0],
+    [0, 0, 'd', 0],
+    [1, 1, 'd', 1]
+]
+
+kmap4a = [
+    [0, 0, 0, 0],
+    [0, 0, 1, 1],
+    [1, 0, 0, 1],
+    [1, 0, 0, 1]
+]
+
+solver3 = KMapSolver(kmap4)
+solver3.print_kmap()
+terms, sop = solver3.minimize()
+print("\n4-var result:", terms, sop)
+
+solver4 = KMapSolver(kmap4a)
+solver4.print_kmap()
+terms, sop = solver4.minimize()
+print("\n4-var result:", terms, sop)
 ```
 
 ### 4.2 Entity-Relationship of class ```KMapSolver```
