@@ -808,29 +808,29 @@ OUTPUT:
 ```mermaid
 flowchart TD
 
-A[Start: Input num_vars and K-map] --> B[Initialize row_labels, col_labels, kmap]
-B --> C[Print K-map]
+A["Start - Input num_vars and K-map"] --> B["Initialize row_labels, col_labels, kmap"]
+B --> C["Print K-map"]
 
-C --> D[Find all possible groups]
-D --> D1[Check group values: all 1 or d, at least one 1]
-D1 --> D2{Valid group?}
-D2 -- Yes --> E[Store group as frozenset(coords)]
+C --> D["Find all possible groups"]
+D --> D1["Check group values: all 1 or d, at least one 1"]
+D1 --> D2{"Valid group?"}
+D2 -- Yes --> E["Store group as frozenset(coords)"]
 D2 -- No --> D
 
-E --> F[Filter prime implicants]
-F --> G[Compute prime_terms and prime_covers]
+E --> F["Filter prime implicants"]
+F --> G["Compute prime_terms and prime_covers"]
 
-G --> H[Build prime implicant chart]
-H --> I[Identify essential primes]
+G --> H["Build prime implicant chart"]
+H --> I["Identify essential primes"]
 
-I --> J[Mark covered minterms]
-J --> K{Remaining uncovered minterms?}
-K -- Yes --> L[Greedy select prime covering most uncovered]
+I --> J["Mark covered minterms"]
+J --> K{"Remaining uncovered minterms?"}
+K -- Yes --> L["Greedy select prime covering most uncovered"]
 L --> J
-K -- No --> M[Remove redundant primes]
+K -- No --> M["Remove redundant primes"]
 
-M --> N[Final SOP: Sum of selected prime terms]
-N --> O[End]
+M --> N["Final SOP: Sum of selected prime terms"]
+N --> O["End"]
 ```
 
 ## 4. USING THE FRAMEWORK
