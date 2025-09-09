@@ -1,10 +1,11 @@
 # Ignore everything
 */
 
-# But keep this folder
-!kmap_algorithm/
 # But keep README.md
 !README.md
+
+# But keep this folder
+!kmap_algorithm/
 
 # And keep its contents
 !kmap_algorithm/*
