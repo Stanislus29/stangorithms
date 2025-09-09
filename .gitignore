@@ -9,3 +9,7 @@
 
 # And keep its contents
 !kmap_algorithm/*
+
+# And keep images folder + its contents
+!kmap_algorithm/images/
+!kmap_algorithm/images/*
