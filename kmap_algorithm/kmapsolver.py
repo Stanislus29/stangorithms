@@ -1,11 +1,15 @@
-# ------------------------------
-# Flexible K-map solver prototype (final prototype)
-# Supports: 2, 3, and 4 variables
-# Handles don't-care conditions (d)
+"""
+Final Framework for obtaining the minimal SOP expression of kmaps, developed from
+kmap_solver_prototype.py
 
-#Author: Somtochukwu Stanisulus Emeka-Onwuneme
-#Publication Date: 8th September, 2025
-# ------------------------------
+- Supports: 2, 3, and 4 variables
+- Handles don't-care conditions (d)
+"""
+
+# Author: Somtochukwu Stanisulus Emeka-Onwuneme
+# Publication Date: 8th September, 2025
+# Copyright © 2025 Somtochukwu Stanislus Emeka-Onwuneme
+# ------------------------------------------------------
 
 # --- USER SETUP --- #
 num_vars = 4   # <-- Change this to 2, 3, or 4 as needed

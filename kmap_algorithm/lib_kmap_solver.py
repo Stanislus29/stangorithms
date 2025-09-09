@@ -1,7 +1,13 @@
-# kmap_solver.py, library to easily solve 2-4 variable kmaps
+"""
+lib_kmap_solver.py, library to easily solve 2-4 variable kmaps.
 
-#Author: Somtochukwu Emeka-Onwuneme 
-#Publication Date: 8th September, 2025
+Developed from kmapsolver.py, kmap_solver_prototype.py
+""" 
+
+# Author: Somtochukwu Stanislus Emeka-Onwuneme 
+# Publication Date: 8th September, 2025
+# Copyright © 2025 Somtochukwu Stanislus Emeka-Onwuneme
+#---------------------------------------------------------
 
 from collections import defaultdict
 

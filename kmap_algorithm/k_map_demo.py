@@ -1,6 +1,9 @@
 #Demo program using the library "lib_kmap_solver.py"
 
-#Author: Somtochukwu Stanislus Emeka-Onwuneme 
+# Author: Somtochukwu Stanislus Emeka-Onwuneme 
+# Publication Date: 8th September, 2025
+# Copyright © 2025 Somtochukwu Stanislus Emeka-Onwuneme
+#---------------------------------------------------------
 
 from lib_kmap_solver import KMapSolver
 
