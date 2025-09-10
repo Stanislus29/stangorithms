@@ -18,7 +18,10 @@ Publication Date: 8th August, 2025
    - [Pseudocode](#32-pseudocode)  
    - [Flowchart](#33-flowchart)  
 4. [Using the Framework](#4-using-the-framework)
-   - [Installation and Usage](#41-installation-and-usage)  
+   - [Installation and Usage](#41-installation-and-usage) 
+        - [Cloning the Repository](#a-cloning-the-repository)
+            - [Using the library](#a1-using-the-library)
+        - [Using the Package](#b-using-the-package) 
    - [Entity-Relationship of class KMapSolver](#42-entity-relationship-of-class-kmapsolver)  
 5. [Conclusion](#5-conclusion) 
     - [Complexity Analysis](#51-complexity-analysis)
@@ -837,7 +840,7 @@ N --> O["End"]
 
 ### 4.1 Installation and Usage
 
-**A. CLONING THE REPOSITORY**
+#### A. CLONING THE REPOSITORY
 
 Clone the repositiory 
 
@@ -879,7 +882,7 @@ Final minimal SOP terms: ['x1x2'', 'x1x3'', 'x2'x3']
 Final minimal SOP (sum): x1x2' + x1x3' + x2'x3
 ```
 
-**A.1. Using the library**
+##### A.1. Using the library
 Within the repo, there is a library; ```lib_kmaap_solver.py```, the ```KMapSolver``` class provides a reusable way to compute minimal SOP expressions for 2,3, and 4 variable K-maps
 
 You can initialize it with your K-map and run ```.minimize()``` to get the result.
@@ -916,7 +919,7 @@ Minimal SOP terms: ['x1x2'', 'x1x3'', "x2'x3"]
 Minimal SOP expression: x1x2' + x1x3' + x2'x3
 ```
 
-**B. USING THE PACKAGE**
+#### B. USING THE PACKAGE**
 A package exists on ```PyPI.org``` which can be installed using the follwing command
 
 ```powershell
