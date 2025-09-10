@@ -17,8 +17,8 @@ Publication Date: 8th August, 2025
    - [Breakdown of the Algorithm](#31-breakdown-of-the-algorithm)  
    - [Pseudocode](#32-pseudocode)  
    - [Flowchart](#33-flowchart)  
-4. [Using the Framework](#4-using-the-framework)  
-   - [Using the Library](#41-using-the-library)  
+4. [Using the Framework](#4-using-the-framework)
+   - [Installation and Usage](#41-installation-and-usage)  
    - [Entity-Relationship of class KMapSolver](#42-entity-relationship-of-class-kmapsolver)  
 5. [Conclusion](#5-conclusion) 
     - [Complexity Analysis](#51-complexity-analysis)
@@ -835,7 +835,7 @@ N --> O["End"]
 
 ## 4. USING THE FRAMEWORK
 
-#### Installation and Usage
+### 4.1 Installation and Usage
 
 **A. CLONING THE REPOSITORY**
 
@@ -852,7 +852,7 @@ python kmapsolver_final_prototype.py
 ```
 Modify the ```num_vars``` and ```kmap``` matrix inside the file to suit your input.
 
-#### Example Run 
+**Test Program** 
 
 Input k-map:
 
@@ -878,7 +878,8 @@ Essential primes: ['x1x2'']
 Final minimal SOP terms: ['x1x2'', 'x1x3'', 'x2'x3']
 Final minimal SOP (sum): x1x2' + x1x3' + x2'x3
 ```
-### 4.1 Using the library
+
+**A.1. Using the library**
 Within the repo, there is a library; ```lib_kmaap_solver.py```, the ```KMapSolver``` class provides a reusable way to compute minimal SOP expressions for 2,3, and 4 variable K-maps
 
 You can initialize it with your K-map and run ```.minimize()``` to get the result.
