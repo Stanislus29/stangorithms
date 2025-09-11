@@ -845,13 +845,14 @@ N --> O["End"]
 Clone the repositiory 
 
 ```bash 
-git clone https://github.com/<your-username>/kmap-solver.git
-cd kmap-solver
+git clone https://github.com/Stanislus29/stangorithms.git
+
+cd stangorithms
 ```
 
 Run the solver: 
 ```bash
-python kmapsolver_final_prototype.py
+python kmapsolver.py
 ```
 Modify the ```num_vars``` and ```kmap``` matrix inside the file to suit your input.
 
