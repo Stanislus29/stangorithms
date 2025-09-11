@@ -923,9 +923,15 @@ Minimal SOP expression: x1x2' + x1x3' + x2'x3
 #### B. USING THE PACKAGE**
 A package exists on ```PyPI.org``` which can be installed using the follwing command
 
-```powershell
+```bash
 pip install kmap_algorithm_4var
 ```
+
+Verify its installation:
+```bash 
+pip show kmap_algorithm_4var
+```
+
 The ```4var``` indicates its support for up to 4 variables only. 
 
 **Test Program**
