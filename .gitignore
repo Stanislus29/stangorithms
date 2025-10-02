@@ -3,6 +3,7 @@
 
 # But keep README.md
 !README.md
+!LICENCE
 
 # But keep this folder
 !kmap_algorithm/
