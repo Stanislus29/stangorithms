@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: kmap_algorithm
+Version: 0.1.1
+Summary: A Python package for solving Karnaugh maps up to 4 variables
+Author-email: Somtochukwu Stanislus Emeka-Onwuneme <somtochukwueo@outlook.com>
+License: MIT
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
