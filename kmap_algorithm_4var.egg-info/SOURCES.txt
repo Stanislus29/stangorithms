@@ -1,0 +1,5 @@
+pyproject.toml
+kmap_algorithm_4var.egg-info/PKG-INFO
+kmap_algorithm_4var.egg-info/SOURCES.txt
+kmap_algorithm_4var.egg-info/dependency_links.txt
+kmap_algorithm_4var.egg-info/top_level.txt
