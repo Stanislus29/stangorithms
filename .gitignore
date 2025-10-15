@@ -1,4 +1,9 @@
-package_test.py
-package_test2.py
+__pycache__/
+*.pyc
 
-kmap_algorithm_4var.egg-info/
+/dist/
+
+/package_test.py
+/package_test2.py
+
+/kmap_algorithm_4var.egg-info/
