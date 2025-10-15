@@ -147,6 +147,8 @@ def find_all_groups(kmap):
                 # Get all coordinates (rr, cc) of the cells inside this rectangle
                 # Wrapping with % ensures groups can cross the map edges
                 coords = get_group_coords(r, c, h, w) #forms all possible rectangular combinations
+                print ("Checking group at", (r,c), "size", (h,w), "-> cells:", end=" ")
+                print (coords)
 
                 # --- DON'T CARE SUPPORT ---
                 # Accept group if *all* cells are either 1 or 'd'
@@ -169,6 +171,7 @@ def find_all_groups(kmap):
     #  ├── set
     #  │    ├── Tuple(row, col)
     #  │    ├── Tuple(row, col)
+    print (groups)
     return list(set(groups)) 
 
 def filter_prime_implicants(groups):
