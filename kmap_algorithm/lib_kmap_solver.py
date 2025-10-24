@@ -12,7 +12,7 @@ Developed from kmapsolver.py, kmap_solver_prototype.py
 from collections import defaultdict
 
 class KMapSolver:
-    def __init__(self, kmap):
+    def __init__(self, kmap, convention = "vranseic"):
         """
         Initialize with a given K-map.
         kmap: 2D list with values 0, 1, or 'd'
@@ -20,6 +20,7 @@ class KMapSolver:
         self.kmap = kmap
         self.num_rows = len(kmap)
         self.num_cols = len(kmap[0])
+        self.convention = convention.lower().strip()
 
         # Determine number of variables (2, 3, or 4)
         size = self.num_rows * self.num_cols
@@ -49,8 +50,15 @@ class KMapSolver:
         return int(bits, 2)
 
     def _cell_to_bits(self, r, c):
-        """Return the bit string of a cell (row + col label)."""
-        return self.col_labels[c] + self.row_labels[r]
+        """Return the bit string representing (row, col) based on the convention."""
+        if self.convention == "mano_kime":
+            # Mano-Kime → rows = x1x2, cols = x3x4
+            bits = self.row_labels[r] + self.col_labels[c]
+        else:
+            # Vranesic → rows = x3x4, cols = x1x2
+            bits = self.col_labels[c] + self.row_labels[r]
+        return bits
+
 
     def _get_group_coords(self, r, c, h, w):
         """Get wrapped coordinates for a group starting at (r,c)."""
