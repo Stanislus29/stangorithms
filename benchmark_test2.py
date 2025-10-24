@@ -122,7 +122,7 @@ def main():
     var_names = symbols('x1 x2 x3 x4')
     results = []
 
-    for i in range(10):  # 10 random K-maps
+    for i in range(50):  # 10 random K-maps
         kmap = generate_kmap(4)
         result = benchmark_case(kmap, var_names)
         results.append(result)
