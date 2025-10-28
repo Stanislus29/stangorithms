@@ -44,10 +44,15 @@ class KMapSolver:
                             (1,4),(4,1),(2,4),(4,2),(4,4)]
 
     # ---------- Utility functions ---------- #
-    def _cell_to_minterm(self, r, c):
+    def _cell_to_term(self, r, c):
         """Convert (row, col) to a minterm index."""
         bits = self.col_labels[c] + self.row_labels[r]
         return int(bits, 2)
+    
+    # def _cell_to_maxterm(self, r, c):
+    #     """Convert (row, col) to a maxterm index."""
+    #     bits = self.col_labels[c] + self.row_labels[r]
+    #     return int(bits, 2)
 
     def _cell_to_bits(self, r, c):
         """Return the bit string representing (row, col) based on the convention."""
@@ -87,6 +92,26 @@ class KMapSolver:
                             groups.append(frozenset(coords))
         return list(set(groups))
 
+    def find_all_groups_pos(self, allow_dontcare=False):
+        """Find all groups of 0's (and optionally 'd') for POS."""
+        groups = []
+        for r in range(self.num_rows):
+            for c in range(self.num_cols):
+                for h, w in self.group_sizes:
+                    if h > self.num_rows or w > self.num_cols:
+                        continue
+
+                    coords = self._get_group_coords(r, c, h, w)
+
+                    if allow_dontcare:
+                        if all(self.kmap[rr][cc] in (0, 'd') for rr, cc in coords) and \
+                        any(self.kmap[rr][cc] == 0 for rr, cc in coords):
+                            groups.append(frozenset(coords))
+                    else:
+                        if all(self.kmap[rr][cc] == 0 for rr, cc in coords):
+                            groups.append(frozenset(coords))
+        return list(set(groups))
+
     def filter_prime_implicants(self, groups):
         """Remove groups that are subsets of others."""
         primes = []
@@ -111,11 +136,47 @@ class KMapSolver:
             elif b == '1':
                 term.append(vars_[i])
         return "".join(term)
+    
+    def _simplify_group_bits_pos(self, bits_list):
+        """Convert group bits to POS term."""
+        bits = list(bits_list[0])
+        for b in bits_list[1:]:
+            for i in range(self.num_vars):
+                if bits[i] != b[i]:
+                    bits[i] = '-'
+
+        vars_ = [f"x{i+1}" for i in range(self.num_vars)]
+        term = []
+        for i, b in enumerate(bits):
+            if b == '1':
+                term.append(vars_[i] + "'")
+            elif b == '0':
+                term.append(vars_[i])
+        return "(" + " + ".join(term) + ")"
 
     # ---------- Main minimization ---------- #
-    def minimize(self):
-        # Step 1: find all valid groups
-        groups = self.find_all_groups(allow_dontcare=True)
+    def minimize(self, form='sop'):
+        """
+        Minimize the K-map expression.
+        Args:
+            form: 'sop' for Sum of Products or 'pos' for Product of Sums
+        Returns:
+            tuple: (list of terms, string expression)
+        """
+        if form.lower() not in ['sop', 'pos']:
+            raise ValueError("form must be either 'sop' or 'pos'")
+
+        # Choose appropriate methods based on form
+        if form.lower() == 'pos':
+            groups = self.find_all_groups_pos(allow_dontcare=True)
+            simplify_method = self._simplify_group_bits_pos
+            cell_to_term = self._cell_to_term
+            join_operator = " * "
+        else:  # SOP
+            groups = self.find_all_groups(allow_dontcare=True)
+            simplify_method = self._simplify_group_bits
+            cell_to_term = self._cell_to_term
+            join_operator = " + "
 
         # Step 2: reduce to prime implicants
         prime_groups = self.filter_prime_implicants(groups)
@@ -124,14 +185,14 @@ class KMapSolver:
         prime_terms, prime_covers = [], []
         for g in prime_groups:
             coords = sorted(g)
-            minterms = sorted(self._cell_to_minterm(r, c) for r, c in coords
-                              if self.kmap[r][c] == 1)  # ignore pure 'd'
-            if not minterms:
+            terms = sorted(cell_to_term(r, c) for r, c in coords
+                        if self.kmap[r][c] == (0 if form.lower() == 'pos' else 1))
+            if not terms:
                 continue
             bits_list = [self._cell_to_bits(r, c) for r, c in coords]
-            term_str = self._simplify_group_bits(bits_list)
+            term_str = simplify_method(bits_list)
             prime_terms.append(term_str)
-            prime_covers.append(minterms)
+            prime_covers.append(terms)
 
         # Step 4: build prime implicant chart
         minterm_to_primes = defaultdict(list)
@@ -186,7 +247,7 @@ class KMapSolver:
                 chosen = trial
 
         final_terms = [prime_terms[i] for i in sorted(chosen)]
-        return final_terms, " + ".join(final_terms)
+        return final_terms, join_operator.join(final_terms)
 
     # ---------- Display ---------- #
     def print_kmap(self):

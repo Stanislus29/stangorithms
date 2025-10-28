@@ -9,10 +9,10 @@ from lib_kmap_solver import KMapSolver
 
 # Example: 3-variable K-map with don't cares
 kmap4 = [
-    [1, 1, 0, 1],
-    [1, 1, 0, 1],
-    [1, 1, 0, 0],
-    [1, 1, 0, 1]
+    [0, 1, 'd', 0],
+    [0, 1, 'd', 0],
+    [0, 0, 'd', 0],
+    [1, 1, 'd', 1]
 ]
 
 # kmap4a = [
@@ -22,9 +22,14 @@ kmap4 = [
 #     [1, 0, 0, 1]
 # ]
 
-solver3 = KMapSolver(kmap4)
-solver3.print_kmap()
-terms, sop = solver3.minimize()
+pos_test = KMapSolver(kmap4)
+pos_test.print_kmap()
+terms, pos = pos_test.minimize(form ="pos")
+print("\n4-var result:", terms, pos)
+
+sop_test = KMapSolver(kmap4)
+sop_test.print_kmap()
+terms, sop = sop_test.minimize(form ="sop")
 print("\n4-var result:", terms, sop)
 
 # solver4 = KMapSolver(kmap4a)
