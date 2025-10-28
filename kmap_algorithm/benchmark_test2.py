@@ -3,7 +3,7 @@ import random
 import re
 import matplotlib.pyplot as plt
 import numpy as np
-from sympy import symbols, SOPform, simplify, Equivalent
+from sympy import symbols, SOPform, simplify, Equivalent, POSform
 from lib_kmap_solver import KMapSolver
 from tabulate import tabulate
 
@@ -92,7 +92,7 @@ def benchmark_case(kmap, var_names, test_index):
     # --- KMapSolver benchmark ---
     start = time.perf_counter()
     expr_kmap = KMapSolver(kmap)
-    terms, sop = expr_kmap.minimize()
+    terms, sop = expr_kmap.minimize(form ="sop")
     t_kmap = time.perf_counter() - start
 
     expr_kmap_sympy = parse_kmap_sop(sop, var_names)
@@ -193,7 +193,7 @@ def main():
     results = []
 
     for i in range(100):  # 10 random K-maps
-        kmap = generate_kmap(2)
+        kmap = generate_kmap(4)
         result = benchmark_case(kmap, var_names, i+1)  # Pass i+1 as the test index
         results.append(result)
 
