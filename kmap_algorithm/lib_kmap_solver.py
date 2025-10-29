@@ -43,6 +43,17 @@ class KMapSolver:
         self.group_sizes = [(1,1),(1,2),(2,1),(2,2),
                             (1,4),(4,1),(2,4),(4,2),(4,4)]
 
+        # ---- Optimizations: precompute mapping and prune group sizes ----
+        # keep only group sizes that actually fit the K-map
+        self.group_sizes = [(h,w) for (h,w) in self.group_sizes if h <= self.num_rows and w <= self.num_cols]
+
+        # Precompute cell index (minterm/maxterm index) and bit-strings for each cell.
+        # Use _cell_to_bits/_cell_to_term (methods are available on the instance)
+        self._cell_index = [[self._cell_to_term(r, c) for c in range(self.num_cols)] for r in range(self.num_rows)]
+        self._cell_bits = [[self._cell_to_bits(r, c) for c in range(self.num_cols)] for r in range(self.num_rows)]
+        # map minterm index -> (r, c)
+        self._index_to_rc = {self._cell_index[r][c]: (r, c) for r in range(self.num_rows) for c in range(self.num_cols)}
+
     # ---------- Utility functions ---------- #
     def _cell_to_term(self, r, c):
         """Convert (row, col) to a minterm index."""
@@ -72,51 +83,66 @@ class KMapSolver:
 
     # ---------- Group finding ---------- #
     def find_all_groups(self, allow_dontcare=False):
-        """Find all groups of 1’s (and optionally 'd')."""
-        groups = []
+        """Find all groups of 1’s (and optionally 'd'). Return integer bitmasks for groups."""
+        groups = set()
         for r in range(self.num_rows):
             for c in range(self.num_cols):
                 for h, w in self.group_sizes:
-                    if h > self.num_rows or w > self.num_cols:
-                        continue
-
                     coords = self._get_group_coords(r, c, h, w)
 
                     if allow_dontcare:
-                        # ✅ allow 'd' only if at least one '1' is inside
                         if all(self.kmap[rr][cc] in (1, 'd') for rr, cc in coords) and \
                            any(self.kmap[rr][cc] == 1 for rr, cc in coords):
-                            groups.append(frozenset(coords))
+                            mask = 0
+                            for rr, cc in coords:
+                                mask |= 1 << self._cell_index[rr][cc]
+                            groups.add(mask)
                     else:
                         if all(self.kmap[rr][cc] == 1 for rr, cc in coords):
-                            groups.append(frozenset(coords))
-        return list(set(groups))
+                            mask = 0
+                            for rr, cc in coords:
+                                mask |= 1 << self._cell_index[rr][cc]
+                            groups.add(mask)
+        return list(groups)
 
     def find_all_groups_pos(self, allow_dontcare=False):
-        """Find all groups of 0's (and optionally 'd') for POS."""
-        groups = []
+        """Find all groups of 0's (and optionally 'd') for POS. Return integer bitmasks."""
+        groups = set()
         for r in range(self.num_rows):
             for c in range(self.num_cols):
                 for h, w in self.group_sizes:
-                    if h > self.num_rows or w > self.num_cols:
-                        continue
-
                     coords = self._get_group_coords(r, c, h, w)
 
                     if allow_dontcare:
                         if all(self.kmap[rr][cc] in (0, 'd') for rr, cc in coords) and \
-                        any(self.kmap[rr][cc] == 0 for rr, cc in coords):
-                            groups.append(frozenset(coords))
+                           any(self.kmap[rr][cc] == 0 for rr, cc in coords):
+                            mask = 0
+                            for rr, cc in coords:
+                                mask |= 1 << self._cell_index[rr][cc]
+                            groups.add(mask)
                     else:
                         if all(self.kmap[rr][cc] == 0 for rr, cc in coords):
-                            groups.append(frozenset(coords))
-        return list(set(groups))
-
+                            mask = 0
+                            for rr, cc in coords:
+                                mask |= 1 << self._cell_index[rr][cc]
+                            groups.add(mask)
+        return list(groups)
+    
     def filter_prime_implicants(self, groups):
-        """Remove groups that are subsets of others."""
+        """Remove groups that are strict subsets of others. groups are integer masks."""
         primes = []
-        for g in groups:
-            if not any((g < other) for other in groups if other != g):
+        # sort by bit_count descending to allow early pruning (larger groups first)
+        groups_sorted = sorted(groups, key=lambda g: g.bit_count(), reverse=True)
+        for i, g in enumerate(groups_sorted):
+            is_subset = False
+            for other in groups_sorted:
+                if other == g:
+                    continue
+                # if g is subset of other
+                if (g & other) == g:
+                    is_subset = True
+                    break
+            if not is_subset:
                 primes.append(g)
         return primes
 
@@ -166,41 +192,55 @@ class KMapSolver:
         if form.lower() not in ['sop', 'pos']:
             raise ValueError("form must be either 'sop' or 'pos'")
 
-        # Choose appropriate methods based on form
+        target_val = 0 if form.lower() == 'pos' else 1
+
+        # Choose appropriate group-finding and simplifier
         if form.lower() == 'pos':
             groups = self.find_all_groups_pos(allow_dontcare=True)
             simplify_method = self._simplify_group_bits_pos
-            cell_to_term = self._cell_to_term
             join_operator = " * "
-        else:  # SOP
+        else:
             groups = self.find_all_groups(allow_dontcare=True)
             simplify_method = self._simplify_group_bits
-            cell_to_term = self._cell_to_term
             join_operator = " + "
 
-        # Step 2: reduce to prime implicants
+        # Step 2: reduce to prime implicants (groups are bitmasks)
         prime_groups = self.filter_prime_implicants(groups)
 
-        # Step 3: compute terms and covers
-        prime_terms, prime_covers = [], []
-        for g in prime_groups:
-            coords = sorted(g)
-            terms = sorted(cell_to_term(r, c) for r, c in coords
-                        if self.kmap[r][c] == (0 if form.lower() == 'pos' else 1))
-            if not terms:
+        # Step 3: compute terms and covers (use bitmasks for covers)
+        prime_terms = []
+        prime_covers = []
+        for gmask in prime_groups:
+            # collect only actual minterms (target_val) covered by this group
+            cover_mask = 0
+            bits_list = []
+            temp = gmask
+            while temp:
+                low = temp & -temp
+                idx = low.bit_length() - 1
+                temp -= low
+                r, c = self._index_to_rc[idx]
+                if self.kmap[r][c] == target_val:
+                    cover_mask |= 1 << idx
+                # include bits for simplification (include don't-cares as they are part of the group)
+                bits_list.append(self._cell_bits[r][c])
+            if cover_mask == 0:
                 continue
-            bits_list = [self._cell_to_bits(r, c) for r, c in coords]
             term_str = simplify_method(bits_list)
             prime_terms.append(term_str)
-            prime_covers.append(terms)
+            prime_covers.append(cover_mask)
 
-        # Step 4: build prime implicant chart
+        # Step 4: build prime implicant chart using masks
         minterm_to_primes = defaultdict(list)
-        all_minterms = set()
-        for idx, cover in enumerate(prime_covers):
-            for m in cover:
-                minterm_to_primes[m].append(idx)
-                all_minterms.add(m)
+        all_minterms_mask = 0
+        for p_idx, cover in enumerate(prime_covers):
+            all_minterms_mask |= cover
+            temp = cover
+            while temp:
+                low = temp & -temp
+                idx = low.bit_length() - 1
+                temp -= low
+                minterm_to_primes[idx].append(p_idx)
 
         # Step 5: essential primes
         essential_indices = set()
@@ -210,45 +250,46 @@ class KMapSolver:
 
         essential_terms = [prime_terms[i] for i in sorted(essential_indices)]
 
-        # Step 6: mark covered
-        covered_minterms = set()
+        # Step 6: mark covered by essentials
+        covered_mask = 0
         for i in essential_indices:
-            covered_minterms.update(prime_covers[i])
+            covered_mask |= prime_covers[i]
 
-        # Step 7: greedy covering
-        remaining = set(all_minterms) - covered_minterms
+        # Step 7: greedy covering (bitmask-based)
+        remaining_mask = all_minterms_mask & ~covered_mask
         selected = set(essential_indices)
-        while remaining:
+        while remaining_mask:
             best_idx, best_cover_count = None, -1
-            for idx in range(len(prime_groups)):
-                if idx in selected: 
+            for idx in range(len(prime_covers)):
+                if idx in selected:
                     continue
-                cover = set(prime_covers[idx]) & remaining
-                if len(cover) > best_cover_count:
-                    best_cover_count = len(cover)
+                cover = prime_covers[idx] & remaining_mask
+                count = cover.bit_count()
+                if count > best_cover_count:
+                    best_cover_count = count
                     best_idx = idx
-            if best_idx is None:
+            if best_idx is None or best_cover_count == 0:
                 break
             selected.add(best_idx)
-            covered_minterms.update(prime_covers[best_idx])
-            remaining = set(all_minterms) - covered_minterms
+            covered_mask |= prime_covers[best_idx]
+            remaining_mask = all_minterms_mask & ~covered_mask
 
-        # Step 8: remove redundant terms
-        def covers_with_terms(indices):
-            covered = set()
-            for idx in indices:
-                covered.update(prime_covers[idx])
-            return covered
+        # Step 8: remove redundant terms using masks
+        def covers_with_indices(indices):
+            mask = 0
+            for i in indices:
+                mask |= prime_covers[i]
+            return mask
 
-        chosen = set(sorted(selected))
-        for idx in sorted(list(chosen)):
+        chosen = set(selected)
+        for idx in list(sorted(chosen)):
             trial = chosen - {idx}
-            if covers_with_terms(trial) == covers_with_terms(chosen):
+            if covers_with_indices(trial) == covers_with_indices(chosen):
                 chosen = trial
 
         final_terms = [prime_terms[i] for i in sorted(chosen)]
         return final_terms, join_operator.join(final_terms)
-
+    
     # ---------- Display ---------- #
     def print_kmap(self):
         """Pretty print the K-map with headers."""

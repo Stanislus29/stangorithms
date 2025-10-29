@@ -92,7 +92,7 @@ def benchmark_case(kmap, var_names, test_index):
     # --- KMapSolver benchmark ---
     start = time.perf_counter()
     expr_kmap = KMapSolver(kmap)
-    terms, sop = expr_kmap.minimize(form ="sop")
+    terms, sop = expr_kmap.minimize(form ="pos")
     t_kmap = time.perf_counter() - start
 
     expr_kmap_sympy = parse_kmap_sop(sop, var_names)
