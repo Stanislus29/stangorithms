@@ -5,7 +5,7 @@
 # Copyright © 2025 Somtochukwu Stanislus Emeka-Onwuneme
 #---------------------------------------------------------
 
-from lib_kmap_solver import KMapSolver
+from stanlogic import KMapSolver
 
 # Example: 3-variable K-map with don't cares
 kmap4 = [

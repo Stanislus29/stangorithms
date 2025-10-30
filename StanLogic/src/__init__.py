@@ -1,6 +1,6 @@
 # kmap_algorithm/__init__.py
 
-from .lib_kmap_solver import KMapSolver
+from .stanlogic import KMapSolver
 
 __all__ = [
     "KMapSolver",

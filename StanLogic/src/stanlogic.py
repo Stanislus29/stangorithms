@@ -1,5 +1,5 @@
 """
-lib_kmap_solver.py, library to easily solve 2-4 variable kmaps.
+stanclustlogic.py, library to easily solve 2-4 variable kmaps.
 
 Developed from kmapsolver.py, kmap_solver_prototype.py
 """ 

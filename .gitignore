@@ -1,9 +1,44 @@
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 
-/dist/
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
 
-/package_test.py
-/package_test2.py
+# Virtual environments
+.venv/
+venv/
+env/
 
-/kmap_algorithm_4var.egg-info/
+# PyInstaller
+*.spec
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# Unit test / coverage reports
+.coverage
+htmlcov/
+.cache/
+.pytest_cache/
+
+# IDE and editor files
+.vscode/
+.idea/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Project-specific
+src/__pycache__/
+tests/__pycache__/
