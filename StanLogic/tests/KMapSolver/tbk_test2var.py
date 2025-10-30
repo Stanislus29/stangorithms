@@ -2,10 +2,10 @@
 Benchmark tests for KMapSolver using known examples from literature.
 Compares KMapSolver results against expected minimal SOP forms.
 
-Test file for 2 variable kmaps.
+Test file for 3 variable kmaps.
 """
 
-from lib_kmap_solver import KMapSolver
+from stanlogic import KMapSolver
 from tabulate import tabulate 
 from sympy import symbols, And, Or, Not, simplify_logic, Equivalent, false
 import matplotlib.pyplot as plt 
@@ -18,37 +18,66 @@ import re
 Reference:
 Test cases adapted from: S. Brown and Z. Vranesic, *Digital Logic with Verilog Design*, McGraw-Hill.
 """
-# -Chapter 2, Fig 2.50, p. 82.
+# -Chapter 2, 2.11, p. 93.
 test1 = [
-    [1, 0],
-    [1, 1]
+    [0, 0, 1, 1],
+    [1, 0, 0, 1]
 ]
-test1_equivalent = "x2 + x1'"
+test1_equivalent = "x1x3' + x2'x3"
+
+# -Chapter 2, 2.11, p. 83. 
+test2 = [
+    [1, 1, 1, 1],
+    [0, 0, 0, 1]
+]
+test2_equivalent = "x3' + x1x2'"
+
+# -Chapter 2, Problem 2.37, p.115. 
+test3 = [
+    [0, 1, 0, 0],
+    [1, 1, 0, 1]
+]
+test3_equivalent = "x1'x2 + x2'x3"
+
+# -Chapter 2, Problem 2.38, p.115. 
+test4 = [
+    [0, 'd', 0, 1],
+    [1, 0, 1, 'd']
+]
+test4_equivalent = "x1x2' + x1x3 + x2'x3"
 
 #------------ Examples extracted from Mano and Kine ----------
 """
 Reference:
 Test cases adapted from: M. Mano and C. Kine, *Logic and Computer Design Fundamentals*, Pearson.
 """
-# -Chapter 2, Fig 9a, p. 62. 
-test2 = [
-    [1, 1],
-    [0, 1]
+
+# -Chapter 2, Example 5a, p. 64.
+test5 = [
+    [1, 1, 1, 1],
+    [1, 1, 0, 0]
 ]
-test2_equivalent = "x1' + x2"
+test5_equivalent = "x1' + x2'"
 
-# -Chapter 2, Fig 9b, p. 62.  
-test3 = [
-    [0, 1],
-    [1, 1]
+# -Chapter 2, Example 5b, p. 64.
+test6 = [
+    [1, 0, 0, 1],
+    [1, 1, 0, 1]
 ]
-test3_equivalent = "x1 + x2" #Textbook gives x1'x2 + x1x2' which is not minimal
+test6_equivalent = "x1x2' + x3'"
 
-Vranesic_kmaps = [test1]
-Vranesic_equivalents = [test1_equivalent]
+# -Chapter 2, Example 5c, p. 65.
+test7 = [
+    [0, 1, 1, 0],
+    [1, 1, 0, 1]
+]
+test7_equivalent = "x1'x3 + x1x2' + x1x3'"
 
-Mano_kmaps = [test2, test3]
-Mano_equivalents = [test2_equivalent, test3_equivalent]
+Vranesic_kmaps = [test1, test2, test3, test4]
+Vranesic_equivalents = [test1_equivalent, test2_equivalent, test3_equivalent, test4_equivalent]
+
+Mano_kmaps = [test5, test6, test7]
+Mano_equivalents = [test5_equivalent, test6_equivalent, test7_equivalent]
 
 results = []
 

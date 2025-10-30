@@ -6,11 +6,11 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 from sympy import symbols, SOPform, simplify, Equivalent, POSform
-from lib_kmap_solver import KMapSolver
+from stanlogic import KMapSolver
 from tabulate import tabulate
 from collections import defaultdict
 from matplotlib.backends.backend_pdf import PdfPages
-from textwrap import fill
+from textwrap import fill, wrap
 import matplotlib.image as mpimg
 
 # -----------------------------------------------------------
@@ -242,8 +242,8 @@ def generate_inference(
     formatted_text = "\n".join(lines)
     print(formatted_text)
     return formatted_text
-
-def export_results_to_csv(all_results, filename="benchmark_results.csv"):
+        
+def export_results_to_csv(all_results, filename="outputs/benchmark_results.csv"):
     """
     Export all benchmark results to a CSV file.
     Groups results by configuration (num_vars, form).
@@ -276,38 +276,75 @@ def export_results_to_csv(all_results, filename="benchmark_results.csv"):
 
     print(f"\n✅ Results exported successfully to '{filename}'\n")
 
-def save_benchmark_plots(all_results, pdf_filename="benchmark_plots.pdf", logo_path="kmap_algorithm/images/St_logo_light.png"):
+def save_benchmark_plots(all_results, pdf_filename="outputs/benchmark_plots.pdf", logo_path="././images/St_logo_light-tp.png"):
     """
     Save benchmark plots, summary, and inference report into a single PDF file.
     """
-
+    
     print(f"\n📊 Generating PDF report: {pdf_filename}")
 
     with PdfPages(pdf_filename) as pdf:
         # ---- COVER PAGE ----
         if os.path.exists(logo_path):
-            plt.figure(figsize=(8.5, 11))
+            fig = plt.figure(figsize=(8.5, 11))
+            ax = plt.gca()
+            
+            # Load and display logo in the upper portion of the page
             img = mpimg.imread(logo_path)
-            plt.imshow(img)
-            plt.axis("off")
-            plt.text(
-                0.5, -0.1,
+            
+            # Create a specific axes for the logo to control its size and position
+            logo_ax = fig.add_axes([0.2, 0.55, 0.6, 0.35])  # [left, bottom, width, height]
+            logo_ax.imshow(img)
+            logo_ax.axis("off")
+            
+            # Main axes for text (invisible)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.axis("off")
+            
+            # Title - well spaced below the logo
+            ax.text(
+                0.5, 0.45,
                 "Inference Report",
-                fontsize=28,
+                fontsize=32,
                 fontweight='bold',
                 ha='center',
                 va='center',
-                transform=plt.gca().transAxes,
             )
-            plt.text(
-                0.5, -0.18,
-                "Performance and Simplification Benchmark between SymPy and KMapSolver",
-                fontsize=14,
+            
+            # Subtitle - appropriately spaced below title
+            ax.text(
+                0.5, 0.38,
+                "Performance and Simplification Benchmark",
+                fontsize=16,
                 ha='center',
                 va='center',
-                transform=plt.gca().transAxes,
             )
-            pdf.savefig()
+            
+            ax.text(
+                0.5, 0.34,
+                "between SymPy and StanLogic",
+                fontsize=16,
+                ha='center',
+                va='center',
+            )
+            
+            # Add a subtle separator line
+            ax.plot([0.25, 0.75], [0.30, 0.30], 'k-', linewidth=1.5, alpha=0.3)
+            
+            # Add date at the bottom of the page
+            import datetime
+            ax.text(
+                0.5, 0.15,
+                f"Generated on {datetime.date.today():%B %d, %Y}",
+                fontsize=12,
+                ha='center',
+                va='center',
+                style='italic',
+                color='gray'
+            )
+            
+            pdf.savefig(bbox_inches='tight')
             plt.close()
         else:
             print(f"⚠️  Logo not found at {logo_path}, skipping cover page.")
@@ -365,6 +402,81 @@ def save_benchmark_plots(all_results, pdf_filename="benchmark_plots.pdf", logo_p
             plt.tight_layout()
             pdf.savefig()
             plt.close()
+            
+            # ---- INFERENCE PAGE FOR THIS CONFIGURATION ----
+            from statistics import stdev
+            
+            # Calculate statistics for this specific configuration
+            std_diff_config = stdev([kt - st for kt, st in zip(kmap_times, sympy_times)]) if len(kmap_times) > 1 else 0
+            std_lit_diff_config = stdev([kl - sl for kl, sl in zip(kmap_literals, sympy_literals)]) if len(kmap_literals) > 1 else 0
+            deviation_ratio_config = std_diff_config / avg_sympy_time if avg_sympy_time else 0
+            deviation_ratio_literals_config = std_lit_diff_config / avg_sympy_literals if avg_sympy_literals else 0
+            
+            inference_text_config = generate_inference(
+                avg_sympy_time, avg_kmap_time,
+                std_diff_config, deviation_ratio_config,
+                avg_sympy_literals, avg_kmap_literals,
+                std_lit_diff_config, deviation_ratio_literals_config
+            )
+            
+            plt.figure(figsize=(8.5, 11))
+            plt.axis("off")
+            
+            # Add header
+            plt.text(
+                0.5, 0.95,
+                f"INFERENCE: {num_vars}-Variable {form.upper()}",
+                fontsize=18,
+                fontweight="bold",
+                ha="center",
+                va="center",
+                transform=plt.gca().transAxes
+            )
+            
+            # Add inference body line by line with proper spacing
+            lines = inference_text_config.split('\n')
+            y_position = 0.90
+            base_line_spacing = 0.022  # base spacing
+
+            for line in lines:
+                line = line.rstrip()
+
+                # Determine font properties and extra spacing
+                if line.startswith("=" * 30):  # Separator
+                    fontweight = 'normal'
+                    fontsize = 10
+                    extra_spacing = 0.015
+                elif line.strip() in ["INFERENCE SUMMARY", "EXECUTION TIME ANALYSIS",
+                                    "LITERAL COUNT ANALYSIS", "OVERALL VERDICT"]:
+                    fontweight = 'bold'
+                    fontsize = 12
+                    extra_spacing = 0.02
+                elif line.strip().startswith(("→", "✅", "⚠️")):
+                    fontweight = 'normal'
+                    fontsize = 10
+                    extra_spacing = 0
+                else:
+                    fontweight = 'normal'
+                    fontsize = 10
+                    extra_spacing = 0
+
+                # Draw the text
+                plt.text(
+                    0.02, y_position,
+                    line,
+                    fontsize=fontsize,
+                    fontweight=fontweight,
+                    family="monospace",
+                    va="bottom",
+                    wrap=True,
+                    transform=plt.gca().transAxes
+                )
+
+                # Move y_position down by base spacing plus extra spacing
+                y_position -= (base_line_spacing + extra_spacing)
+           
+            pdf.savefig()
+            plt.close()
 
         # ---- SUMMARY PAGE ----
         plt.figure(figsize=(10, 5))
@@ -418,7 +530,7 @@ def save_benchmark_plots(all_results, pdf_filename="benchmark_plots.pdf", logo_p
         # Add header with company name and date
         plt.text(
             0.5, 0.95,
-            "INFERENCE REPORT",
+            "OVERALL INFERENCE REPORT",
             fontsize=22,
             fontweight="bold",
             ha="center",
@@ -433,17 +545,59 @@ def save_benchmark_plots(all_results, pdf_filename="benchmark_plots.pdf", logo_p
             transform=plt.gca().transAxes
         )
 
-        # Add inference body (with wrapping)
-        wrapped_text = fill(inference_text, width=95)
-        plt.text(
-            0.05, 0.85,
-            wrapped_text,
-            fontsize=10,
-            family="monospace",
-            va="top",
-            transform=plt.gca().transAxes
-        )
+        # Add inference body line by line with proper spacing
+        lines = inference_text.split('\n')
+        y_position = 0.87
+        base_line_spacing = 0.022  # Base spacing between lines
 
+        for line in lines:
+            line = line.rstrip()
+
+            # Determine font properties and extra spacing
+            if line.startswith("=" * 30):  # Separator line
+                fontweight = 'normal'
+                fontsize = 10
+                extra_spacing = 0.015  # Extra space after separators
+            elif line.strip() in ["INFERENCE SUMMARY", "EXECUTION TIME ANALYSIS",
+                                "LITERAL COUNT ANALYSIS", "OVERALL VERDICT"]:
+                fontweight = 'bold'
+                fontsize = 12
+                extra_spacing = 0.02  # Extra space after headings
+            elif line.strip().startswith(("✅", "⚠️")):
+                fontweight = 'normal'
+                fontsize = 10
+                extra_spacing = 0.02
+            else:
+                fontweight = 'normal'
+                fontsize = 10
+                extra_spacing = 0
+
+            # Draw the text with wrapping
+            plt.text(
+                0.02, y_position,
+                line,
+                fontsize=fontsize,
+                fontweight=fontweight,
+                family="monospace",
+                va="top",
+                wrap=True,  # Ensure text wraps inside the plot
+                transform=plt.gca().transAxes
+            )
+
+            # Move y_position down by base spacing plus extra spacing
+            y_position -= (base_line_spacing + extra_spacing)
+
+        # Add copyright footer
+        plt.text(
+            0.5, 0.03,
+            "© Copyright Stan's Technologies 2025",
+            fontsize=10,
+            ha="center",
+            va="center",
+            transform=plt.gca().transAxes,
+            style='italic',
+            color='gray'
+        )
         pdf.savefig()
         plt.close()
         
@@ -454,6 +608,10 @@ def save_benchmark_plots(all_results, pdf_filename="benchmark_plots.pdf", logo_p
 # -----------------------------------------------------------
 
 def main():
+    # Create outputs directory if it doesn't exist
+    outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+    os.makedirs(outputs_dir, exist_ok=True)
+
     config = [
         (2, "sop"),
         (2, "pos"),
@@ -474,7 +632,7 @@ def main():
         print(f"{'='*70}\n")
         results = []
 
-        for i in range(100):  # 10 random K-maps
+        for i in range(1000):  # 10 random K-maps
             kmap = generate_kmap(vars)
             result = benchmark_case(kmap, var_names, form_type, i+1)  # Pass i+1 as the test index
             result["num_vars"] = vars
@@ -554,11 +712,15 @@ def main():
         # )
 
     
-    export_results_to_csv(all_results, "benchmark_results.csv")
-    save_benchmark_plots(all_results, "benchmark_results.pdf")
+    # Fix output paths using os.path.join
+    csv_path = os.path.join(outputs_dir, "benchmark_results.csv")
+    pdf_path = os.path.join(outputs_dir, "benchmark_results.pdf")
+    
+    export_results_to_csv(all_results, csv_path)
+    save_benchmark_plots(all_results, pdf_path)
 
-    print("\n✅ All benchmark results exported to 'benchmark_results.csv'")   
-    print("✅ All benchmark plots saved to 'benchmark_results.pdf'") 
+    print(f"\n✅ All benchmark results exported to '{csv_path}'")   
+    print(f"✅ All benchmark plots saved to '{pdf_path}'") 
 
 if __name__ == "__main__":
     main()

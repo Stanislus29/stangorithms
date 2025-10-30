@@ -1,4 +1,4 @@
-from kmap_algorithm import KMapSolver
+from stanlogic import KMapSolver
 from tabulate import tabulate 
 from sympy import symbols, And, Or, Not, simplify_logic, Equivalent, false
 import matplotlib.pyplot as plt 
@@ -79,12 +79,12 @@ Test cases adapted from: M. Mano and C. Kine, *Logic and Computer Design Fundame
 
 # -Chapter 2, Example 8, p. 65.
 test8 = [
-    ['d', 1, 1, 'd'],
-    [0, 'd', 1, 0],
-    [0, 0, 1, 0],
-    [1, 0, 1, 0]
+    [1, 1, 0, 1],
+    [1, 1, 0, 1],
+    [1, 1, 0, 0],
+    [1, 1, 0, 1]
 ]
-test8_equivalent = "x3x4 + x1'x4"
+test8_equivalent = "x3' + x1'x4' + x2'x4'"
 
 # -Chapter 2, Example 9, p. 66.
 test9 = [
@@ -104,12 +104,14 @@ test10 = [
 ]
 test10_equivalent = "x3x4 + x1'x2'"
 
-kmaps = [test1, test2, test3, test4, test5, 
-         test6, test7, test8, test9, test10]
+Vranesic_kmaps = [test1, test2, test3, test4, test5, 
+         test6, test7]
 
-equivalents = [test1_equivalent, test2_equivalent, test3_equivalent, test4_equivalent, 
-               test5_equivalent, test6_equivalent, test7_equivalent, test8_equivalent,
-               test9_equivalent, test10_equivalent]
+Vranesic_equivalents = [test1_equivalent, test2_equivalent, test3_equivalent, test4_equivalent, 
+               test5_equivalent, test6_equivalent, test7_equivalent]
+
+Mano_kmaps = [test8, test9, test10]
+Mano_equivalents = [test8_equivalent, test9_equivalent, test10_equivalent]
 
 results = []
 
@@ -184,7 +186,7 @@ def count_literals_kmap(sop_str, var_names):
 var_names = ['x1', 'x2', 'x3', 'x4']
 literals_kmap, literals_equiv = [], []
 
-for idx, kmap in enumerate(kmaps):
+for idx, kmap in enumerate(Vranesic_kmaps):
     solver = KMapSolver(kmap)
     start_time = time.perf_counter()
     terms, sop = solver.minimize()
@@ -192,13 +194,13 @@ for idx, kmap in enumerate(kmaps):
 
     # Parse both the solver's output and expected equivalent
     expr_kmap = parse_kmap_sop(sop, var_names)
-    expr_equiv = parse_kmap_sop(equivalents[idx], var_names)
+    expr_equiv = parse_kmap_sop(Vranesic_equivalents[idx], var_names)
 
     # expr_kmap = simplify_logic(expr_kmap, form="dnf")
     # expr_equiv = simplify_logic(expr_equiv, form="dnf")
 
     # Literal counts
-    lit_equiv = count_literals_kmap(equivalents[idx], var_names)
+    lit_equiv = count_literals_kmap(Vranesic_equivalents[idx], var_names)
     lit_kmap = count_literals_kmap(sop, var_names)
     literals_equiv.append(lit_equiv)
     literals_kmap.append(lit_kmap)
@@ -223,6 +225,45 @@ for idx, kmap in enumerate(kmaps):
     'Literals (KMap)': lit_kmap,
     'Literals (Expected)': lit_equiv
     })
+
+for i, map in enumerate(Mano_kmaps):
+    solver = KMapSolver(map, convention="mano_kime")
+    start_time = time.perf_counter()
+    terms, sop = solver.minimize()
+    duration = time.perf_counter() - start_time
+
+    # Parse both the solver's output and expected equivalent
+    expr_kmap = parse_kmap_sop(sop, var_names)
+    expr_equiv = parse_kmap_sop(Mano_equivalents[i], var_names)
+
+    # Literal counts
+    lit_equiv = count_literals_kmap(Mano_equivalents[i], var_names)
+    lit_kmap = count_literals_kmap(sop, var_names)
+    literals_equiv.append(lit_equiv)
+    literals_kmap.append(lit_kmap)
+
+    # Use SymPy equivalence checking
+    try:
+        equivalent = Equivalent(expr_kmap, expr_equiv).simplify()
+    except Exception:
+        # Fallback: use XOR-based equivalence check
+        try:
+            diff = simplify_logic(expr_kmap ^ expr_equiv, form="dnf")
+            equivalent = (diff == false)
+        except Exception:
+            equivalent = False
+
+    print(f"Test {idx + 1 + i + 1} SOP: {sop}")
+    
+    results.append({
+    'Test': idx + 1 + i + 1,
+    'Time Taken (s)': duration,
+    'Equivalent': equivalent,
+    'Literals (KMap)': lit_kmap,
+    'Literals (Expected)': lit_equiv
+    })
+
+# print (results)    
 
 # --- Prepare data ---
 tests = [r['Test'] for r in results]

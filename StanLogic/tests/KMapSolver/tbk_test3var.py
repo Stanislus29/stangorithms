@@ -1,4 +1,11 @@
-from lib_kmap_solver import KMapSolver
+"""
+Benchmark tests for KMapSolver using known examples from literature.
+Compares KMapSolver results against expected minimal SOP forms.
+
+Test file for 2 variable kmaps.
+"""
+
+from stanlogic import KMapSolver
 from tabulate import tabulate 
 from sympy import symbols, And, Or, Not, simplify_logic, Equivalent, false
 import matplotlib.pyplot as plt 
@@ -11,107 +18,37 @@ import re
 Reference:
 Test cases adapted from: S. Brown and Z. Vranesic, *Digital Logic with Verilog Design*, McGraw-Hill.
 """
-# -Chapter 2, 2.14a, p. 95.
+# -Chapter 2, Fig 2.50, p. 82.
 test1 = [
-    [0, 1, 'd', 0],
-    [0, 1, 'd', 0],
-    [0, 0, 'd', 0],
-    [1, 1, 'd', 1]
+    [1, 0],
+    [1, 1]
 ]
-test1_equivalent = "x3x4' + x2x3'"
-
-# -Chapter 2, 2.11, p. 85. 
-test2 = [
-    [0, 0, 0, 0],
-    [0, 0, 1, 1],
-    [1, 0, 0, 1],
-    [1, 0, 0, 1]
-]
-test2_equivalent = "x2'x3 + x1x3'x4"
-
-test3 = [
-    [0, 0, 0, 0],
-    [0, 0, 1, 1],
-    [1, 1, 1, 1],
-    [1, 1, 1, 1]
-]
-test3_equivalent = "x3 + x1x4"
-
-test4 = [
-    [1, 0, 0, 1],
-    [0, 0, 0, 0],
-    [1, 1, 1, 0],
-    [1, 1, 0, 1]
-]
-test4_equivalent = "x2'x4' + x1'x3 + x2x3x4"
-
-test5 = [
-    [1, 1, 1, 0],
-    [1, 1, 1, 0],
-    [0, 0, 1, 1],
-    [0, 0, 1, 1]
-]
-test5_equivalent = "x1'x3' + x1x3 + x1x2"
-
-# -Chapter 2, Example 2.27, p. 106.
-test6 = [
-    [1, 1, 'd', 0],
-    [1, 0, 1, 'd'],
-    [1, 1, 1, 1],
-    [0, 0, 'd', 0]
-]
-test6_equivalent = "x3x4' + x1'x3'x4' + x2x4 +x1x4"
-
-# -Chapter 2, Example 2.26a, p. 105.
-test7 = [
-    [0, 1, 1, 1],
-    [0, 'd', 0, 'd'],
-    ['d', 'd', 1, 1],
-    [0, 1, 0, 'd']
-]
-test7_equivalent = "x1'x2 + x1x2' + x3x4 + x1x3'x4'"
+test1_equivalent = "x2 + x1'"
 
 #------------ Examples extracted from Mano and Kine ----------
 """
 Reference:
 Test cases adapted from: M. Mano and C. Kine, *Logic and Computer Design Fundamentals*, Pearson.
 """
-
-# -Chapter 2, Example 8, p. 65.
-test8 = [
-    [1, 1, 0, 1],
-    [1, 1, 0, 1],
-    [1, 1, 0, 0],
-    [1, 1, 0, 1]
+# -Chapter 2, Fig 9a, p. 62. 
+test2 = [
+    [1, 1],
+    [0, 1]
 ]
-test8_equivalent = "x3' + x1'x4' + x2'x4'"
+test2_equivalent = "x1' + x2"
 
-# -Chapter 2, Example 9, p. 66.
-test9 = [
-    [1, 1, 1, 1],
-    [1, 1, 1, 0],
-    [0, 0, 1, 0],
-    [1, 0, 1, 1]
+# -Chapter 2, Fig 9b, p. 62.  
+test3 = [
+    [0, 1],
+    [1, 1]
 ]
-test9_equivalent = "x2'x4' + x1'x3' + x3x4"
+test3_equivalent = "x1 + x2" #Textbook gives x1'x2 + x1x2' which is not minimal
 
-# -Chapter 2, Example 9, p. 66.
-test10 = [
-    ['d', 1, 1, 'd'],
-    [0, 'd', 1, 0],
-    [0, 0, 1, 0],
-    [0, 0, 1, 0]
-]
-test10_equivalent = "x3x4 + x1'x2'"
+Vranesic_kmaps = [test1]
+Vranesic_equivalents = [test1_equivalent]
 
-Vranesic_kmaps = [test1, test2, test3, test4, test5, 
-         test6, test7]
-
-Vranesic_equivalents = [test1_equivalent, test2_equivalent, test3_equivalent, test4_equivalent, 
-               test5_equivalent, test6_equivalent, test7_equivalent]
-
-Mano_kmaps = [test8, test9, test10]
-Mano_equivalents = [test8_equivalent, test9_equivalent, test10_equivalent]
+Mano_kmaps = [test2, test3]
+Mano_equivalents = [test2_equivalent, test3_equivalent]
 
 results = []
 
