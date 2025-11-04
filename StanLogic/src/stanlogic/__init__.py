@@ -1,9 +1,9 @@
 # kmap_algorithm/__init__.py
 
-from .stanlogic import KMapSolver
+from .kmapsolver import KMapSolver
 
 __all__ = [
     "KMapSolver",
 ]
 
-__version__ = "0.1.2"
+__version__ = "1.1.0"

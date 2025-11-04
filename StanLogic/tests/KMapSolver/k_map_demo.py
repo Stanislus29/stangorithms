@@ -7,20 +7,13 @@
 
 from stanlogic import KMapSolver
 
-# Example: 3-variable K-map with don't cares
+# Example: 4-variable K-map with don't cares
 kmap4 = [
     [0, 1, 'd', 0],
     [0, 1, 'd', 0],
     [0, 0, 'd', 0],
     [1, 1, 'd', 1]
 ]
-
-# kmap4a = [
-#     [0, 0, 0, 0],
-#     [0, 0, 1, 1],
-#     [1, 0, 0, 1],
-#     [1, 0, 0, 1]
-# ]
 
 pos_test = KMapSolver(kmap4)
 pos_test.print_kmap()
@@ -32,7 +25,17 @@ sop_test.print_kmap()
 terms, sop = sop_test.minimize(form ="sop")
 print("\n4-var result:", terms, sop)
 
-# solver4 = KMapSolver(kmap4a)
-# solver4.print_kmap()
-# terms, sop = solver4.minimize()
-# print("\n4-var result:", terms, sop)
+# ---------------Using the "mano_kime" convention-----------------
+kmap = [
+    [1, 1, 0, 0],
+    [1, 1, 0, 0],
+    [0, 0, 1, 1],
+    [0, 0, 1, 1]
+]
+
+solver = KMapSolver(kmap, convention="mano_kime")
+solver.print_kmap()
+terms, sop2 = solver.minimize(form="sop")
+terms_pos2, pos2 = solver.minimize(form="pos")
+print("Minimal SOP:", sop2)
+print("Minimal POS:", pos2)
