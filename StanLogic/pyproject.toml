@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stanlogic"
+version = "1.1.0"
+authors = [
+  { name = "Somtochukwu Stanislus Emeka-Onwuneme", email = "somtochukwueo@outlook.com" }
+]
+description = "A Boolean simplification and inference library that integrates K-Map simplification and logical inference."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT NC" }
+keywords = ["boolean-algebra", "kmap", "logic-simplification", "inference", "symbolic-logic"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+# Entry point for setuptools to find your code
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# pytest configuration
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
