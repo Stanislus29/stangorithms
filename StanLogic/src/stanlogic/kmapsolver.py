@@ -69,6 +69,18 @@ class KMapSolver:
                             for r in range(self.num_rows) 
                             for c in range(self.num_cols)}
 
+    def _mask_to_coords(self, mask):
+        """Helper to convert a bitmask to a list of [row, col] coordinates."""
+        coords = []
+        temp = mask
+        while temp:
+            low = temp & -temp
+            idx = low.bit_length() - 1
+            temp -= low
+            if idx in self._index_to_rc:
+                coords.append(self._index_to_rc[idx])
+        return coords
+
     def _cell_to_term(self, r, c):
         """
         Convert K-map cell coordinates to minterm/maxterm index.
@@ -372,10 +384,142 @@ class KMapSolver:
         # Build final minimized expression
         final_terms = [prime_terms[i] for i in sorted(chosen)]
         return final_terms, join_operator.join(final_terms)
+
+    def minimize_visualize(self, form='sop'):
+        """
+        Minimizes the K-map and returns a detailed step-by-step breakdown for visualization.
+        """
+        if form.lower() not in ['sop', 'pos']:
+            raise ValueError("form must be either 'sop' or 'pos'")
+
+        steps = {}
+        target_val = 0 if form.lower() == 'pos' else 1
+
+        # Step 1: Find all valid groups
+        if form.lower() == 'pos':
+            groups = self.find_all_groups_pos(allow_dontcare=True)
+            simplify_method = self._simplify_group_bits_pos
+            join_operator = " * "
+        else:
+            groups = self.find_all_groups(allow_dontcare=True)
+            simplify_method = self._simplify_group_bits
+            join_operator = " + "
+        
+        steps['allGroups'] = {
+            'count': len(groups),
+            'masks': groups,
+            'coords': [self._mask_to_coords(g) for g in groups]
+        }
+
+        # Step 2: Filter to prime implicants
+        prime_groups = self.filter_prime_implicants(groups)
+        prime_terms_map = {}
+        for g in prime_groups:
+            bits_list = [self._cell_bits[r][c] for r, c in self._mask_to_coords(g)]
+            prime_terms_map[g] = simplify_method(bits_list) if bits_list else ""
+
+        steps['primeImplicants'] = {
+            'count': len(prime_groups),
+            'masks': prime_groups,
+            'coords': [self._mask_to_coords(g) for g in prime_groups],
+            'terms': [prime_terms_map[g] for g in prime_groups]
+        }
+
+        # Step 3: Compute coverage for each prime implicant
+        prime_covers = []
+        for gmask in prime_groups:
+            cover_mask = 0
+            temp = gmask
+            while temp:
+                low = temp & -temp
+                idx = low.bit_length() - 1
+                temp -= low
+                r, c = self._index_to_rc[idx]
+                if self.kmap[r][c] == target_val:
+                    cover_mask |= (1 << idx)
+            prime_covers.append(cover_mask)
+
+        steps['primeWithCoverage'] = {
+            'coords': steps['primeImplicants']['coords'],
+            'terms': steps['primeImplicants']['terms'],
+            'coverageCounts': [c.bit_count() for c in prime_covers]
+        }
+
+        # Step 4: Find essential primes
+        minterm_to_primes = defaultdict(list)
+        all_minterms_mask = 0
+        for p_idx, cover in enumerate(prime_covers):
+            all_minterms_mask |= cover
+            temp = cover
+            while temp:
+                low = temp & -temp; idx = low.bit_length() - 1; temp -= low
+                minterm_to_primes[idx].append(p_idx)
+        
+        essential_indices = {primes[0] for primes in minterm_to_primes.values() if len(primes) == 1}
+        
+        steps['essentialPrimes'] = {
+            'indices': sorted(list(essential_indices)),
+            'coords': [self._mask_to_coords(prime_groups[i]) for i in essential_indices],
+            'terms': [prime_terms_map[prime_groups[i]] for i in essential_indices]
+        }
+
+        # Step 5: Greedy set cover
+        covered_mask = 0
+        for i in essential_indices:
+            covered_mask |= prime_covers[i]
+        
+        remaining_mask = all_minterms_mask & ~covered_mask
+        selected = set(essential_indices)
+        greedy_selections = []
+
+        while remaining_mask:
+            best_idx, best_cover_count = -1, -1
+            for idx in range(len(prime_covers)):
+                if idx in selected: continue
+                new_coverage = prime_covers[idx] & remaining_mask
+                count = new_coverage.bit_count()
+                if count > best_cover_count:
+                    best_cover_count = count
+                    best_idx = idx
+            
+            if best_idx == -1 or best_cover_count == 0: break
+            
+            selected.add(best_idx)
+            greedy_selections.append({
+                'term': prime_terms_map[prime_groups[best_idx]],
+                'newCoverage': best_cover_count
+            })
+            covered_mask |= prime_covers[best_idx]
+            remaining_mask = all_minterms_mask & ~covered_mask
+        
+        steps['greedySelections'] = greedy_selections
+
+        # Step 6: Final redundancy check and expression assembly
+        def covers_with_indices(indices):
+            mask = 0
+            for i in indices: mask |= prime_covers[i]
+            return mask
+
+        chosen = set(selected)
+        for idx in sorted(list(chosen)):
+            trial = chosen - {idx}
+            if covers_with_indices(trial) == covers_with_indices(chosen):
+                chosen = trial
+        
+        final_terms = [prime_terms_map[prime_groups[i]] for i in sorted(list(chosen))]
+        expression = join_operator.join(final_terms) if final_terms else ('1' if form == 'sop' else '0')
+
+        steps['finalSelected'] = {
+            'indices': sorted(list(chosen)),
+            'coords': [self._mask_to_coords(prime_groups[i]) for i in chosen],
+            'terms': final_terms
+        }
+
+        return expression, steps
     
     # ---------- Display ---------- #
     def print_kmap(self):
         """Pretty print the K-map with headers."""
         print("     " + "  ".join(self.col_labels))
         for i, row in enumerate(self.kmap):
-            print(f"{self.row_labels[i]}   " + "  ".join(str(val) for val in row))           
+            print(f"{self.row_labels[i]}   " + "  ".join(str(val) for val in row))
