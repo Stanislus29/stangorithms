@@ -42,3 +42,6 @@ Thumbs.db
 # Project-specific
 src/__pycache__/
 tests/__pycache__/
+
+#files 
+kmap_report.html
