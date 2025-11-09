@@ -7,35 +7,32 @@
 
 from stanlogic import KMapSolver
 
-# Example: 4-variable K-map with don't cares
-kmap4 = [
-    [0, 1, 'd', 0],
-    [0, 1, 'd', 0],
-    [0, 0, 'd', 0],
-    [1, 1, 'd', 1]
-]
+# # Example: 4-variable K-map with don't cares
+# kmap4 = [
+#     [0, 1, 'd', 0],
+#     [0, 1, 'd', 0],
+#     [0, 0, 'd', 0],
+#     [1, 1, 'd', 1]
+# ]
 
-pos_test = KMapSolver(kmap4)
-pos_test.print_kmap()
-terms, pos = pos_test.minimize(form ="pos")
-print("\n4-var result:", terms, pos)
+# pos_test = KMapSolver(kmap4)
+# pos_test.print_kmap()
+# terms, pos = pos_test.minimize(form ="pos")
+# print("\n4-var result:", terms, pos)
 
-sop_test = KMapSolver(kmap4)
-sop_test.print_kmap()
-terms, sop = sop_test.minimize(form ="sop")
-print("\n4-var result:", terms, sop)
+# sop_test = KMapSolver(kmap4)
+# sop_test.print_kmap()
+# terms, sop = sop_test.minimize(form ="sop")
+# print("\n4-var result:", terms, sop)
 
 # ---------------Using the "mano_kime" convention-----------------
 kmap = [
-    [1, 1, 0, 0],
-    [1, 1, 0, 0],
-    [0, 0, 1, 1],
-    [0, 0, 1, 1]
+    ['d', 1, 0, 1],
+    [0, 0, 'd', 'd'],
+    ['d', 1, 0, 1],
+    [1, 0, 0, 0]
 ]
 
-solver = KMapSolver(kmap, convention="mano_kime")
-solver.print_kmap()
-terms, sop2 = solver.minimize(form="sop")
-terms_pos2, pos2 = solver.minimize(form="pos")
-print("Minimal SOP:", sop2)
-print("Minimal POS:", pos2)
+solver = KMapSolver(kmap)
+solver.generate_html_report(form="sop", filename="kmap_report.html")
+print("HTML report generated: kmap_report.html")
