@@ -35,8 +35,10 @@
    - [Pseudocode](#35-pseudocode)  
    - [Flowchart](#36-flowchart)  
 4. [Using the Framework](#4-using-the-framework)  
-   - [Installation and Usage](#41-installation-and-usage)  
-   - [API Reference](#42-api-reference)  
+   - [Installation and Usage](#41-installation-and-usage)
+   - [Using the visualizer](#42-Using-the-visualizer)
+   - [API Reference](#43-api-reference)  
+   - [HTML Report & Verilog Export](#43-html-report--verilog-export)  
 5. [Conclusion](#5-conclusion)  
    - [Complexity Analysis](#51-complexity-analysis)  
    - [Comparison to Manual K-maps](#52-comparison-to-manual-k-maps)  
@@ -777,7 +779,54 @@ terms, sop = solver.minimize()
 print("Minimal SOP:", sop)
 ```
 
-### 4.2 API Reference
+### 4.2 Using the visualizer
+
+An HTML file which allows you to visualize the clustering process of the algorithm is available here [KMapSolver Visualize](../kmap-solver-visualizer.html)
+
+To install the requirements, run 
+
+```python
+python -r requirements.txt
+```
+Check that flask was installed 
+
+```bash 
+pip show flask
+```
+
+Then run app.py 
+```python
+python app.py
+```
+
+It should return something like this 
+``` bash
+Starting Flask server for K-Map Visualizer...
+Base directory: c:\Users\DELL\Documents\Mathematical_models\StanLogic
+HTML file: c:\Users\DELL\Documents\Mathematical_models\StanLogic\kmap-solver-visualizer.html
+File exists: True
+============================================================    
+View at: http://localhost:5000
+Or from network: http://<your-ip>:5000
+============================================================    
+ * Serving Flask app 'app'
+ * Debug mode: on
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://0.0.0.1:5000
+ * Running on http://0.10.209.0:5000
+Starting Flask server for K-Map Visualizer...
+Base directory: c:\Users\DELL\Documents\Mathematical_models\StanLogic
+HTML file: c:\Users\DELL\Documents\Mathematical_models\StanLogic\kmap-solver-visualizer.html
+File exists: True
+============================================================    
+View at: http://localhost:5000
+Or from network: http://<your-ip>:5000
+```
+
+Simply click the link, and follow the instructions available to use the visualizer
+
+### 4.3 API Reference
 
 #### Class: `KMapSolver`
 
@@ -896,6 +945,72 @@ primes = solver.filter_prime_implicants(all_groups)
 | `_simplify_group_bits_pos(bits_list)` | Generate POS term from bitstrings |
 | `_get_group_coords(r, c, h, w)` | Get wrapped coordinates for group |
 
+#### Method: `generate_html_report(filename="kmap_output.html", form='sop', module_name="logic_circuit")`
+Create an HTML report with minimized expression, Graphviz-based SVG logic diagram, and Verilog code.
+
+**Dependencies**
+This function requires the installation of Graphviz to render the svg image in HTML
+
+To install graphviz:
+
+1. Install the system package 
+**Windows** 
+```bash 
+winget install graphviz
+```
+
+After installation, make sure Graphviz’s ```bin``` directory (usually ```C:\Program Files\Graphviz\bin```) is added to your PATH environment variable.
+
+**macOS**
+```bash 
+brew install graphviz
+```
+
+Linux (Ubuntu/Debian)
+```bash
+sudo apt-get update
+sudo apt-get install graphviz
+```
+
+2. Install the Python package 
+
+```bash 
+pip install graphviz
+```
+
+Parameters:
+- filename (str): Output HTML filename.
+- form (str): "sop" or "pos".
+- module_name (str): Verilog module name to embed in the report.
+
+Returns:
+- str: The path of the written HTML file.
+
+Details:
+- Internally renders a Graphviz DOT description to SVG using Viz.js (loaded via CDN in the HTML).
+- Embeds the Verilog produced by generate_verilog with simple syntax highlighting.
+
+Example:
+```python
+solver.generate_html_report("report.html", form="pos", module_name="my_logic")
+```
+
+#### Method: `generate_verilog(module_name="logic_circuit", form='sop')`
+Generate a Verilog HDL module implementing the minimized Boolean function.
+
+Parameters:
+- module_name (str): Verilog module name.
+- form (str): "sop" or "pos".
+
+Returns:
+- str: Verilog source code.
+
+Example:
+```python
+code = solver.generate_verilog(module_name="f_unit", form="sop")
+print(code)
+```
+
 ---
 
 ## 5. Conclusion
@@ -993,7 +1108,7 @@ Bitmask-based implementation provides significant performance gains over the ori
 
 **Performance Strengths (Validated):**
 - ✓ Dominates SymPy in 2-3 variable cases: up to 80.9% faster
-- ✓ Consistently produces more minimal expressions: 33.9% fewer literals overall
+- ✓ Consistently produces more minimal expressions: 33.9% fewer literals
 - ✓ Highly stable: deviation ratio 0.193 for literal counts
 - ✓ Zero functional errors across 6000 benchmark test cases
 
@@ -1051,11 +1166,12 @@ The framework has been extensively validated through:
 - Hardware: Intel Core i7-9750H @ 2.60GHz
 - Date: October 30, 2025
 
-The open-source implementation is available under MIT NC license, enabling:
+The open-source implementation is dual licensed under AGPL - 3.0 and a commercial license, enabling:
 - Academic use in digital design courses
 - Integration into CAD tool workflows
 - Research experimentation with minimization algorithms
-- Commercial applications in small-scale circuit optimization
+
+For Commercial applications: contact stanstechnologies@gmail.com
 
 ---
 
@@ -1385,20 +1501,6 @@ x₃x₄=10|  1 |  1 | 'd'|  1 |
   - Need minimal literals? → StanLogic (28% fewer)
   - Need fastest runtime? → SymPy (~5-10% faster)
 - **Educational Use**: StanLogic preferred for pedagogical transparency
-
----
-
-## Appendix C: License
-
-**MIT License**
-
-Copyright © 2025 Somtochukwu Stanislus Emeka-Onwuneme
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ---
 
