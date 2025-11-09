@@ -83,7 +83,7 @@ StanLogic
 Clone the repository and install locally:
 
 ``` bash
-git clone https://github.com/<your-username>/StanLogic.git
+git clone https://github.com/Stanislus29/stangorithms.git
 cd StanLogic/src
 pip install -e .
 ```
@@ -93,13 +93,13 @@ If you use StanLogic in your research, teaching, or software, please cite it as 
 
 **Plain Text:**
 
-    Somtochukwu Emeka-Onwuneme. StanLogic: A Python Package for Boolean Simplification and Logic Computation. Stan's Technologies, 2025. GitHub Repository.
+    Somtochukwu Stanislus Emeka-Onwuneme. StanLogic: A Python Package for Boolean Simplification and Logic Computation. Stan's Technologies, 2025. GitHub Repository.
 
 **BibTeX:**
 
 ```BibTeX
 @software{stanlogic2025,
-author = {Somtochukwu Emeka-Onwuneme},
+author = {Somtochukwu Stanislus Emeka-Onwuneme},
 title = {StanLogic: A Python Package for Boolean Simplification and Logic Computation},
 year = {2025},
 institution = {Stan's Technologies},
@@ -108,7 +108,7 @@ url = {https://github.com/Stanislus29/stangorithms/tree/main/StanLogic}
 ```
 
 ## Licence 
-This project is licensed under the MIT Non-Commercial (MIT-NC) License.
+This project is dual-licensed under AGPL - 3.0, and a commercial license
 
 You are free to use, modify, and distribute this code for educational and research purposes only. Commercial use requires explicit permission from Somtochukwu Emeka-Onwuneme (Stan's Technologies).
 

@@ -62,7 +62,7 @@ Stangorithms
 ```
 
 ## Legal & Contribution
-- [MIT License](LICENSE)
+- [AGPL - 3.0 License](LICENSE)
 - [Trademark & Attribution Policy](TRADEMARKS.md)
 - [Contributor Guidelines](CONTRIBUTING.md)
 
