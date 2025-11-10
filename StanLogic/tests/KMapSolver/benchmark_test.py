@@ -276,7 +276,7 @@ def export_results_to_csv(all_results, filename="outputs/benchmark_results.csv")
 
     print(f"\n✅ Results exported successfully to '{filename}'\n")
 
-def save_benchmark_plots(all_results, pdf_filename="outputs/benchmark_plots.pdf", logo_path="././images/St_logo_light-tp.png"):
+def save_benchmark_plots(all_results, pdf_filename="outputs/benchmark_plots.pdf", logo_path="StanLogic\images\St_logo_light-tp.png"):
     """
     Save benchmark plots, summary, and inference report into a single PDF file.
     """

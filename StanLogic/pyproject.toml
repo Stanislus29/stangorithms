@@ -4,18 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stanlogic"
-version = "1.1.0"
+version = "1.1.1"
 authors = [
   { name = "Somtochukwu Stanislus Emeka-Onwuneme", email = "somtochukwueo@outlook.com" }
 ]
 description = "A Boolean simplification and inference library that integrates K-Map simplification and logical inference."
 readme = "README.md"
 requires-python = ">=3.8"
-license = { text = "MIT NC" }
+license = { text = "Dual licensed: AGPL - 3.0, Commercial License" }
 keywords = ["boolean-algebra", "kmap", "logic-simplification", "inference", "symbolic-logic"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
     "Operating System :: OS Independent",
 ]
 
