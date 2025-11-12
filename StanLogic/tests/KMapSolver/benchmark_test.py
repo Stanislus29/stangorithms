@@ -13,30 +13,90 @@ from matplotlib.backends.backend_pdf import PdfPages
 from textwrap import fill, wrap
 import matplotlib.image as mpimg
 
-# -----------------------------------------------------------
-# Utility functions
-# -----------------------------------------------------------
+# ...existing code...
+def random_kmap(rows=4, cols=4, formatted=False, p_one=0.55, p_dc=0.07, seed=None):
+    """
+    Generate a random K-map with controlled probability of 1, 0, and 'd'.
+    p_one: probability a cell is 1
+    p_dc: probability a cell is 'd' (kept low to avoid excessive don't cares)
+    Remaining probability becomes 0.
+    """
+    if seed is not None:
+        random.seed(seed)
+    if p_one < 0 or p_dc < 0 or p_one + p_dc > 1:
+        raise ValueError("Probabilities invalid: ensure p_one >=0, p_dc >=0, p_one + p_dc <= 1")
+    p_zero = 1 - p_one - p_dc
+    choices = [1, 0, 'd']
+    weights = [p_one, p_zero, p_dc]
+    kmap = [[random.choices(choices, weights=weights, k=1)[0] for _ in range(cols)] for _ in range(rows)]
+    if formatted:
+        return "kmap = [\n" + "\n".join("    " + repr(row) + "," for row in kmap) + "\n]"
+    return kmap
+# ...existing code...
 
-def generate_kmap(num_vars):
-    """Generate a random K-map matrix with values 0, 1, or 'd'."""
-    size = 2 ** (num_vars // 2), 2 ** ((num_vars + 1) // 2)
-    rows, cols = size
-    values = [0, 1, 'd']
-    return [[random.choice(values) for _ in range(cols)] for _ in range(rows)]
+def kmap_minterms(kmap, convention="vranseic"):
+    """
+    Extract minterm indices (cells with 1) and don't care indices (cells with 'd')
+    from a K-map using Gray code labeling and variable ordering convention.
+    convention: 'vranseic' (cols=x1x2, rows=x3x4) or 'mano_kime' (rows=x1x2, cols=x3x4)
+    Returns dict with minterms, dont_cares, bits_map.
+    """
+    rows = len(kmap)
+    cols = len(kmap[0])
+    size = rows * cols
 
-def get_minterms_from_kmap(kmap):
-    """Extract minterms and don't cares from a 4-variable K-map layout."""
-    row_order = [0, 1, 3, 2]
-    col_order = [0, 1, 3, 2]
-    minterms, dont_cares = [], []
-    for r, row in enumerate(kmap):
-        for c, val in enumerate(row):
-            idx = (row_order[r] << 2) | col_order[c]
+    if size == 4:          # 2 vars (2x2)
+        num_vars = 2
+        row_labels = ["0", "1"]
+        col_labels = ["0", "1"]
+    elif size == 8:        # 3 vars (2x4 or 4x2)
+        num_vars = 3
+        if rows == 2 and cols == 4:
+            row_labels = ["0", "1"]
+            col_labels = ["00", "01", "11", "10"]  # Gray code
+        elif rows == 4 and cols == 2:
+            row_labels = ["00", "01", "11", "10"]
+            col_labels = ["0", "1"]
+        else:
+            raise ValueError("Invalid 3-variable K-map shape.")
+    elif size == 16:       # 4 vars (4x4)
+        num_vars = 4
+        row_labels = ["00", "01", "11", "10"]
+        col_labels = ["00", "01", "11", "10"]
+    else:
+        raise ValueError("K-map must be 2x2, 2x4/4x2, or 4x4.")
+
+    convention = convention.lower().strip()
+
+    def cell_to_bits(r, c):
+        if convention == "mano_kime":
+            return row_labels[r] + col_labels[c]
+        return col_labels[c] + row_labels[r]
+
+    def cell_to_term(r, c):
+        bits = cell_to_bits(r, c)
+        return int(bits, 2)
+
+    minterms = []
+    dont_cares = []
+    bits_map = {}
+
+    for r in range(rows):
+        for c in range(cols):
+            val = kmap[r][c]
+            idx = cell_to_term(r, c)
+            bits_map[idx] = cell_to_bits(r, c)
             if val == 1:
                 minterms.append(idx)
             elif val == 'd':
                 dont_cares.append(idx)
-    return minterms, dont_cares
+
+    return {
+        "num_vars": num_vars,
+        "minterms": sorted(minterms),
+        "dont_cares": sorted(dont_cares),
+        "bits_map": bits_map
+    }
 
 def parse_kmap_expression(expr_str, var_names, form="sop"):
     """
@@ -51,7 +111,6 @@ def parse_kmap_expression(expr_str, var_names, form="sop"):
         SymPy Boolean expression equivalent to the input string.
     """
     from sympy import And, Or, Not, false, true
-    import re
 
     if not expr_str or expr_str.strip() == "":
         return false if form == "sop" else true
@@ -115,59 +174,214 @@ def check_equivalence(expr1, expr2):
     except Exception:
         return False
 
-def count_literals(sop_str):
-    """Count number of product terms and literals in a SOP string."""
-    if not sop_str or sop_str.strip() == "":
+def count_literals(expr_str, form="sop"):
+    """
+    Count number of terms and total literals in a Boolean expression.
+    form='sop': expression like A'B + BC' + D
+        - terms = product terms (separated by +)
+        - literals = variable appearances with negation counted separately
+    form='pos': expression like (A + B')(A' + C + D')
+        - terms = sum clauses (parenthesized groups)
+        - literals = variable appearances across all sum clauses
+    Returns (num_terms, num_literals).
+    """
+    if not expr_str or expr_str.strip() == "":
         return 0, 0
-    terms = [t.strip() for t in sop_str.split('+') if t.strip()]
-    num_terms = len(terms)
-    num_literals = 0
-    for t in terms:
-        num_literals += len([v for v in re.findall(r"[A-Za-z_]\w*'?", t)])
-    return num_terms, num_literals
 
-# -----------------------------------------------------------
-# Benchmark routine
-# -----------------------------------------------------------
+    form = form.lower()
+    s = expr_str.replace(" ", "")
+
+    if form == "sop":
+        terms = [t for t in s.split('+') if t]
+        num_terms = len(terms)
+        num_literals = 0
+        for t in terms:
+            lits = re.findall(r"[A-Za-z_]\w*'?", t)
+            num_literals += len(lits)
+        return num_terms, num_literals
+
+    if form == "pos":
+        # Extract clauses inside parentheses; if none, treat whole string as one clause
+        clauses = re.findall(r"\(([^()]*)\)", s)
+        if not clauses:
+            clauses = [s]
+        num_terms = len(clauses)
+        num_literals = 0
+        for clause in clauses:
+            # Split by '+' inside clause
+            lits = [lit for lit in clause.split('+') if lit]
+            # Each lit may be like A or A'
+            for lit in lits:
+                if re.fullmatch(r"[A-Za-z_]\w*'?", lit):
+                    num_literals += 1
+        return num_terms, num_literals
+
+    raise ValueError("form must be 'sop' or 'pos'")
+
+def count_sympy_expression_literals(expr, form="sop"):
+    """
+    Count number of terms and literals from a SymPy boolean expression string
+    without using SymPy logic utilities (pure string parsing).
+    SOP: terms are top-level OR-separated groups (|). Each group's literals are &-separated.
+    POS: clauses are top-level AND-separated groups (&). Each clause's literals are |-separated.
+    Negations (~x) count as literals. Parentheses only provide grouping and are ignored in counts.
+    Returns (num_terms, num_literals).
+    """
+    if expr is None:
+        return 0, 0
+    s = str(expr).strip()
+    form = form.lower()
+
+    # Handle trivial constants
+    if s in ("True", "False"):
+        return 0, 0
+
+    # If single symbol or negated symbol
+    import re
+    if re.fullmatch(r"~?[A-Za-z_]\w*", s):
+        return 1, 1
+
+    def split_top_level(text, sep):
+        parts = []
+        buf = []
+        depth = 0
+        for ch in text:
+            if ch == '(':
+                depth += 1
+            elif ch == ')':
+                depth -= 1
+            if ch == sep and depth == 0:
+                part = ''.join(buf).strip()
+                if part:
+                    parts.append(part)
+                buf = []
+            else:
+                buf.append(ch)
+        last = ''.join(buf).strip()
+        if last:
+            parts.append(last)
+        return parts
+
+    def strip_parens(x):
+        x = x.strip()
+        while x.startswith('(') and x.endswith(')'):
+            # Ensure they are a matching outer pair
+            depth = 0
+            valid = True
+            for i, ch in enumerate(x):
+                if ch == '(':
+                    depth += 1
+                elif ch == ')':
+                    depth -= 1
+                    if depth == 0 and i != len(x) - 1:
+                        valid = False
+                        break
+            if valid:
+                x = x[1:-1].strip()
+            else:
+                break
+        return x
+
+    def count_literals_in_group(group_str, inner_sep):
+        group_str = strip_parens(group_str)
+        if not group_str:
+            return 0
+        # Split by inner_sep at top level for POS clauses or SOP products
+        inner_parts = split_top_level(group_str, inner_sep)
+        # If no split occurred (single literal or conjunction/disjunction without separator)
+        if len(inner_parts) == 1 and inner_sep in ('|', '&'):
+            # For products/clauses we still might have separators
+            raw = inner_parts[0]
+            # For SOP product: split by '&'
+            if inner_sep == '&':
+                lits = split_top_level(raw, '&')
+            else:
+                lits = split_top_level(raw, '|')
+        else:
+            lits = inner_parts
+        literal_count = 0
+        for lit in lits:
+            lit = strip_parens(lit)
+            if re.fullmatch(r"~?[A-Za-z_]\w*", lit):
+                literal_count += 1
+        return literal_count
+
+    if form == "sop":
+        # Top-level OR splits
+        top_terms = split_top_level(s, '|')
+        num_terms = len(top_terms)
+        total_literals = 0
+        for term in top_terms:
+            # Count literals inside product (AND-separated)
+            literals_in_term = count_literals_in_group(term, '&')
+            total_literals += literals_in_term
+        return num_terms, total_literals
+
+    if form == "pos":
+        # Top-level AND splits
+        top_clauses = split_top_level(s, '&')
+        num_terms = len(top_clauses)
+        total_literals = 0
+        for clause in top_clauses:
+            # Count literals inside sum (OR-separated)
+            literals_in_clause = count_literals_in_group(clause, '|')
+            total_literals += literals_in_clause
+        return num_terms, total_literals
+
+    raise ValueError("form must be 'sop' or 'pos'")
+
 
 def benchmark_case(kmap, var_names, form_type, test_index):
-    minterms, dont_cares = get_minterms_from_kmap(kmap)
+    info = kmap_minterms(kmap, convention="vranseic")
+    minterms = info["minterms"]
+    dont_cares = info["dont_cares"]
 
-    if form_type == "pos":
-        # --- SymPy benchmark ---
-        start = time.perf_counter()
-        expr_sympy = POSform(var_names, minterms, dont_cares)
-        t_sympy = time.perf_counter() - start
-    else:
-        # --- SymPy benchmark ---
-        start = time.perf_counter()
-        expr_sympy = SOPform(var_names, minterms, dont_cares)
-        t_sympy = time.perf_counter() - start    
+    if len(var_names) != info["num_vars"]:
+        raise ValueError(f"Variable symbol count ({len(var_names)}) does not match K-map ({info['num_vars']}).")
 
-    # --- KMapSolver benchmark ---
+    # SymPy minimization
     start = time.perf_counter()
-    expr_kmap = KMapSolver(kmap)
-    terms, expr = expr_kmap.minimize(form = form_type)
+    if form_type == "pos":
+        expr_sympy = POSform(var_names, minterms, dont_cares)
+    else:
+        expr_sympy = SOPform(var_names, minterms, dont_cares)
+    t_sympy = time.perf_counter() - start
+
+    # KMapSolver minimization
+    start = time.perf_counter()
+    solver = KMapSolver(kmap)
+    terms, expr_str = solver.minimize(form=form_type)
     t_kmap = time.perf_counter() - start
 
-    expr_kmap_sympy = parse_kmap_expression(expr, var_names)
+    # Parse solver expression to SymPy
+    expr_kmap_sympy = parse_kmap_expression(expr_str, var_names, form=form_type)
     equiv = check_equivalence(expr_sympy, expr_kmap_sympy)
 
-    # literal metrics
-    sympy_terms, sympy_literals = count_literals(str(expr_sympy))
-    kmap_terms, kmap_literals = count_literals(expr)
+    # Literal metrics (pass form so POS counted correctly)
+    sympy_terms, sympy_literals = count_sympy_expression_literals(str(expr_sympy), form=form_type)
+    kmap_terms, kmap_literals = count_literals(expr_str, form=form_type)
 
     return {
-        # Uncomment to see expressions of each algorithm
-        # "sympy_expr": expr_sympy,
-        # "kmap_expr": sop,
         "index": test_index,
+        "num_vars": info["num_vars"],
+        "form": form_type,
         "equiv": equiv,
         "t_sympy": t_sympy,
         "t_kmap": t_kmap,
         "sympy_literals": sympy_literals,
         "kmap_literals": kmap_literals,
+        "sympy_terms": sympy_terms,
+        "kmap_terms": kmap_terms,
     }
+
+def _kmap_shape(num_vars):
+    if num_vars == 2:
+        return 2, 2
+    if num_vars == 3:
+        return 2, 4   # matches kmap_minterms 3-variable case rows=2, cols=4
+    if num_vars == 4:
+        return 4, 4
+    raise ValueError("Only 2–4 variables supported.")
 
 def generate_inference(
     avg_sympy_time, avg_kmap_time, std_diff, deviation_ratio,
@@ -276,7 +490,7 @@ def export_results_to_csv(all_results, filename="outputs/benchmark_results.csv")
 
     print(f"\n✅ Results exported successfully to '{filename}'\n")
 
-def save_benchmark_plots(all_results, pdf_filename="outputs/benchmark_plots.pdf", logo_path="StanLogic\images\St_logo_light-tp.png"):
+def save_benchmark_plots(all_results, pdf_filename="outputs/benchmark_plots.pdf", logo_path="StanLogic/images/St_logo_light-tp.png"):
     """
     Save benchmark plots, summary, and inference report into a single PDF file.
     """
@@ -603,10 +817,6 @@ def save_benchmark_plots(all_results, pdf_filename="outputs/benchmark_plots.pdf"
         
     print(f"✅ PDF successfully saved to {pdf_filename}")
 
-# -----------------------------------------------------------
-# Run multiple tests and plot results
-# -----------------------------------------------------------
-
 def main():
     # Create outputs directory if it doesn't exist
     outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
@@ -621,33 +831,22 @@ def main():
         (4, "pos"),
     ]
 
-    random.seed(42)
-    var_names = symbols('x1 x2 x3 x4')
-
+    # random.seed(42)
+    var_pool = symbols('x1 x2 x3 x4')
     all_results = []
 
-    for vars, form_type in config:
+    for num_vars, form_type in config:
         print(f"\n{'='*70}")
-        print(f" Running benchmark for {vars}-variable K-maps ({form_type.upper()} form)")
-        print(f"{'='*70}\n")
+        print(f" Benchmark: {num_vars}-variable K-map ({form_type.upper()})")
+        print(f"{'='*70}")
+        rows, cols = _kmap_shape(num_vars)
         results = []
-
-        for i in range(1000):  # 10 random K-maps
-            kmap = generate_kmap(vars)
-            result = benchmark_case(kmap, var_names, form_type, i+1)  # Pass i+1 as the test index
-            result["num_vars"] = vars
-            result["form"] = form_type
+        for i in range(1000):  # 100 random K-maps per configuration
+            kmap = random_kmap(rows=rows, cols=cols)
+            var_names = var_pool[:num_vars]
+            result = benchmark_case(kmap, var_names, form_type, i + 1)
             results.append(result)
             all_results.append(result)
-
-            #---Uncomment to see individual test details---
-            # print(f"\nTest {i+1}")
-            # print(f"SymPy: {result['sympy_expr']}")
-            # print(f"KMap:  {result['kmap_expr']}")
-            # print(f"Equivalent: {result['equiv']}")
-            # print(f"SymPy time: {result['t_sympy']:.6f}s, KMapSolver time: {result['t_kmap']:.6f}s")
-    
-        # print(tabulate(results, headers="keys", tablefmt="fancy_grid"))
 
         # --- Plot performance comparison ---
         sympy_times = [r['t_sympy'] for r in results]
@@ -720,7 +919,49 @@ def main():
     save_benchmark_plots(all_results, pdf_path)
 
     print(f"\n✅ All benchmark results exported to '{csv_path}'")   
-    print(f"✅ All benchmark plots saved to '{pdf_path}'") 
+    print(f"✅ All benchmark plots saved to '{pdf_path}'")         
+
+        # print(tabulate(results, headers="keys", tablefmt="fancy_grid"))        
+        
+    #     sop_expr = SOPform(vars_syms, minterms, dont_cares)
+
+    #     expr_kmap_sympy = parse_kmap_expression(sop, vars_syms)
+    #     equiv = check_equivalence(expr_kmap_sympy, sop_expr)
+
+    #     if not equiv:
+    #         print("Discrepancy found!")
+    #         print("K-map:")
+    #         solver.print_kmap()
+    #         print("K-map SOP:", sop)
+    #         print("SymPy SOP:", sop_expr)
+    #         print("Minterms:", info["minterms"])
+    #         print("Don't cares:", info["dont_cares"])
+    #         break
 
 if __name__ == "__main__":
     main()
+
+
+# # Example usage
+# kmap = random_kmap(rows=4, cols=4)  # list, suitable for KMapSolver
+# solver = KMapSolver(kmap)
+# terms, sop = solver.minimize()
+# solver.print_kmap()
+# print("K-map SOP:", sop)
+
+
+# info = kmap_minterms(kmap, convention="vranseic")
+# minterms = info["minterms"]
+# dont_cares = info["dont_cares"]
+
+# vars_syms = symbols('x1 x2 x3 x4')
+# sop_expr = SOPform(vars_syms, minterms, dont_cares)
+# print("SymPy SOP:", sop_expr)
+
+# print("Minterms:", info["minterms"])
+# print("Don't cares:", info["dont_cares"])
+
+# expr_kmap_sympy = parse_kmap_expression(sop, vars_syms)
+# equiv = check_equivalence(expr_kmap_sympy, sop_expr)
+
+# print("Equivalence:", equiv)
