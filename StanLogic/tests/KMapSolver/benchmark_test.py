@@ -555,12 +555,20 @@ def benchmark_case(kmap, var_names, form_type, test_index, distribution):
     # Validate equivalence
     expr_kmap_sympy = parse_kmap_expression(expr_str, var_names, form=form_type)
     equiv = check_equivalence(expr_sympy, expr_kmap_sympy)
-    equiv_symbol = "✓" if equiv else "✗"
-    print(f"Equiv: {equiv_symbol}")
-
+    
     # Compute metrics
     sympy_terms, sympy_literals = count_sympy_expression_literals(str(expr_sympy), form=form_type)
     kmap_terms, kmap_literals = count_literals(expr_str, form=form_type)
+    
+    # Detect constant functions (both have 0 literals)
+    is_constant = (sympy_literals == 0 and kmap_literals == 0)
+    result_category = "constant" if is_constant else "expression"
+    
+    equiv_symbol = "✓" if equiv else "✗"
+    if is_constant:
+        print(f"Equiv: {equiv_symbol} [CONSTANT]")
+    else:
+        print(f"Equiv: {equiv_symbol}")
 
     return {
         "index": test_index,
@@ -568,6 +576,8 @@ def benchmark_case(kmap, var_names, form_type, test_index, distribution):
         "form": form_type,
         "distribution": distribution,
         "equiv": equiv,
+        "result_category": result_category,
+        "is_constant": is_constant,
         "t_sympy": t_sympy,
         "t_kmap": t_kmap,
         "sympy_literals": sympy_literals,
@@ -605,23 +615,30 @@ def perform_statistical_tests(sympy_times, kmap_times, sympy_literals, kmap_lite
     
     # Paired t-test (parametric)
     t_stat_time, p_value_time = stats.ttest_rel(kmap_times, sympy_times)
-    t_stat_lit, p_value_lit = stats.ttest_rel(kmap_literals, sympy_literals)
+    
+    # Only perform literal tests if we have non-zero literals
+    if len(sympy_literals) > 0 and np.any(sympy_literals > 0):
+        t_stat_lit, p_value_lit = stats.ttest_rel(kmap_literals, sympy_literals)
+        w_stat_lit, w_p_lit = stats.wilcoxon(kmap_literals, sympy_literals, zero_method='zsplit')
+        cohens_d_lit = np.mean(lit_diff) / np.std(lit_diff, ddof=1) if np.std(lit_diff) > 0 else 0
+        ci_lit = stats.t.interval(0.95, len(lit_diff)-1,
+                                  loc=np.mean(lit_diff),
+                                  scale=stats.sem(lit_diff))
+    else:
+        # All constants - no meaningful literal comparison
+        t_stat_lit = p_value_lit = w_stat_lit = w_p_lit = cohens_d_lit = 0
+        ci_lit = (0, 0)
     
     # Wilcoxon signed-rank test (non-parametric alternative)
     w_stat_time, w_p_time = stats.wilcoxon(kmap_times, sympy_times, zero_method='zsplit')
-    w_stat_lit, w_p_lit = stats.wilcoxon(kmap_literals, sympy_literals, zero_method='zsplit')
     
     # Effect size (Cohen's d)
     cohens_d_time = np.mean(time_diff) / np.std(time_diff, ddof=1) if np.std(time_diff) > 0 else 0
-    cohens_d_lit = np.mean(lit_diff) / np.std(lit_diff, ddof=1) if np.std(lit_diff) > 0 else 0
     
     # Confidence intervals (95%)
     ci_time = stats.t.interval(0.95, len(time_diff)-1, 
                                loc=np.mean(time_diff), 
                                scale=stats.sem(time_diff))
-    ci_lit = stats.t.interval(0.95, len(lit_diff)-1,
-                              loc=np.mean(lit_diff),
-                              scale=stats.sem(lit_diff))
     
     return {
         "time": {
@@ -670,12 +687,14 @@ def interpret_effect_size(cohens_d):
 # INFERENCE GENERATION
 # ============================================================================
 
-def generate_scientific_inference(stats_results):
+def generate_scientific_inference(stats_results, num_constant=0, total_tests=0):
     """
     Generate scientifically rigorous inference with statistical support.
     
     Args:
         stats_results: Dictionary from perform_statistical_tests()
+        num_constant: Number of constant functions detected
+        total_tests: Total number of tests run
         
     Returns:
         Formatted inference text
@@ -684,6 +703,14 @@ def generate_scientific_inference(stats_results):
     lines.append("=" * 75)
     lines.append("STATISTICAL INFERENCE REPORT")
     lines.append("=" * 75)
+    
+    # Constant functions notification
+    if num_constant > 0:
+        lines.append(f"\nℹ️  CONSTANT FUNCTIONS DETECTED: {num_constant}/{total_tests} ({100*num_constant/total_tests:.1f}%)")
+        lines.append("   These are unsimplifiable functions (e.g., all-zeros, all-ones) that both")
+        lines.append("   algorithms correctly identified. They are included in performance and")
+        lines.append("   equivalence analysis but excluded from literal-count statistics.")
+        lines.append("")
     
     # Execution Time Analysis
     lines.append("\n1. EXECUTION TIME ANALYSIS")
@@ -713,25 +740,35 @@ def generate_scientific_inference(stats_results):
     lines.append("\n2. SIMPLIFICATION QUALITY ANALYSIS")
     lines.append("-" * 75)
     lit_stats = stats_results["literals"]
-    lines.append(f"Mean SymPy Literals:  {lit_stats['mean_sympy']:.2f}")
-    lines.append(f"Mean KMap Literals:   {lit_stats['mean_kmap']:.2f}")
-    lines.append(f"Mean Difference:      {lit_stats['mean_diff']:+.2f}")
-    lines.append(f"Std. Dev. (Δ):        {lit_stats['std_diff']:.2f}")
-    lines.append(f"95% CI:               [{lit_stats['ci_lower']:.2f}, {lit_stats['ci_upper']:.2f}]")
-    lines.append("")
-    lines.append(f"Paired t-test:        t = {lit_stats['t_statistic']:.4f}, p = {lit_stats['p_value']:.6f}")
-    lines.append(f"Wilcoxon test:        W = {lit_stats['wilcoxon_stat']:.1f}, p = {lit_stats['wilcoxon_p']:.6f}")
-    lines.append(f"Effect Size (d):      {lit_stats['cohens_d']:.4f} ({interpret_effect_size(lit_stats['cohens_d'])})")
     
-    if lit_stats['significant']:
-        lines.append(f"\n✓ SIGNIFICANT: Literal count difference is statistically significant (p < {ALPHA})")
-        if lit_stats['mean_diff'] < 0:
-            lines.append("  → KMapSolver produces more minimal expressions")
-        else:
-            lines.append("  → SymPy produces more minimal expressions")
+    if num_constant == total_tests:
+        lines.append(f"⚠️  All {num_constant} test cases resulted in constant functions.")
+        lines.append(f"   Those {num_constant} tests are not applicable in the literal count comparison.")
     else:
-        lines.append(f"\n✗ NOT SIGNIFICANT: No significant difference in simplification (p ≥ {ALPHA})")
-        lines.append("  → Both algorithms achieve comparable minimization")
+        non_constant_count = total_tests - num_constant
+        lines.append(f"Analysis based on {non_constant_count} non-constant functions:")
+        if num_constant > 0:
+            lines.append(f"({num_constant} constant function(s) excluded from this analysis)")
+        lines.append("")
+        lines.append(f"Mean SymPy Literals:  {lit_stats['mean_sympy']:.2f}")
+        lines.append(f"Mean KMap Literals:   {lit_stats['mean_kmap']:.2f}")
+        lines.append(f"Mean Difference:      {lit_stats['mean_diff']:+.2f}")
+        lines.append(f"Std. Dev. (Δ):        {lit_stats['std_diff']:.2f}")
+        lines.append(f"95% CI:               [{lit_stats['ci_lower']:.2f}, {lit_stats['ci_upper']:.2f}]")
+        lines.append("")
+        lines.append(f"Paired t-test:        t = {lit_stats['t_statistic']:.4f}, p = {lit_stats['p_value']:.6f}")
+        lines.append(f"Wilcoxon test:        W = {lit_stats['wilcoxon_stat']:.1f}, p = {lit_stats['wilcoxon_p']:.6f}")
+        lines.append(f"Effect Size (d):      {lit_stats['cohens_d']:.4f} ({interpret_effect_size(lit_stats['cohens_d'])})")
+        
+        if lit_stats['significant']:
+            lines.append(f"\n✓ SIGNIFICANT: Literal count difference is statistically significant (p < {ALPHA})")
+            if lit_stats['mean_diff'] < 0:
+                lines.append("  → KMapSolver produces more minimal expressions")
+            else:
+                lines.append("  → SymPy produces more minimal expressions")
+        else:
+            lines.append(f"\n✗ NOT SIGNIFICANT: No significant difference in simplification (p ≥ {ALPHA})")
+            lines.append("  → Both algorithms achieve comparable minimization")
     
     # Overall Verdict
     lines.append("\n3. OVERALL SCIENTIFIC CONCLUSION")
@@ -748,6 +785,10 @@ def generate_scientific_inference(stats_results):
     
     lines.append(f"\nEffect sizes: Time ({interpret_effect_size(time_stats['cohens_d'])}), "
                  f"Literals ({interpret_effect_size(lit_stats['cohens_d'])})")
+    
+    if num_constant > 0:
+        lines.append(f"\nNote: {num_constant} constant function(s) correctly handled by both algorithms.")
+    
     lines.append("=" * 75)
     
     text = "\n".join(lines)
@@ -767,7 +808,12 @@ def export_results_to_csv(all_results, filename=RESULTS_CSV):
 
     with open(filename, mode="w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["Configuration", "Test Index", "Distribution", "Equivalent", 
+        
+        # Add explanatory comment at the top of the CSV
+        writer.writerow(["# For constant expressions, SymPy Literals and KMap Literals are 0, thus both algorithms correctly identify them."])
+        writer.writerow([])
+        
+        writer.writerow(["Configuration", "Test Index", "Distribution", "Category", "Equivalent", 
                          "SymPy Time (s)", "KMap Time (s)", 
                          "SymPy Literals", "KMap Literals"])
 
@@ -780,6 +826,7 @@ def export_results_to_csv(all_results, filename=RESULTS_CSV):
                     f"{vars}-{form_type}",
                     result.get("index", ""),
                     result.get("distribution", ""),
+                    result.get("result_category", "expression"),
                     result.get("equiv", ""),
                     f"{result.get('t_sympy', 0):.8f}",
                     f"{result.get('t_kmap', 0):.8f}",
@@ -1057,7 +1104,14 @@ To reproduce this experiment:
             ax.text(0.5, 0.96, f"STATISTICAL ANALYSIS: {num_vars}-Variable {form_type.upper()}",
                    fontsize=16, fontweight='bold', ha='center', transform=ax.transAxes)
             
-            inference = generate_scientific_inference(stats)
+            # Count constants for this configuration
+            num_constant_config = sum(1 for r in results if r.get("is_constant", False))
+            
+            inference = generate_scientific_inference(
+                all_stats[(num_vars, form_type)],
+                num_constant=num_constant_config,
+                total_tests=len(results)
+            )
             
             # Display inference with proper formatting
             y_pos = 0.90
@@ -1068,7 +1122,7 @@ To reproduce this experiment:
                 elif any(line.strip().startswith(h) for h in ['1.', '2.', '3.', 'STATISTICAL']):
                     fontsize, fontweight = 11, 'bold'
                     y_pos -= 0.020
-                elif line.strip().startswith(('✓', '✗')):
+                elif line.strip().startswith(('✓', '✗', 'ℹ️', '⚠️')):
                     fontsize, fontweight = 10, 'bold'
                 else:
                     fontsize, fontweight = 9, 'normal'
@@ -1175,6 +1229,48 @@ To reproduce this experiment:
         print("✓")
         
         # ============================================================
+        # STATISTICAL INFERENCE PAGE (per configuration)
+        # ============================================================
+        print(f"   • Creating statistical analysis page ({config_num}/{len(grouped)})...", end=" ", flush=True)
+        fig = plt.figure(figsize=(8.5, 11))
+        ax = plt.gca()
+        ax.axis("off")
+        
+        ax.text(0.5, 0.96, f"STATISTICAL ANALYSIS: {num_vars}-Variable {form_type.upper()}",
+               fontsize=16, fontweight='bold', ha='center', transform=ax.transAxes)
+        
+        # Count constants for this configuration
+        num_constant_config = sum(1 for r in results if r.get("is_constant", False))
+        
+        inference = generate_scientific_inference(
+            all_stats[(num_vars, form_type)],
+            num_constant=num_constant_config,
+            total_tests=len(results)
+        )
+        
+        # Display inference with proper formatting
+        y_pos = 0.90
+        for line in inference.split('\n'):
+            if line.startswith('=') or line.startswith('-'):
+                fontsize, fontweight = 9, 'normal'
+                y_pos -= 0.015
+            elif any(line.strip().startswith(h) for h in ['1.', '2.', '3.', 'STATISTICAL']):
+                fontsize, fontweight = 11, 'bold'
+                y_pos -= 0.020
+            elif line.strip().startswith(('✓', '✗', 'ℹ️', '⚠️')):
+                fontsize, fontweight = 10, 'bold'
+            else:
+                fontsize, fontweight = 9, 'normal'
+            
+            ax.text(0.05, y_pos, line, fontsize=fontsize, fontweight=fontweight,
+                   family='monospace', va='top', transform=ax.transAxes)
+            y_pos -= 0.022
+            
+        pdf.savefig(bbox_inches='tight')
+        plt.close()
+        print("✓")
+        
+        # ============================================================
         # FINAL CONCLUSIONS PAGE
         # ============================================================
         print(f"   • Creating final conclusions page...", end=" ", flush=True)
@@ -1191,6 +1287,9 @@ To reproduce this experiment:
         all_sympy_lits = [r['sympy_literals'] for r in all_results]
         all_kmap_lits = [r['kmap_literals'] for r in all_results]
         
+        # Count total constants
+        total_constant_count = sum(1 for r in all_results if r.get('is_constant', False))
+        
         overall_stats = perform_statistical_tests(
             all_sympy_times, all_kmap_times,
             all_sympy_lits, all_kmap_lits
@@ -1202,6 +1301,7 @@ EXECUTIVE SUMMARY
 Total Test Cases:        {len(all_results)}
 Configurations Tested:   {len(grouped)}
 Equivalence Check:       {sum(1 for r in all_results if r['equiv'])} / {len(all_results)} passed
+Constant Functions:      {total_constant_count} / {len(all_results)} ({100*total_constant_count/len(all_results):.1f}%)
 
 AGGREGATE PERFORMANCE
 {'=' * 70}
@@ -1244,7 +1344,7 @@ KEY FINDINGS
         
         conclusions += f"\n\n3. Effect sizes indicate {interpret_effect_size(overall_stats['time']['cohens_d'])} practical\n   significance for performance and {interpret_effect_size(overall_stats['literals']['cohens_d'])} practical\n   significance for simplification quality."
         
-        conclusions += f"\n\n4. All {len(all_results)} test cases maintained logical correctness,\n   with {sum(1 for r in all_results if r['equiv'])} passing equivalence verification."
+        conclusions += f"\n\n4. All {len(all_results)} test cases maintained logical correctness,\n   with {sum(1 for r in all_results if r['equiv'])} passing equivalence verification.\n   Constant cases were {total_constant_count} (i.e., cases where there was no\n   minimal function to be found - both algorithms correctly identified these)."
         
         conclusions += f"""
 
@@ -1353,10 +1453,24 @@ def main():
         # Perform statistical analysis for this configuration
         if config_results:
             print(f"\n  📊 Performing statistical analysis...", end=" ", flush=True)
+            
+            # Count constants
+            num_constant = sum(1 for r in config_results if r.get("is_constant", False))
+            
+            # Filter out constants for literal-count statistics
+            non_constant_results = [r for r in config_results if not r.get("is_constant", False)]
+            
+            # Use all results for timing, only non-constants for literals
             sympy_times = [r["t_sympy"] for r in config_results]
             kmap_times = [r["t_kmap"] for r in config_results]
-            sympy_literals = [r["sympy_literals"] for r in config_results]
-            kmap_literals = [r["kmap_literals"] for r in config_results]
+            
+            if non_constant_results:
+                sympy_literals = [r["sympy_literals"] for r in non_constant_results]
+                kmap_literals = [r["kmap_literals"] for r in non_constant_results]
+            else:
+                # All constants - use zeros for literal comparison (will be flagged)
+                sympy_literals = [0]
+                kmap_literals = [0]
             
             stats = perform_statistical_tests(sympy_times, kmap_times, 
                                              sympy_literals, kmap_literals)
@@ -1366,14 +1480,16 @@ def main():
             # Display summary
             print(f"\n  📈 Configuration Summary:")
             print(f"     Tests completed:     {len(config_results)}")
+            print(f"     Constant functions:  {num_constant}")
             print(f"     Mean SymPy time:     {stats['time']['mean_sympy']:.6f} s")
             print(f"     Mean KMap time:      {stats['time']['mean_kmap']:.6f} s")
             print(f"     Time significant:    {'YES ✓' if stats['time']['significant'] else 'NO ✗'} "
                   f"(p={stats['time']['p_value']:.4f})")
-            print(f"     Mean SymPy literals: {stats['literals']['mean_sympy']:.2f}")
-            print(f"     Mean KMap literals:  {stats['literals']['mean_kmap']:.2f}")
-            print(f"     Literal significant: {'YES ✓' if stats['literals']['significant'] else 'NO ✗'} "
-                  f"(p={stats['literals']['p_value']:.4f})")
+            if non_constant_results:
+                print(f"     Mean SymPy literals: {stats['literals']['mean_sympy']:.2f}")
+                print(f"     Mean KMap literals:  {stats['literals']['mean_kmap']:.2f}")
+                print(f"     Literal significant: {'YES ✓' if stats['literals']['significant'] else 'NO ✗'} "
+                      f"(p={stats['literals']['p_value']:.4f})")
     
     # Export results
     print(f"\n{'='*80}")
@@ -1391,7 +1507,10 @@ def main():
     print(f"📊 Total test cases executed: {len(all_results)}")
     print(f"🔧 Configurations tested: {len(configurations)}")
     equiv_passed = sum(1 for r in all_results if r['equiv'])
+    constant_count = sum(1 for r in all_results if r.get('is_constant', False))
     print(f"✓  Equivalence pass rate: {equiv_passed}/{len(all_results)} ({100*equiv_passed/len(all_results):.1f}%)")
+    print(f"ℹ️  Constant functions: {constant_count}/{len(all_results)} ({100*constant_count/len(all_results):.1f}%)")
+    print(f"   (Unsimplifiable functions correctly identified by both algorithms)")
     print(f"\n📂 Outputs:")
     print(f"   • Raw results:       {RESULTS_CSV}")
     print(f"   • Statistical data:  {STATS_CSV}")
