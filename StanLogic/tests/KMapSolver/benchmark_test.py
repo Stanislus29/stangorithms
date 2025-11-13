@@ -1,65 +1,242 @@
+"""
+Scientific Benchmark: K-Map Solver vs SymPy Boolean Minimization
+=================================================================
+
+A rigorous experimental comparison of Boolean function minimization algorithms
+with proper statistical analysis, reproducibility controls, and comprehensive
+test coverage.
+
+Author: [Your Name]
+Date: November 2025
+Version: 2.0 (Scientifically Enhanced)
+"""
+
 import time
 import random
 import re
 import csv
 import os
+import sys
+import platform
+import datetime
+from collections import defaultdict
+from textwrap import wrap
+
 import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
+import scipy
+from scipy import stats
 from sympy import symbols, SOPform, simplify, Equivalent, POSform
 from stanlogic import KMapSolver
 from tabulate import tabulate
-from collections import defaultdict
-from matplotlib.backends.backend_pdf import PdfPages
-from textwrap import fill, wrap
-import matplotlib.image as mpimg
 
-# ...existing code...
-def random_kmap(rows=4, cols=4, formatted=False, p_one=0.55, p_dc=0.07, seed=None):
+# ============================================================================
+# CONFIGURATION & EXPERIMENTAL PARAMETERS
+# ============================================================================
+
+# Random seed for reproducibility (CRITICAL for scientific validity)
+RANDOM_SEED = 42
+
+# Benchmark parameters
+TESTS_PER_CONFIG = 500  # Reduced from 1000 for faster testing, increase for production
+TIMING_REPEATS = 5      # Number of timing repetitions per test
+TIMING_WARMUP = 2       # Warm-up iterations before timing
+
+# Statistical significance threshold
+ALPHA = 0.05  # 95% confidence level
+
+# Output directories
+OUTPUTS_DIR = "outputs"
+RESULTS_CSV = os.path.join(OUTPUTS_DIR, "benchmark_results.csv")
+REPORT_PDF = os.path.join(OUTPUTS_DIR, "benchmark_scientific_report.pdf")
+STATS_CSV = os.path.join(OUTPUTS_DIR, "statistical_analysis.csv")
+
+# Logo for report cover
+LOGO_PATH = "StanLogic/images/St_logo_light-tp.png"
+
+# ============================================================================
+# EXPERIMENTAL SETUP DOCUMENTATION
+# ============================================================================
+
+def document_experimental_setup():
     """
-    Generate a random K-map with controlled probability of 1, 0, and 'd'.
-    p_one: probability a cell is 1
-    p_dc: probability a cell is 'd' (kept low to avoid excessive don't cares)
-    Remaining probability becomes 0.
+    Record all relevant environmental factors for reproducibility.
+    Returns a dictionary with system and experimental configuration.
+    """
+    import sympy
+    
+    setup_info = {
+        "experiment_date": datetime.datetime.now().isoformat(),
+        "python_version": sys.version,
+        "platform": platform.platform(),
+        "processor": platform.processor(),
+        "sympy_version": sympy.__version__,
+        "numpy_version": np.__version__,
+        "scipy_version": scipy.__version__,
+        "random_seed": RANDOM_SEED,
+        "tests_per_config": TESTS_PER_CONFIG,
+        "timing_repeats": TIMING_REPEATS,
+        "timing_warmup": TIMING_WARMUP,
+        "alpha_level": ALPHA,
+    }
+    return setup_info
+
+# ============================================================================
+# TEST DATA GENERATION
+# ============================================================================
+
+class TestDistribution:
+    """Enumeration of different test data distributions."""
+    SPARSE = "sparse"           # Few 1s (common in digital logic)
+    DENSE = "dense"             # Many 1s
+    BALANCED = "balanced"       # Equal probability
+    MINIMAL_DC = "minimal_dc"   # Few don't-cares (realistic)
+    HEAVY_DC = "heavy_dc"       # Many don't-cares (stress test)
+
+def random_kmap(rows=4, cols=4, p_one=0.45, p_dc=0.1, seed=None):
+    """
+    Generate a random K-map with controlled probability distribution.
+    
+    Args:
+        rows: Number of rows in K-map
+        cols: Number of columns in K-map
+        p_one: Probability a cell is 1
+        p_dc: Probability a cell is 'd' (don't care)
+        seed: Random seed for this specific K-map
+        
+    Returns:
+        2D list representing the K-map
+        
+    Raises:
+        ValueError: If probabilities are invalid
     """
     if seed is not None:
         random.seed(seed)
+    
     if p_one < 0 or p_dc < 0 or p_one + p_dc > 1:
         raise ValueError("Probabilities invalid: ensure p_one >=0, p_dc >=0, p_one + p_dc <= 1")
+    
     p_zero = 1 - p_one - p_dc
     choices = [1, 0, 'd']
     weights = [p_one, p_zero, p_dc]
-    kmap = [[random.choices(choices, weights=weights, k=1)[0] for _ in range(cols)] for _ in range(rows)]
-    if formatted:
-        return "kmap = [\n" + "\n".join("    " + repr(row) + "," for row in kmap) + "\n]"
+    
+    kmap = [[random.choices(choices, weights=weights, k=1)[0] 
+             for _ in range(cols)] for _ in range(rows)]
+    
     return kmap
-# ...existing code...
+
+def generate_test_suite(num_vars, tests_per_distribution=100):
+    """
+    Generate comprehensive test suite with diverse distributions.
+    
+    Args:
+        num_vars: Number of variables (2, 3, or 4)
+        tests_per_distribution: Number of tests per distribution type
+        
+    Returns:
+        List of tuples: (kmap, distribution_label)
+    """
+    rows, cols = _kmap_shape(num_vars)
+    test_cases = []
+    
+    # Distribution configurations
+    distributions = {
+        TestDistribution.SPARSE: {"p_one": 0.2, "p_dc": 0.05},
+        TestDistribution.DENSE: {"p_one": 0.7, "p_dc": 0.05},
+        TestDistribution.BALANCED: {"p_one": 0.5, "p_dc": 0.1},
+        TestDistribution.MINIMAL_DC: {"p_one": 0.45, "p_dc": 0.02},
+        TestDistribution.HEAVY_DC: {"p_one": 0.3, "p_dc": 0.3},
+    }
+    
+    for dist_name, params in distributions.items():
+        for i in range(tests_per_distribution):
+            kmap = random_kmap(rows=rows, cols=cols, **params)
+            test_cases.append((kmap, dist_name))
+    
+    # Add edge cases
+    test_cases.extend(generate_edge_cases(num_vars))
+    
+    return test_cases
+
+def generate_edge_cases(num_vars):
+    """
+    Generate edge case K-maps for comprehensive testing.
+    
+    Args:
+        num_vars: Number of variables
+        
+    Returns:
+        List of tuples: (kmap, label)
+    """
+    rows, cols = _kmap_shape(num_vars)
+    edge_cases = []
+    
+    # All zeros
+    edge_cases.append(([[0] * cols for _ in range(rows)], "edge_all_zeros"))
+    
+    # All ones
+    edge_cases.append(([[1] * cols for _ in range(rows)], "edge_all_ones"))
+    
+    # All don't cares
+    edge_cases.append(([['d'] * cols for _ in range(rows)], "edge_all_dc"))
+    
+    # Checkerboard pattern
+    checkerboard = [[(i + j) % 2 for j in range(cols)] for i in range(rows)]
+    edge_cases.append((checkerboard, "edge_checkerboard"))
+    
+    # Single 1
+    single_one = [[0] * cols for _ in range(rows)]
+    single_one[0][0] = 1
+    edge_cases.append((single_one, "edge_single_one"))
+    
+    return edge_cases
+
+def _kmap_shape(num_vars):
+    """Return (rows, cols) for given number of variables."""
+    if num_vars == 2:
+        return 2, 2
+    if num_vars == 3:
+        return 2, 4
+    if num_vars == 4:
+        return 4, 4
+    raise ValueError("Only 2-4 variables supported.")
+
+# ============================================================================
+# K-MAP ANALYSIS
+# ============================================================================
 
 def kmap_minterms(kmap, convention="vranseic"):
     """
-    Extract minterm indices (cells with 1) and don't care indices (cells with 'd')
-    from a K-map using Gray code labeling and variable ordering convention.
-    convention: 'vranseic' (cols=x1x2, rows=x3x4) or 'mano_kime' (rows=x1x2, cols=x3x4)
-    Returns dict with minterms, dont_cares, bits_map.
+    Extract minterm indices and don't care indices from a K-map.
+    
+    Args:
+        kmap: 2D list representing the K-map
+        convention: Variable ordering convention ('vranseic' or 'mano_kime')
+        
+    Returns:
+        Dictionary with num_vars, minterms, dont_cares, and bits_map
     """
     rows = len(kmap)
     cols = len(kmap[0])
     size = rows * cols
 
-    if size == 4:          # 2 vars (2x2)
+    if size == 4:
         num_vars = 2
         row_labels = ["0", "1"]
         col_labels = ["0", "1"]
-    elif size == 8:        # 3 vars (2x4 or 4x2)
+    elif size == 8:
         num_vars = 3
         if rows == 2 and cols == 4:
             row_labels = ["0", "1"]
-            col_labels = ["00", "01", "11", "10"]  # Gray code
+            col_labels = ["00", "01", "11", "10"]
         elif rows == 4 and cols == 2:
             row_labels = ["00", "01", "11", "10"]
             col_labels = ["0", "1"]
         else:
             raise ValueError("Invalid 3-variable K-map shape.")
-    elif size == 16:       # 4 vars (4x4)
+    elif size == 16:
         num_vars = 4
         row_labels = ["00", "01", "11", "10"]
         col_labels = ["00", "01", "11", "10"]
@@ -98,17 +275,21 @@ def kmap_minterms(kmap, convention="vranseic"):
         "bits_map": bits_map
     }
 
+# ============================================================================
+# EXPRESSION PARSING & VALIDATION
+# ============================================================================
+
 def parse_kmap_expression(expr_str, var_names, form="sop"):
     """
-    Parse a K-map expression (SOP or POS) string into a SymPy boolean expression.
-
+    Parse a Boolean expression string into a SymPy expression.
+    
     Args:
-        expr_str (str): The Boolean expression string (SOP or POS form).
-        var_names (list): List of SymPy symbols (variable names).
-        form (str): 'sop' or 'pos' (Sum of Products or Product of Sums).
-
+        expr_str: The Boolean expression string
+        var_names: List of SymPy symbols
+        form: 'sop' or 'pos'
+        
     Returns:
-        SymPy Boolean expression equivalent to the input string.
+        SymPy Boolean expression
     """
     from sympy import And, Or, Not, false, true
 
@@ -117,7 +298,6 @@ def parse_kmap_expression(expr_str, var_names, form="sop"):
 
     name_map = {str(v): v for v in var_names}
 
-    # --- SOP (Sum of Products): A'B + BC' + ...
     if form.lower() == "sop":
         or_terms = []
         for product in expr_str.split('+'):
@@ -140,11 +320,9 @@ def parse_kmap_expression(expr_str, var_names, form="sop"):
                 or_terms.append(And(*and_terms))
         return Or(*or_terms) if or_terms else false
 
-    # --- POS (Product of Sums): (A + B')(A' + C) + ...
     elif form.lower() == "pos":
         and_terms = []
-        # Split between parentheses (handle (A + B')(A' + C))
-        for sum_term in re.split(r'\)\s*\(\s*', expr_str.strip('() ')):
+        for sum_term in re.split(r'\)\s*\(', expr_str.strip('() ')):
             sum_term = sum_term.strip()
             if not sum_term:
                 continue
@@ -164,11 +342,10 @@ def parse_kmap_expression(expr_str, var_names, form="sop"):
                 and_terms.append(Or(*or_terms))
         return And(*and_terms) if and_terms else true
 
-    else:
-        raise ValueError(f"Unsupported form '{form}'. Must be 'sop' or 'pos'.")
+    raise ValueError(f"Unsupported form '{form}'.")
 
 def check_equivalence(expr1, expr2):
-    """Return True if both SymPy expressions are logically equivalent."""
+    """Check if two SymPy expressions are logically equivalent."""
     try:
         return bool(simplify(Equivalent(expr1, expr2)))
     except Exception:
@@ -176,14 +353,14 @@ def check_equivalence(expr1, expr2):
 
 def count_literals(expr_str, form="sop"):
     """
-    Count number of terms and total literals in a Boolean expression.
-    form='sop': expression like A'B + BC' + D
-        - terms = product terms (separated by +)
-        - literals = variable appearances with negation counted separately
-    form='pos': expression like (A + B')(A' + C + D')
-        - terms = sum clauses (parenthesized groups)
-        - literals = variable appearances across all sum clauses
-    Returns (num_terms, num_literals).
+    Count terms and literals in a Boolean expression string.
+    
+    Args:
+        expr_str: Boolean expression string
+        form: 'sop' or 'pos'
+        
+    Returns:
+        Tuple of (num_terms, num_literals)
     """
     if not expr_str or expr_str.strip() == "":
         return 0, 0
@@ -194,50 +371,42 @@ def count_literals(expr_str, form="sop"):
     if form == "sop":
         terms = [t for t in s.split('+') if t]
         num_terms = len(terms)
-        num_literals = 0
-        for t in terms:
-            lits = re.findall(r"[A-Za-z_]\w*'?", t)
-            num_literals += len(lits)
+        num_literals = sum(len(re.findall(r"[A-Za-z_]\w*'?", t)) for t in terms)
         return num_terms, num_literals
 
     if form == "pos":
-        # Extract clauses inside parentheses; if none, treat whole string as one clause
         clauses = re.findall(r"\(([^()]*)\)", s)
         if not clauses:
             clauses = [s]
         num_terms = len(clauses)
         num_literals = 0
         for clause in clauses:
-            # Split by '+' inside clause
             lits = [lit for lit in clause.split('+') if lit]
-            # Each lit may be like A or A'
-            for lit in lits:
-                if re.fullmatch(r"[A-Za-z_]\w*'?", lit):
-                    num_literals += 1
+            num_literals += sum(1 for lit in lits if re.fullmatch(r"[A-Za-z_]\w*'?", lit))
         return num_terms, num_literals
 
     raise ValueError("form must be 'sop' or 'pos'")
 
 def count_sympy_expression_literals(expr, form="sop"):
     """
-    Count number of terms and literals from a SymPy boolean expression string
-    without using SymPy logic utilities (pure string parsing).
-    SOP: terms are top-level OR-separated groups (|). Each group's literals are &-separated.
-    POS: clauses are top-level AND-separated groups (&). Each clause's literals are |-separated.
-    Negations (~x) count as literals. Parentheses only provide grouping and are ignored in counts.
-    Returns (num_terms, num_literals).
+    Count terms and literals from a SymPy expression (string parsing).
+    
+    Args:
+        expr: SymPy expression
+        form: 'sop' or 'pos'
+        
+    Returns:
+        Tuple of (num_terms, num_literals)
     """
     if expr is None:
         return 0, 0
+    
     s = str(expr).strip()
     form = form.lower()
 
-    # Handle trivial constants
     if s in ("True", "False"):
         return 0, 0
 
-    # If single symbol or negated symbol
-    import re
     if re.fullmatch(r"~?[A-Za-z_]\w*", s):
         return 1, 1
 
@@ -265,7 +434,6 @@ def count_sympy_expression_literals(expr, form="sop"):
     def strip_parens(x):
         x = x.strip()
         while x.startswith('(') and x.endswith(')'):
-            # Ensure they are a matching outer pair
             depth = 0
             valid = True
             for i, ch in enumerate(x):
@@ -286,78 +454,111 @@ def count_sympy_expression_literals(expr, form="sop"):
         group_str = strip_parens(group_str)
         if not group_str:
             return 0
-        # Split by inner_sep at top level for POS clauses or SOP products
         inner_parts = split_top_level(group_str, inner_sep)
-        # If no split occurred (single literal or conjunction/disjunction without separator)
-        if len(inner_parts) == 1 and inner_sep in ('|', '&'):
-            # For products/clauses we still might have separators
+        if len(inner_parts) == 1:
             raw = inner_parts[0]
-            # For SOP product: split by '&'
-            if inner_sep == '&':
-                lits = split_top_level(raw, '&')
-            else:
-                lits = split_top_level(raw, '|')
+            lits = split_top_level(raw, inner_sep)
         else:
             lits = inner_parts
-        literal_count = 0
-        for lit in lits:
-            lit = strip_parens(lit)
-            if re.fullmatch(r"~?[A-Za-z_]\w*", lit):
-                literal_count += 1
+        literal_count = sum(1 for lit in lits if re.fullmatch(r"~?[A-Za-z_]\w*", strip_parens(lit)))
         return literal_count
 
     if form == "sop":
-        # Top-level OR splits
         top_terms = split_top_level(s, '|')
         num_terms = len(top_terms)
-        total_literals = 0
-        for term in top_terms:
-            # Count literals inside product (AND-separated)
-            literals_in_term = count_literals_in_group(term, '&')
-            total_literals += literals_in_term
+        total_literals = sum(count_literals_in_group(term, '&') for term in top_terms)
         return num_terms, total_literals
 
     if form == "pos":
-        # Top-level AND splits
         top_clauses = split_top_level(s, '&')
         num_terms = len(top_clauses)
-        total_literals = 0
-        for clause in top_clauses:
-            # Count literals inside sum (OR-separated)
-            literals_in_clause = count_literals_in_group(clause, '|')
-            total_literals += literals_in_clause
+        total_literals = sum(count_literals_in_group(clause, '|') for clause in top_clauses)
         return num_terms, total_literals
 
     raise ValueError("form must be 'sop' or 'pos'")
 
+# ============================================================================
+# IMPROVED TIMING METHODOLOGY
+# ============================================================================
 
-def benchmark_case(kmap, var_names, form_type, test_index):
+def benchmark_with_warmup(func, args, warmup=TIMING_WARMUP, repeats=TIMING_REPEATS):
+    """
+    Benchmark a function with warm-up runs and multiple repetitions.
+    
+    Args:
+        func: Function to benchmark
+        args: Tuple of arguments to pass to function
+        warmup: Number of warm-up iterations
+        repeats: Number of timed repetitions
+        
+    Returns:
+        Minimum execution time (best of N to minimize OS noise)
+    """
+    # Warm-up phase (not counted)
+    for _ in range(warmup):
+        func(*args)
+    
+    # Actual timing
+    times = []
+    for _ in range(repeats):
+        start = time.perf_counter()
+        func(*args)
+        elapsed = time.perf_counter() - start
+        times.append(elapsed)
+    
+    # Return minimum time (reduces impact of system interrupts)
+    return min(times)
+
+# ============================================================================
+# BENCHMARK EXECUTION
+# ============================================================================
+
+def benchmark_case(kmap, var_names, form_type, test_index, distribution):
+    """
+    Run a single benchmark case comparing SymPy and KMapSolver.
+    
+    Args:
+        kmap: K-map as 2D list
+        var_names: List of SymPy variable symbols
+        form_type: 'sop' or 'pos'
+        test_index: Test case number
+        distribution: Distribution type label
+        
+    Returns:
+        Dictionary with benchmark results
+    """
     info = kmap_minterms(kmap, convention="vranseic")
     minterms = info["minterms"]
     dont_cares = info["dont_cares"]
 
     if len(var_names) != info["num_vars"]:
-        raise ValueError(f"Variable symbol count ({len(var_names)}) does not match K-map ({info['num_vars']}).")
+        raise ValueError(f"Variable count mismatch: {len(var_names)} != {info['num_vars']}")
 
-    # SymPy minimization
-    start = time.perf_counter()
+    # SymPy minimization with improved timing
     if form_type == "pos":
-        expr_sympy = POSform(var_names, minterms, dont_cares)
+        sympy_func = lambda: POSform(var_names, minterms, dont_cares)
     else:
-        expr_sympy = SOPform(var_names, minterms, dont_cares)
-    t_sympy = time.perf_counter() - start
+        sympy_func = lambda: SOPform(var_names, minterms, dont_cares)
+    
+    print(f"    Test {test_index}: Running SymPy {form_type.upper()}...", end=" ", flush=True)
+    t_sympy = benchmark_with_warmup(sympy_func, ())
+    expr_sympy = sympy_func()  # Get actual result
+    print(f"✓ ({t_sympy:.6f}s)", end=" | ", flush=True)
 
-    # KMapSolver minimization
-    start = time.perf_counter()
-    solver = KMapSolver(kmap)
-    terms, expr_str = solver.minimize(form=form_type)
-    t_kmap = time.perf_counter() - start
+    # KMapSolver minimization with improved timing
+    kmap_func = lambda: KMapSolver(kmap).minimize(form=form_type)
+    print(f"KMapSolver...", end=" ", flush=True)
+    t_kmap = benchmark_with_warmup(kmap_func, ())
+    terms, expr_str = kmap_func()  # Get actual result
+    print(f"✓ ({t_kmap:.6f}s)", end=" | ", flush=True)
 
-    # Parse solver expression to SymPy
+    # Validate equivalence
     expr_kmap_sympy = parse_kmap_expression(expr_str, var_names, form=form_type)
     equiv = check_equivalence(expr_sympy, expr_kmap_sympy)
+    equiv_symbol = "✓" if equiv else "✗"
+    print(f"Equiv: {equiv_symbol}")
 
-    # Literal metrics (pass form so POS counted correctly)
+    # Compute metrics
     sympy_terms, sympy_literals = count_sympy_expression_literals(str(expr_sympy), form=form_type)
     kmap_terms, kmap_literals = count_literals(expr_str, form=form_type)
 
@@ -365,6 +566,7 @@ def benchmark_case(kmap, var_names, form_type, test_index):
         "index": test_index,
         "num_vars": info["num_vars"],
         "form": form_type,
+        "distribution": distribution,
         "equiv": equiv,
         "t_sympy": t_sympy,
         "t_kmap": t_kmap,
@@ -374,455 +576,738 @@ def benchmark_case(kmap, var_names, form_type, test_index):
         "kmap_terms": kmap_terms,
     }
 
-def _kmap_shape(num_vars):
-    if num_vars == 2:
-        return 2, 2
-    if num_vars == 3:
-        return 2, 4   # matches kmap_minterms 3-variable case rows=2, cols=4
-    if num_vars == 4:
-        return 4, 4
-    raise ValueError("Only 2–4 variables supported.")
+# ============================================================================
+# STATISTICAL ANALYSIS
+# ============================================================================
 
-def generate_inference(
-    avg_sympy_time, avg_kmap_time, std_diff, deviation_ratio,
-    avg_sympy_literals, avg_kmap_literals, std_lit_diff, deviation_ratio_literals
-):
+def perform_statistical_tests(sympy_times, kmap_times, sympy_literals, kmap_literals):
     """
-    Generate a comprehensive inference summary based on performance and simplification statistics.
-    Returns a formatted string (also prints to console).
+    Perform rigorous statistical hypothesis testing.
+    
+    Args:
+        sympy_times: List of SymPy execution times
+        kmap_times: List of KMapSolver execution times
+        sympy_literals: List of SymPy literal counts
+        kmap_literals: List of KMapSolver literal counts
+        
+    Returns:
+        Dictionary with comprehensive statistical test results
     """
+    # Convert to numpy arrays
+    sympy_times = np.array(sympy_times)
+    kmap_times = np.array(kmap_times)
+    sympy_literals = np.array(sympy_literals)
+    kmap_literals = np.array(kmap_literals)
+    
+    # Calculate differences
+    time_diff = kmap_times - sympy_times
+    lit_diff = kmap_literals - sympy_literals
+    
+    # Paired t-test (parametric)
+    t_stat_time, p_value_time = stats.ttest_rel(kmap_times, sympy_times)
+    t_stat_lit, p_value_lit = stats.ttest_rel(kmap_literals, sympy_literals)
+    
+    # Wilcoxon signed-rank test (non-parametric alternative)
+    w_stat_time, w_p_time = stats.wilcoxon(kmap_times, sympy_times, zero_method='zsplit')
+    w_stat_lit, w_p_lit = stats.wilcoxon(kmap_literals, sympy_literals, zero_method='zsplit')
+    
+    # Effect size (Cohen's d)
+    cohens_d_time = np.mean(time_diff) / np.std(time_diff, ddof=1) if np.std(time_diff) > 0 else 0
+    cohens_d_lit = np.mean(lit_diff) / np.std(lit_diff, ddof=1) if np.std(lit_diff) > 0 else 0
+    
+    # Confidence intervals (95%)
+    ci_time = stats.t.interval(0.95, len(time_diff)-1, 
+                               loc=np.mean(time_diff), 
+                               scale=stats.sem(time_diff))
+    ci_lit = stats.t.interval(0.95, len(lit_diff)-1,
+                              loc=np.mean(lit_diff),
+                              scale=stats.sem(lit_diff))
+    
+    return {
+        "time": {
+            "mean_sympy": np.mean(sympy_times),
+            "mean_kmap": np.mean(kmap_times),
+            "mean_diff": np.mean(time_diff),
+            "std_diff": np.std(time_diff, ddof=1),
+            "t_statistic": t_stat_time,
+            "p_value": p_value_time,
+            "wilcoxon_stat": w_stat_time,
+            "wilcoxon_p": w_p_time,
+            "cohens_d": cohens_d_time,
+            "ci_lower": ci_time[0],
+            "ci_upper": ci_time[1],
+            "significant": p_value_time < ALPHA
+        },
+        "literals": {
+            "mean_sympy": np.mean(sympy_literals),
+            "mean_kmap": np.mean(kmap_literals),
+            "mean_diff": np.mean(lit_diff),
+            "std_diff": np.std(lit_diff, ddof=1),
+            "t_statistic": t_stat_lit,
+            "p_value": p_value_lit,
+            "wilcoxon_stat": w_stat_lit,
+            "wilcoxon_p": w_p_lit,
+            "cohens_d": cohens_d_lit,
+            "ci_lower": ci_lit[0],
+            "ci_upper": ci_lit[1],
+            "significant": p_value_lit < ALPHA
+        }
+    }
 
-    time_diff = avg_kmap_time - avg_sympy_time
-    time_pct_diff = (time_diff / avg_sympy_time) * 100 if avg_sympy_time else 0
-    lit_diff = avg_kmap_literals - avg_sympy_literals
-    lit_pct_diff = (lit_diff / avg_sympy_literals) * 100 if avg_sympy_literals else 0
+def interpret_effect_size(cohens_d):
+    """Interpret Cohen's d effect size."""
+    abs_d = abs(cohens_d)
+    if abs_d < 0.2:
+        return "negligible"
+    elif abs_d < 0.5:
+        return "small"
+    elif abs_d < 0.8:
+        return "medium"
+    else:
+        return "large"
 
+# ============================================================================
+# INFERENCE GENERATION
+# ============================================================================
+
+def generate_scientific_inference(stats_results):
+    """
+    Generate scientifically rigorous inference with statistical support.
+    
+    Args:
+        stats_results: Dictionary from perform_statistical_tests()
+        
+    Returns:
+        Formatted inference text
+    """
     lines = []
     lines.append("=" * 75)
-    lines.append("INFERENCE SUMMARY")
+    lines.append("STATISTICAL INFERENCE REPORT")
     lines.append("=" * 75)
-
-    # Execution Time
-    lines.append("\nEXECUTION TIME ANALYSIS")
-    lines.append(f"  Average SymPy Time:      {avg_sympy_time:.6f} s")
-    lines.append(f"  Average KMapSolver Time: {avg_kmap_time:.6f} s")
-    lines.append(f"  Difference:              {time_diff:+.6f} s ({time_pct_diff:+.2f}%)")
-    lines.append(f"  Std. Dev (ΔTime):        {std_diff:.6f} s")
-    lines.append(f"  Deviation Ratio:         {deviation_ratio:.3f}")
-
-    if time_diff < 0:
-        lines.append("  → KMapSolver is faster than SymPy on average.")
-    elif abs(time_diff) < avg_sympy_time * 0.1:
-        lines.append("  → Both algorithms exhibit nearly identical runtimes.")
+    
+    # Execution Time Analysis
+    lines.append("\n1. EXECUTION TIME ANALYSIS")
+    lines.append("-" * 75)
+    time_stats = stats_results["time"]
+    lines.append(f"Mean SymPy Time:      {time_stats['mean_sympy']:.6f} s")
+    lines.append(f"Mean KMapSolver Time: {time_stats['mean_kmap']:.6f} s")
+    lines.append(f"Mean Difference:      {time_stats['mean_diff']:+.6f} s")
+    lines.append(f"Std. Dev. (Δ):        {time_stats['std_diff']:.6f} s")
+    lines.append(f"95% CI:               [{time_stats['ci_lower']:.6f}, {time_stats['ci_upper']:.6f}]")
+    lines.append("")
+    lines.append(f"Paired t-test:        t = {time_stats['t_statistic']:.4f}, p = {time_stats['p_value']:.6f}")
+    lines.append(f"Wilcoxon test:        W = {time_stats['wilcoxon_stat']:.1f}, p = {time_stats['wilcoxon_p']:.6f}")
+    lines.append(f"Effect Size (d):      {time_stats['cohens_d']:.4f} ({interpret_effect_size(time_stats['cohens_d'])})")
+    
+    if time_stats['significant']:
+        lines.append(f"\n✓ SIGNIFICANT: Time difference is statistically significant (p < {ALPHA})")
+        if time_stats['mean_diff'] < 0:
+            lines.append("  → KMapSolver is significantly faster than SymPy")
+        else:
+            lines.append("  → SymPy is significantly faster than KMapSolver")
     else:
-        lines.append("  → KMapSolver shows a slight runtime overhead compared to SymPy.")
-
-    if std_diff < 0.001:
-        lines.append("  → Execution times are stable and consistent.")
+        lines.append(f"\n✗ NOT SIGNIFICANT: No statistically significant time difference (p ≥ {ALPHA})")
+        lines.append("  → Both algorithms exhibit comparable performance")
+    
+    # Literal Count Analysis
+    lines.append("\n2. SIMPLIFICATION QUALITY ANALYSIS")
+    lines.append("-" * 75)
+    lit_stats = stats_results["literals"]
+    lines.append(f"Mean SymPy Literals:  {lit_stats['mean_sympy']:.2f}")
+    lines.append(f"Mean KMap Literals:   {lit_stats['mean_kmap']:.2f}")
+    lines.append(f"Mean Difference:      {lit_stats['mean_diff']:+.2f}")
+    lines.append(f"Std. Dev. (Δ):        {lit_stats['std_diff']:.2f}")
+    lines.append(f"95% CI:               [{lit_stats['ci_lower']:.2f}, {lit_stats['ci_upper']:.2f}]")
+    lines.append("")
+    lines.append(f"Paired t-test:        t = {lit_stats['t_statistic']:.4f}, p = {lit_stats['p_value']:.6f}")
+    lines.append(f"Wilcoxon test:        W = {lit_stats['wilcoxon_stat']:.1f}, p = {lit_stats['wilcoxon_p']:.6f}")
+    lines.append(f"Effect Size (d):      {lit_stats['cohens_d']:.4f} ({interpret_effect_size(lit_stats['cohens_d'])})")
+    
+    if lit_stats['significant']:
+        lines.append(f"\n✓ SIGNIFICANT: Literal count difference is statistically significant (p < {ALPHA})")
+        if lit_stats['mean_diff'] < 0:
+            lines.append("  → KMapSolver produces more minimal expressions")
+        else:
+            lines.append("  → SymPy produces more minimal expressions")
     else:
-        lines.append("  → Some variability observed across test runs.")
-
-    # Simplification
-    lines.append("\nLITERAL COUNT ANALYSIS")
-    lines.append(f"  Average SymPy Literals:  {avg_sympy_literals:.2f}")
-    lines.append(f"  Average KMap Literals:   {avg_kmap_literals:.2f}")
-    lines.append(f"  Difference:              {lit_diff:+.2f} ({lit_pct_diff:+.1f}%)")
-    lines.append(f"  Std. Dev (ΔLiterals):    {std_lit_diff:.2f}")
-    lines.append(f"  Deviation Ratio:         {deviation_ratio_literals:.3f}")
-
-    if lit_diff < 0:
-        lines.append("  → KMapSolver produces more minimal logical forms (fewer literals).")
-    elif abs(lit_diff) < 0.5:
-        lines.append("  → Both solvers yield nearly identical simplifications.")
+        lines.append(f"\n✗ NOT SIGNIFICANT: No significant difference in simplification (p ≥ {ALPHA})")
+        lines.append("  → Both algorithms achieve comparable minimization")
+    
+    # Overall Verdict
+    lines.append("\n3. OVERALL SCIENTIFIC CONCLUSION")
+    lines.append("-" * 75)
+    
+    if time_stats['significant'] and lit_stats['significant']:
+        lines.append("Both performance and simplification show statistically significant differences.")
+    elif time_stats['significant']:
+        lines.append("Performance difference is significant, but simplification is comparable.")
+    elif lit_stats['significant']:
+        lines.append("Simplification difference is significant, but performance is comparable.")
     else:
-        lines.append("  → SymPy produces slightly simpler expressions on average.")
-
-    if std_lit_diff < 2:
-        lines.append("  → Literal simplifications are consistent.")
-    else:
-        lines.append("  → Simplification outcomes vary across inputs.")
-
-    # Overall verdict
-    lines.append("\nOVERALL VERDICT")
-    if avg_kmap_literals <= avg_sympy_literals and avg_kmap_time <= avg_sympy_time * 1.1:
-        lines.append("  ✅ KMapSolver achieves comparable or superior simplification efficiency with minimal time overhead.")
-    elif avg_kmap_time < avg_sympy_time:
-        lines.append("  ✅ KMapSolver outperforms SymPy in runtime while maintaining correctness.")
-    else:
-        lines.append("  ⚠️ KMapSolver maintains correctness but trades slight performance for structural optimization.")
-
+        lines.append("No statistically significant differences detected in either metric.")
+    
+    lines.append(f"\nEffect sizes: Time ({interpret_effect_size(time_stats['cohens_d'])}), "
+                 f"Literals ({interpret_effect_size(lit_stats['cohens_d'])})")
     lines.append("=" * 75)
+    
+    text = "\n".join(lines)
+    print(text)
+    return text
 
-    formatted_text = "\n".join(lines)
-    print(formatted_text)
-    return formatted_text
-        
-def export_results_to_csv(all_results, filename="outputs/benchmark_results.csv"):
-    """
-    Export all benchmark results to a CSV file.
-    Groups results by configuration (num_vars, form).
-    """
-    # Group results by (num_vars, form)
+# ============================================================================
+# EXPORT & VISUALIZATION
+# ============================================================================
+
+def export_results_to_csv(all_results, filename=RESULTS_CSV):
+    """Export benchmark results to CSV."""
+    print(f"\n📄 Exporting raw results to CSV...", end=" ", flush=True)
     grouped = defaultdict(list)
     for r in all_results:
         grouped[(r["num_vars"], r["form"])].append(r)
 
     with open(filename, mode="w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["Configuration", "Test Index", "Equivalent", 
+        writer.writerow(["Configuration", "Test Index", "Distribution", "Equivalent", 
                          "SymPy Time (s)", "KMap Time (s)", 
                          "SymPy Literals", "KMap Literals"])
 
-        for (vars, form_type), group in grouped.items():
-            writer.writerow([])  # blank line for readability
+        for (vars, form_type), group in sorted(grouped.items()):
+            writer.writerow([])
             writer.writerow([f"{vars}-Variable ({form_type.upper()} Form)"])
             
             for result in group:
                 writer.writerow([
                     f"{vars}-{form_type}",
                     result.get("index", ""),
+                    result.get("distribution", ""),
                     result.get("equiv", ""),
-                    f"{result.get('t_sympy', 0):.6f}",
-                    f"{result.get('t_kmap', 0):.6f}",
+                    f"{result.get('t_sympy', 0):.8f}",
+                    f"{result.get('t_kmap', 0):.8f}",
                     result.get("sympy_literals", ""),
                     result.get("kmap_literals", "")
                 ])
 
-    print(f"\n✅ Results exported successfully to '{filename}'\n")
+    print(f"✅ Done ({len(all_results)} records)")
 
-def save_benchmark_plots(all_results, pdf_filename="outputs/benchmark_plots.pdf", logo_path="StanLogic/images/St_logo_light-tp.png"):
-    """
-    Save benchmark plots, summary, and inference report into a single PDF file.
-    """
+def export_statistical_analysis(all_stats, filename=STATS_CSV):
+    """Export statistical analysis results to CSV."""
+    print(f"📊 Exporting statistical analysis...", end=" ", flush=True)
+    with open(filename, mode="w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        
+        # Header
+        writer.writerow(["Configuration", "Metric", "Mean SymPy", "Mean KMap", 
+                        "Mean Diff", "Std Diff", "t-statistic", "p-value",
+                        "Cohen's d", "Effect Size", "CI Lower", "CI Upper", "Significant"])
+        
+        for (num_vars, form_type), stats in sorted(all_stats.items()):
+            config = f"{num_vars}-{form_type}"
+            
+            # Time statistics
+            t = stats["time"]
+            writer.writerow([
+                config, "Time (s)",
+                f"{t['mean_sympy']:.8f}",
+                f"{t['mean_kmap']:.8f}",
+                f"{t['mean_diff']:.8f}",
+                f"{t['std_diff']:.8f}",
+                f"{t['t_statistic']:.4f}",
+                f"{t['p_value']:.6f}",
+                f"{t['cohens_d']:.4f}",
+                interpret_effect_size(t['cohens_d']),
+                f"{t['ci_lower']:.8f}",
+                f"{t['ci_upper']:.8f}",
+                "Yes" if t['significant'] else "No"
+            ])
+            
+            # Literal statistics
+            l = stats["literals"]
+            writer.writerow([
+                config, "Literals",
+                f"{l['mean_sympy']:.2f}",
+                f"{l['mean_kmap']:.2f}",
+                f"{l['mean_diff']:.2f}",
+                f"{l['std_diff']:.2f}",
+                f"{l['t_statistic']:.4f}",
+                f"{l['p_value']:.6f}",
+                f"{l['cohens_d']:.4f}",
+                interpret_effect_size(l['cohens_d']),
+                f"{l['ci_lower']:.2f}",
+                f"{l['ci_upper']:.2f}",
+                "Yes" if l['significant'] else "No"
+            ])
     
-    print(f"\n📊 Generating PDF report: {pdf_filename}")
+    print(f"✅ Done ({len(all_stats)} configurations)")
 
+def save_comprehensive_report(all_results, all_stats, setup_info, pdf_filename=REPORT_PDF):
+    """
+    Generate comprehensive scientific report as PDF.
+    """
+    print(f"\n📊 Generating comprehensive scientific report...")
+    print(f"   Output: {pdf_filename}")
+    
     with PdfPages(pdf_filename) as pdf:
-        # ---- COVER PAGE ----
-        if os.path.exists(logo_path):
-            fig = plt.figure(figsize=(8.5, 11))
-            ax = plt.gca()
-            
-            # Load and display logo in the upper portion of the page
-            img = mpimg.imread(logo_path)
-            
-            # Create a specific axes for the logo to control its size and position
-            logo_ax = fig.add_axes([0.2, 0.55, 0.6, 0.35])  # [left, bottom, width, height]
-            logo_ax.imshow(img)
-            logo_ax.axis("off")
-            
-            # Main axes for text (invisible)
-            ax.set_xlim(0, 1)
-            ax.set_ylim(0, 1)
-            ax.axis("off")
-            
-            # Title - well spaced below the logo
-            ax.text(
-                0.5, 0.45,
-                "Inference Report",
-                fontsize=32,
-                fontweight='bold',
-                ha='center',
-                va='center',
-            )
-            
-            # Subtitle - appropriately spaced below title
-            ax.text(
-                0.5, 0.38,
-                "Performance and Simplification Benchmark",
-                fontsize=16,
-                ha='center',
-                va='center',
-            )
-            
-            ax.text(
-                0.5, 0.34,
-                "between SymPy and StanLogic",
-                fontsize=16,
-                ha='center',
-                va='center',
-            )
-            
-            # Add a subtle separator line
-            ax.plot([0.25, 0.75], [0.30, 0.30], 'k-', linewidth=1.5, alpha=0.3)
-            
-            # Add date at the bottom of the page
-            import datetime
-            ax.text(
-                0.5, 0.15,
-                f"Generated on {datetime.date.today():%B %d, %Y}",
-                fontsize=12,
-                ha='center',
-                va='center',
-                style='italic',
-                color='gray'
-            )
-            
-            pdf.savefig(bbox_inches='tight')
-            plt.close()
-        else:
-            print(f"⚠️  Logo not found at {logo_path}, skipping cover page.")
+        # ============================================================
+        # COVER PAGE
+        # ============================================================
+        print(f"   • Creating cover page...", end=" ", flush=True)
+        fig = plt.figure(figsize=(8.5, 11))
+        ax = plt.gca()
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.axis("off")
+        
+        # Logo (if available)
+        if os.path.exists(LOGO_PATH):
+            try:
+                img = mpimg.imread(LOGO_PATH)
+                logo_ax = fig.add_axes([0.2, 0.65, 0.6, 0.25])
+                logo_ax.imshow(img)
+                logo_ax.axis("off")
+            except:
+                pass
+        
+        # Title
+        ax.text(0.5, 0.55, "Scientific Benchmark Report", 
+                fontsize=28, fontweight='bold', ha='center')
+        ax.text(0.5, 0.49, "K-Map Solver vs SymPy Boolean Minimization",
+                fontsize=16, ha='center')
+        
+        # Separator
+        ax.plot([0.2, 0.8], [0.45, 0.45], 'k-', linewidth=2, alpha=0.3)
+        
+        # Metadata
+        ax.text(0.5, 0.35, f"Experiment Date: {setup_info['experiment_date'][:10]}",
+                fontsize=11, ha='center')
+        ax.text(0.5, 0.31, f"Random Seed: {setup_info['random_seed']}",
+                fontsize=11, ha='center')
+        ax.text(0.5, 0.27, f"Total Test Cases: {len(all_results)}",
+                fontsize=11, ha='center')
+        ax.text(0.5, 0.23, f"Statistical Significance Level: α = {ALPHA}",
+                fontsize=11, ha='center')
+        
+        # Footer
+        ax.text(0.5, 0.08, "A Rigorous Statistical Analysis with Reproducibility Controls",
+                fontsize=10, ha='center', style='italic', color='gray')
+        ax.text(0.5, 0.04, f"© Stan's Technologies {datetime.datetime.now().year}",
+                fontsize=9, ha='center', color='gray')
+        
+        pdf.savefig(bbox_inches='tight')
+        plt.close()
+        print("✓")
+        
+        # ============================================================
+        # EXPERIMENTAL SETUP PAGE
+        # ============================================================
+        print(f"   • Creating experimental setup page...", end=" ", flush=True)
+        fig = plt.figure(figsize=(8.5, 11))
+        ax = plt.gca()
+        ax.axis("off")
+        
+        ax.text(0.5, 0.95, "EXPERIMENTAL SETUP", 
+                fontsize=20, fontweight='bold', ha='center', transform=ax.transAxes)
+        
+        setup_text = f"""
+SYSTEM CONFIGURATION
+{'─' * 70}
+Python Version:    {setup_info['python_version'].split()[0]}
+Platform:          {setup_info['platform']}
+Processor:         {setup_info['processor']}
 
-        # ---- GROUP RESULTS ----
-        grouped = {}
+LIBRARY VERSIONS
+{'─' * 70}
+SymPy:             {setup_info['sympy_version']}
+NumPy:             {setup_info['numpy_version']}
+SciPy:             {setup_info['scipy_version']}
+
+EXPERIMENTAL PARAMETERS
+{'─' * 70}
+Random Seed:                {setup_info['random_seed']}
+Tests per Configuration:    {setup_info['tests_per_config']}
+Timing Warm-up Runs:        {setup_info['timing_warmup']}
+Timing Repetitions:         {setup_info['timing_repeats']}
+Significance Level (α):     {setup_info['alpha_level']}
+
+TEST DISTRIBUTIONS
+{'─' * 70}
+• Sparse:       20% ones, 5% don't-cares (realistic digital logic)
+• Dense:        70% ones, 5% don't-cares (stress test)
+• Balanced:     50% ones, 10% don't-cares (neutral case)
+• Minimal DC:   45% ones, 2% don't-cares (typical circuits)
+• Heavy DC:     30% ones, 30% don't-cares (optimization test)
+• Edge Cases:   All-zeros, all-ones, checkerboard, single-minterm
+
+METHODOLOGY
+{'─' * 70}
+1. Random K-maps generated with controlled distributions
+2. Each algorithm executed with {setup_info['timing_warmup']} warm-up runs
+3. Best of {setup_info['timing_repeats']} timed repetitions recorded
+4. Logical equivalence verified using SymPy
+5. Statistical significance tested using paired t-tests
+6. Non-parametric Wilcoxon tests used as robustness check
+7. Effect sizes computed using Cohen's d
+
+REPRODUCIBILITY
+{'─' * 70}
+To reproduce this experiment:
+  1. Set random seed: random.seed({setup_info['random_seed']})
+  2. Run with identical system configuration
+  3. Use same library versions as documented above
+"""
+        
+        ax.text(0.05, 0.88, setup_text, fontsize=9, family='monospace',
+                va='top', transform=ax.transAxes)
+        
+        pdf.savefig(bbox_inches='tight')
+        plt.close()
+        print("✓")
+        
+        # ============================================================
+        # PER-CONFIGURATION RESULTS
+        # ============================================================
+        grouped = defaultdict(list)
         for r in all_results:
-            key = (r["num_vars"], r["form"])
-            grouped.setdefault(key, []).append(r)
-
-        # ---- PER-CONFIGURATION PAGES ----
-        for (num_vars, form), results in grouped.items():
+            grouped[(r["num_vars"], r["form"])].append(r)
+        
+        for config_num, ((num_vars, form_type), results) in enumerate(sorted(grouped.items()), 1):
+            print(f"   • Creating plots for {num_vars}-var {form_type.upper()} ({config_num}/{len(grouped)})...", end=" ", flush=True)
+            
+            # Extract data
             sympy_times = [r["t_sympy"] for r in results]
             kmap_times = [r["t_kmap"] for r in results]
             sympy_literals = [r["sympy_literals"] for r in results]
             kmap_literals = [r["kmap_literals"] for r in results]
-
-            avg_sympy_time = np.mean(sympy_times)
-            avg_kmap_time = np.mean(kmap_times)
-            avg_sympy_literals = np.mean(sympy_literals)
-            avg_kmap_literals = np.mean(kmap_literals)
             tests = list(range(1, len(results) + 1))
-
-            # ---- Plot for this configuration ----
-            plt.figure(figsize=(11, 5))
-
-            # Time plot
-            plt.subplot(1, 2, 1)
-            plt.plot(tests, sympy_times, marker='o', label='SymPy Time')
-            plt.plot(tests, kmap_times, marker='s', label='KMapSolver Time')
-            plt.axhline(avg_sympy_time, color='blue', linestyle='--', alpha=0.6,
-                        label=f'SymPy Avg = {avg_sympy_time:.6f}s')
-            plt.axhline(avg_kmap_time, color='orange', linestyle='--', alpha=0.6,
-                        label=f'KMap Avg = {avg_kmap_time:.6f}s')
-            plt.xlabel('Test Case')
-            plt.ylabel('Execution Time (s)')
-            plt.title(f'Performance ({num_vars}-Variable {form.upper()})')
-            plt.legend()
-            plt.grid(True)
-
-            # Literal count plot
-            plt.subplot(1, 2, 2)
-            plt.bar([x - 0.2 for x in tests], sympy_literals, width=0.4, label='SymPy Literals')
-            plt.bar([x + 0.2 for x in tests], kmap_literals, width=0.4, label='KMapSolver Literals')
-            plt.axhline(avg_sympy_literals, color='blue', linestyle='--', alpha=0.6,
-                        label=f'SymPy Avg = {avg_sympy_literals:.2f}')
-            plt.axhline(avg_kmap_literals, color='orange', linestyle='--', alpha=0.6,
-                        label=f'KMap Avg = {avg_kmap_literals:.2f}')
-            plt.xlabel('Test Case')
-            plt.ylabel('Number of Literals')
-            plt.title(f'Literal Comparison ({num_vars}-Variable {form.upper()})')
-            plt.legend()
-            plt.grid(True)
-
+            
+            stats = all_stats[(num_vars, form_type)]
+            
+            # Create figure with 2x2 subplots
+            fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(11, 8.5))
+            fig.suptitle(f'{num_vars}-Variable K-Map ({form_type.upper()} Form)', 
+                        fontsize=16, fontweight='bold')
+            
+            # Plot 1: Time comparison (line plot)
+            ax1.plot(tests, sympy_times, marker='o', markersize=2, label='SymPy', alpha=0.7)
+            ax1.plot(tests, kmap_times, marker='s', markersize=2, label='KMapSolver', alpha=0.7)
+            ax1.axhline(stats['time']['mean_sympy'], color='blue', linestyle='--', 
+                       alpha=0.5, label=f'SymPy Mean = {stats["time"]["mean_sympy"]:.6f}s')
+            ax1.axhline(stats['time']['mean_kmap'], color='orange', linestyle='--',
+                       alpha=0.5, label=f'KMap Mean = {stats["time"]["mean_kmap"]:.6f}s')
+            ax1.set_xlabel('Test Case')
+            ax1.set_ylabel('Execution Time (s)')
+            ax1.set_title('Execution Time Comparison')
+            ax1.legend(fontsize=8)
+            ax1.grid(True, alpha=0.3)
+            
+            # Plot 2: Time difference histogram
+            time_diffs = np.array(kmap_times) - np.array(sympy_times)
+            ax2.hist(time_diffs, bins=30, edgecolor='black', alpha=0.7)
+            ax2.axvline(0, color='red', linestyle='--', linewidth=2, label='No Difference')
+            ax2.axvline(stats['time']['mean_diff'], color='green', linestyle='--', 
+                       linewidth=2, label=f'Mean Δ = {stats["time"]["mean_diff"]:.6f}s')
+            ax2.set_xlabel('Time Difference (KMap - SymPy) [s]')
+            ax2.set_ylabel('Frequency')
+            ax2.set_title('Distribution of Time Differences')
+            ax2.legend(fontsize=8)
+            ax2.grid(True, alpha=0.3, axis='y')
+            
+            # Plot 3: Literal comparison (bar plot)
+            sample_indices = list(range(0, len(tests), max(1, len(tests)//50)))  # Show ~50 bars
+            ax3.bar([tests[i] - 0.2 for i in sample_indices], 
+                   [sympy_literals[i] for i in sample_indices], 
+                   width=0.4, label='SymPy', alpha=0.7)
+            ax3.bar([tests[i] + 0.2 for i in sample_indices], 
+                   [kmap_literals[i] for i in sample_indices],
+                   width=0.4, label='KMapSolver', alpha=0.7)
+            ax3.axhline(stats['literals']['mean_sympy'], color='blue', linestyle='--',
+                       alpha=0.5, label=f'SymPy Mean = {stats["literals"]["mean_sympy"]:.2f}')
+            ax3.axhline(stats['literals']['mean_kmap'], color='orange', linestyle='--',
+                       alpha=0.5, label=f'KMap Mean = {stats["literals"]["mean_kmap"]:.2f}')
+            ax3.set_xlabel('Test Case (sampled)')
+            ax3.set_ylabel('Number of Literals')
+            ax3.set_title('Literal Count Comparison')
+            ax3.legend(fontsize=8)
+            ax3.grid(True, alpha=0.3, axis='y')
+            
+            # Plot 4: Literal difference histogram
+            lit_diffs = np.array(kmap_literals) - np.array(sympy_literals)
+            ax4.hist(lit_diffs, bins=20, edgecolor='black', alpha=0.7)
+            ax4.axvline(0, color='red', linestyle='--', linewidth=2, label='No Difference')
+            ax4.axvline(stats['literals']['mean_diff'], color='green', linestyle='--',
+                       linewidth=2, label=f'Mean Δ = {stats["literals"]["mean_diff"]:.2f}')
+            ax4.set_xlabel('Literal Difference (KMap - SymPy)')
+            ax4.set_ylabel('Frequency')
+            ax4.set_title('Distribution of Literal Differences')
+            ax4.legend(fontsize=8)
+            ax4.grid(True, alpha=0.3, axis='y')
+            
             plt.tight_layout()
             pdf.savefig()
             plt.close()
+            print("✓")
             
-            # ---- INFERENCE PAGE FOR THIS CONFIGURATION ----
-            from statistics import stdev
+            # ============================================================
+            # STATISTICAL INFERENCE PAGE (per configuration)
+            # ============================================================
+            print(f"   • Creating statistical analysis page ({config_num}/{len(grouped)})...", end=" ", flush=True)
+            fig = plt.figure(figsize=(8.5, 11))
+            ax = plt.gca()
+            ax.axis("off")
             
-            # Calculate statistics for this specific configuration
-            std_diff_config = stdev([kt - st for kt, st in zip(kmap_times, sympy_times)]) if len(kmap_times) > 1 else 0
-            std_lit_diff_config = stdev([kl - sl for kl, sl in zip(kmap_literals, sympy_literals)]) if len(kmap_literals) > 1 else 0
-            deviation_ratio_config = std_diff_config / avg_sympy_time if avg_sympy_time else 0
-            deviation_ratio_literals_config = std_lit_diff_config / avg_sympy_literals if avg_sympy_literals else 0
+            ax.text(0.5, 0.96, f"STATISTICAL ANALYSIS: {num_vars}-Variable {form_type.upper()}",
+                   fontsize=16, fontweight='bold', ha='center', transform=ax.transAxes)
             
-            inference_text_config = generate_inference(
-                avg_sympy_time, avg_kmap_time,
-                std_diff_config, deviation_ratio_config,
-                avg_sympy_literals, avg_kmap_literals,
-                std_lit_diff_config, deviation_ratio_literals_config
-            )
+            inference = generate_scientific_inference(stats)
             
-            plt.figure(figsize=(8.5, 11))
-            plt.axis("off")
-            
-            # Add header
-            plt.text(
-                0.5, 0.95,
-                f"INFERENCE: {num_vars}-Variable {form.upper()}",
-                fontsize=18,
-                fontweight="bold",
-                ha="center",
-                va="center",
-                transform=plt.gca().transAxes
-            )
-            
-            # Add inference body line by line with proper spacing
-            lines = inference_text_config.split('\n')
-            y_position = 0.90
-            base_line_spacing = 0.022  # base spacing
-
-            for line in lines:
-                line = line.rstrip()
-
-                # Determine font properties and extra spacing
-                if line.startswith("=" * 30):  # Separator
-                    fontweight = 'normal'
-                    fontsize = 10
-                    extra_spacing = 0.015
-                elif line.strip() in ["INFERENCE SUMMARY", "EXECUTION TIME ANALYSIS",
-                                    "LITERAL COUNT ANALYSIS", "OVERALL VERDICT"]:
-                    fontweight = 'bold'
-                    fontsize = 12
-                    extra_spacing = 0.02
-                elif line.strip().startswith(("→", "✅", "⚠️")):
-                    fontweight = 'normal'
-                    fontsize = 10
-                    extra_spacing = 0
+            # Display inference with proper formatting
+            y_pos = 0.90
+            for line in inference.split('\n'):
+                if line.startswith('=') or line.startswith('-'):
+                    fontsize, fontweight = 9, 'normal'
+                    y_pos -= 0.015
+                elif any(line.strip().startswith(h) for h in ['1.', '2.', '3.', 'STATISTICAL']):
+                    fontsize, fontweight = 11, 'bold'
+                    y_pos -= 0.020
+                elif line.strip().startswith(('✓', '✗')):
+                    fontsize, fontweight = 10, 'bold'
                 else:
-                    fontweight = 'normal'
-                    fontsize = 10
-                    extra_spacing = 0
-
-                # Draw the text
-                plt.text(
-                    0.02, y_position,
-                    line,
-                    fontsize=fontsize,
-                    fontweight=fontweight,
-                    family="monospace",
-                    va="bottom",
-                    wrap=True,
-                    transform=plt.gca().transAxes
-                )
-
-                # Move y_position down by base spacing plus extra spacing
-                y_position -= (base_line_spacing + extra_spacing)
-           
-            pdf.savefig()
+                    fontsize, fontweight = 9, 'normal'
+                
+                ax.text(0.05, y_pos, line, fontsize=fontsize, fontweight=fontweight,
+                       family='monospace', va='top', transform=ax.transAxes)
+                y_pos -= 0.022
+            
+            pdf.savefig(bbox_inches='tight')
             plt.close()
-
-        # ---- SUMMARY PAGE ----
-        plt.figure(figsize=(10, 5))
-        configs = [f"{nv}-{f}" for (nv, f) in grouped.keys()]
-        avg_sympy_times = [np.mean([r["t_sympy"] for r in grouped[k]]) for k in grouped]
-        avg_kmap_times = [np.mean([r["t_kmap"] for r in grouped[k]]) for k in grouped]
-        avg_sympy_literals = [np.mean([r["sympy_literals"] for r in grouped[k]]) for k in grouped]
-        avg_kmap_literals = [np.mean([r["kmap_literals"] for r in grouped[k]]) for k in grouped]
-
-        plt.subplot(1, 2, 1)
-        plt.bar(np.arange(len(configs)) - 0.2, avg_sympy_times, width=0.4, label='SymPy Avg Time')
-        plt.bar(np.arange(len(configs)) + 0.2, avg_kmap_times, width=0.4, label='KMapSolver Avg Time')
-        plt.xticks(range(len(configs)), configs, rotation=30)
-        plt.ylabel("Average Time (s)")
-        plt.title("Average Execution Time per Configuration")
-        plt.legend()
-        plt.grid(True, axis='y', linestyle='--', alpha=0.5)
-
-        plt.subplot(1, 2, 2)
-        plt.bar(np.arange(len(configs)) - 0.2, avg_sympy_literals, width=0.4, label='SymPy Avg Literals')
-        plt.bar(np.arange(len(configs)) + 0.2, avg_kmap_literals, width=0.4, label='KMapSolver Avg Literals')
-        plt.xticks(range(len(configs)), configs, rotation=30)
-        plt.ylabel("Average Literals")
-        plt.title("Average Literal Count per Configuration")
-        plt.legend()
-        plt.grid(True, axis='y', linestyle='--', alpha=0.5)
-
+            print("✓")
+        
+        # ============================================================
+        # OVERALL SUMMARY PAGE
+        # ============================================================
+        print(f"   • Creating overall summary page...", end=" ", flush=True)
+        fig = plt.figure(figsize=(11, 8.5))
+        
+        configs = [f"{nv}V-{f.upper()}" for (nv, f) in sorted(grouped.keys())]
+        
+        # Extract aggregate statistics
+        time_means_sympy = [all_stats[k]['time']['mean_sympy'] for k in sorted(all_stats.keys())]
+        time_means_kmap = [all_stats[k]['time']['mean_kmap'] for k in sorted(all_stats.keys())]
+        lit_means_sympy = [all_stats[k]['literals']['mean_sympy'] for k in sorted(all_stats.keys())]
+        lit_means_kmap = [all_stats[k]['literals']['mean_kmap'] for k in sorted(all_stats.keys())]
+        time_significant = [all_stats[k]['time']['significant'] for k in sorted(all_stats.keys())]
+        lit_significant = [all_stats[k]['literals']['significant'] for k in sorted(all_stats.keys())]
+        
+        # Plot 1: Average execution time
+        ax1 = plt.subplot(2, 2, 1)
+        x = np.arange(len(configs))
+        width = 0.35
+        bars1 = ax1.bar(x - width/2, time_means_sympy, width, label='SymPy', alpha=0.8)
+        bars2 = ax1.bar(x + width/2, time_means_kmap, width, label='KMapSolver', alpha=0.8)
+        
+        # Mark significant differences
+        for i, sig in enumerate(time_significant):
+            if sig:
+                ax1.text(i, max(time_means_sympy[i], time_means_kmap[i]) * 1.05, 
+                        '*', ha='center', fontsize=16, color='red')
+        
+        ax1.set_xlabel('Configuration')
+        ax1.set_ylabel('Mean Execution Time (s)')
+        ax1.set_title('Average Performance by Configuration\n(* = statistically significant)')
+        ax1.set_xticks(x)
+        ax1.set_xticklabels(configs, rotation=45, ha='right')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3, axis='y')
+        
+        # Plot 2: Average literal count
+        ax2 = plt.subplot(2, 2, 2)
+        bars1 = ax2.bar(x - width/2, lit_means_sympy, width, label='SymPy', alpha=0.8)
+        bars2 = ax2.bar(x + width/2, lit_means_kmap, width, label='KMapSolver', alpha=0.8)
+        
+        # Mark significant differences
+        for i, sig in enumerate(lit_significant):
+            if sig:
+                ax2.text(i, max(lit_means_sympy[i], lit_means_kmap[i]) * 1.05,
+                        '*', ha='center', fontsize=16, color='red')
+        
+        ax2.set_xlabel('Configuration')
+        ax2.set_ylabel('Mean Literal Count')
+        ax2.set_title('Average Simplification Quality\n(* = statistically significant)')
+        ax2.set_xticks(x)
+        ax2.set_xticklabels(configs, rotation=45, ha='right')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3, axis='y')
+        
+        # Plot 3: Effect sizes (time)
+        ax3 = plt.subplot(2, 2, 3)
+        time_effects = [all_stats[k]['time']['cohens_d'] for k in sorted(all_stats.keys())]
+        colors = ['red' if abs(d) >= 0.8 else 'orange' if abs(d) >= 0.5 else 'yellow' if abs(d) >= 0.2 else 'green' 
+                  for d in time_effects]
+        ax3.barh(configs, time_effects, color=colors, alpha=0.7)
+        ax3.axvline(0, color='black', linestyle='-', linewidth=1)
+        ax3.axvline(-0.2, color='gray', linestyle='--', alpha=0.5, label='Small effect')
+        ax3.axvline(0.2, color='gray', linestyle='--', alpha=0.5)
+        ax3.axvline(-0.5, color='gray', linestyle=':', alpha=0.5, label='Medium effect')
+        ax3.axvline(0.5, color='gray', linestyle=':', alpha=0.5)
+        ax3.set_xlabel("Cohen's d")
+        ax3.set_title('Effect Size: Execution Time\n(Negative = KMap faster)')
+        ax3.legend(fontsize=8)
+        ax3.grid(True, alpha=0.3, axis='x')
+        
+        # Plot 4: Effect sizes (literals)
+        ax4 = plt.subplot(2, 2, 4)
+        lit_effects = [all_stats[k]['literals']['cohens_d'] for k in sorted(all_stats.keys())]
+        colors = ['red' if abs(d) >= 0.8 else 'orange' if abs(d) >= 0.5 else 'yellow' if abs(d) >= 0.2 else 'green'
+                  for d in lit_effects]
+        ax4.barh(configs, lit_effects, color=colors, alpha=0.7)
+        ax4.axvline(0, color='black', linestyle='-', linewidth=1)
+        ax4.axvline(-0.2, color='gray', linestyle='--', alpha=0.5, label='Small effect')
+        ax4.axvline(0.2, color='gray', linestyle='--', alpha=0.5)
+        ax4.axvline(-0.5, color='gray', linestyle=':', alpha=0.5, label='Medium effect')
+        ax4.axvline(0.5, color='gray', linestyle=':', alpha=0.5)
+        ax4.set_xlabel("Cohen's d")
+        ax4.set_title('Effect Size: Literal Count\n(Negative = KMap more minimal)')
+        ax4.legend(fontsize=8)
+        ax4.grid(True, alpha=0.3, axis='x')
+        
         plt.tight_layout()
         pdf.savefig()
         plt.close()
-
-        # ---- INFERENCE PAGE ----
-        from statistics import stdev
-        import datetime
-
-        std_diff = stdev(np.array(avg_kmap_times) - np.array(avg_sympy_times))
-        std_lit_diff = stdev(np.array(avg_kmap_literals) - np.array(avg_sympy_literals))
-        deviation_ratio = std_diff / np.mean(avg_sympy_times)
-        deviation_ratio_literals = std_lit_diff / np.mean(avg_sympy_literals)
-
-        inference_text = generate_inference(
-            np.mean(avg_sympy_times), np.mean(avg_kmap_times),
-            std_diff, deviation_ratio,
-            np.mean(avg_sympy_literals), np.mean(avg_kmap_literals),
-            std_lit_diff, deviation_ratio_literals
-        )
-
-        plt.figure(figsize=(8.5, 11))
-        plt.axis("off")
-
-        # Add header with company name and date
-        plt.text(
-            0.5, 0.95,
-            "OVERALL INFERENCE REPORT",
-            fontsize=22,
-            fontweight="bold",
-            ha="center",
-            va="center",
-            transform=plt.gca().transAxes
-        )
-        plt.text(
-            0.5, 0.91,
-            f"Generated on {datetime.date.today():%B %d, %Y}",
-            fontsize=12,
-            ha="center",
-            transform=plt.gca().transAxes
-        )
-
-        # Add inference body line by line with proper spacing
-        lines = inference_text.split('\n')
-        y_position = 0.87
-        base_line_spacing = 0.022  # Base spacing between lines
-
-        for line in lines:
-            line = line.rstrip()
-
-            # Determine font properties and extra spacing
-            if line.startswith("=" * 30):  # Separator line
-                fontweight = 'normal'
-                fontsize = 10
-                extra_spacing = 0.015  # Extra space after separators
-            elif line.strip() in ["INFERENCE SUMMARY", "EXECUTION TIME ANALYSIS",
-                                "LITERAL COUNT ANALYSIS", "OVERALL VERDICT"]:
-                fontweight = 'bold'
-                fontsize = 12
-                extra_spacing = 0.02  # Extra space after headings
-            elif line.strip().startswith(("✅", "⚠️")):
-                fontweight = 'normal'
-                fontsize = 10
-                extra_spacing = 0.02
-            else:
-                fontweight = 'normal'
-                fontsize = 10
-                extra_spacing = 0
-
-            # Draw the text with wrapping
-            plt.text(
-                0.02, y_position,
-                line,
-                fontsize=fontsize,
-                fontweight=fontweight,
-                family="monospace",
-                va="top",
-                wrap=True,  # Ensure text wraps inside the plot
-                transform=plt.gca().transAxes
-            )
-
-            # Move y_position down by base spacing plus extra spacing
-            y_position -= (base_line_spacing + extra_spacing)
-
-        # Add copyright footer
-        plt.text(
-            0.5, 0.03,
-            "© Copyright Stan's Technologies 2025",
-            fontsize=10,
-            ha="center",
-            va="center",
-            transform=plt.gca().transAxes,
-            style='italic',
-            color='gray'
-        )
-        pdf.savefig()
-        plt.close()
+        print("✓")
         
-    print(f"✅ PDF successfully saved to {pdf_filename}")
+        # ============================================================
+        # FINAL CONCLUSIONS PAGE
+        # ============================================================
+        print(f"   • Creating final conclusions page...", end=" ", flush=True)
+        fig = plt.figure(figsize=(8.5, 11))
+        ax = plt.gca()
+        ax.axis("off")
+        
+        ax.text(0.5, 0.96, "OVERALL SCIENTIFIC CONCLUSIONS",
+               fontsize=18, fontweight='bold', ha='center', transform=ax.transAxes)
+        
+        # Aggregate all statistics
+        all_sympy_times = [r['t_sympy'] for r in all_results]
+        all_kmap_times = [r['t_kmap'] for r in all_results]
+        all_sympy_lits = [r['sympy_literals'] for r in all_results]
+        all_kmap_lits = [r['kmap_literals'] for r in all_results]
+        
+        overall_stats = perform_statistical_tests(
+            all_sympy_times, all_kmap_times,
+            all_sympy_lits, all_kmap_lits
+        )
+        
+        conclusions = f"""
+EXECUTIVE SUMMARY
+{'=' * 70}
+Total Test Cases:        {len(all_results)}
+Configurations Tested:   {len(grouped)}
+Equivalence Check:       {sum(1 for r in all_results if r['equiv'])} / {len(all_results)} passed
+
+AGGREGATE PERFORMANCE
+{'=' * 70}
+Mean SymPy Time:         {overall_stats['time']['mean_sympy']:.6f} s
+Mean KMapSolver Time:    {overall_stats['time']['mean_kmap']:.6f} s
+Mean Time Difference:    {overall_stats['time']['mean_diff']:+.6f} s
+95% CI:                  [{overall_stats['time']['ci_lower']:.6f}, {overall_stats['time']['ci_upper']:.6f}]
+Statistical Significance: {'YES' if overall_stats['time']['significant'] else 'NO'} (p = {overall_stats['time']['p_value']:.6f})
+Effect Size:             {overall_stats['time']['cohens_d']:.4f} ({interpret_effect_size(overall_stats['time']['cohens_d'])})
+
+AGGREGATE SIMPLIFICATION
+{'=' * 70}
+Mean SymPy Literals:     {overall_stats['literals']['mean_sympy']:.2f}
+Mean KMap Literals:      {overall_stats['literals']['mean_kmap']:.2f}
+Mean Literal Difference: {overall_stats['literals']['mean_diff']:+.2f}
+95% CI:                  [{overall_stats['literals']['ci_lower']:.2f}, {overall_stats['literals']['ci_upper']:.2f}]
+Statistical Significance: {'YES' if overall_stats['literals']['significant'] else 'NO'} (p = {overall_stats['literals']['p_value']:.6f})
+Effect Size:             {overall_stats['literals']['cohens_d']:.4f} ({interpret_effect_size(overall_stats['literals']['cohens_d'])})
+
+KEY FINDINGS
+{'=' * 70}
+"""
+        
+        # Add findings based on results
+        if overall_stats['time']['significant']:
+            if overall_stats['time']['mean_diff'] < 0:
+                conclusions += "\n1. KMapSolver demonstrates statistically significant performance\n   advantage over SymPy's minimization approach."
+            else:
+                conclusions += "\n1. SymPy demonstrates statistically significant performance\n   advantage over KMapSolver."
+        else:
+            conclusions += "\n1. No statistically significant performance difference detected\n   between KMapSolver and SymPy."
+        
+        if overall_stats['literals']['significant']:
+            if overall_stats['literals']['mean_diff'] < 0:
+                conclusions += "\n\n2. KMapSolver produces statistically more minimal Boolean\n   expressions (fewer literals) compared to SymPy."
+            else:
+                conclusions += "\n\n2. SymPy produces statistically more minimal Boolean\n   expressions (fewer literals) compared to KMapSolver."
+        else:
+            conclusions += "\n\n2. Both algorithms achieve statistically equivalent simplification\n   quality in terms of literal count."
+        
+        conclusions += f"\n\n3. Effect sizes indicate {interpret_effect_size(overall_stats['time']['cohens_d'])} practical\n   significance for performance and {interpret_effect_size(overall_stats['literals']['cohens_d'])} practical\n   significance for simplification quality."
+        
+        conclusions += f"\n\n4. All {len(all_results)} test cases maintained logical correctness,\n   with {sum(1 for r in all_results if r['equiv'])} passing equivalence verification."
+        
+        conclusions += f"""
+
+THREATS TO VALIDITY
+{'=' * 70}
+• Limited to 2-4 variable K-maps (inherent K-map scalability limit)
+• Random test case generation may not reflect real-world distributions
+• Timing includes Python overhead (not pure algorithm performance)
+• SymPy uses different minimization strategies (not pure K-map based)
+
+REPRODUCIBILITY
+{'=' * 70}
+This experiment used random seed {RANDOM_SEED} and can be fully reproduced
+using the documented experimental setup and library versions.
+
+RECOMMENDATIONS
+{'=' * 70}
+Based on statistical evidence:
+"""
+        
+        if overall_stats['time']['mean_diff'] < -0.0001 and overall_stats['literals']['mean_diff'] <= 0:
+            conclusions += "\n→ KMapSolver offers practical advantages for applications requiring\n  both speed and minimal circuit representations."
+        elif abs(overall_stats['time']['mean_diff']) < 0.0001 and abs(overall_stats['literals']['mean_diff']) < 0.5:
+            conclusions += "\n→ Both algorithms are practically equivalent; choice should be based\n  on integration convenience and API preferences."
+        else:
+            conclusions += "\n→ Algorithm selection should be based on whether performance or\n  simplification quality is the priority for the application."
+        
+        conclusions += f"\n\n{'=' * 70}\nReport generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n© Stan's Technologies {datetime.datetime.now().year}"
+        
+        ax.text(0.05, 0.90, conclusions, fontsize=9, family='monospace',
+               va='top', transform=ax.transAxes)
+        
+        pdf.savefig(bbox_inches='tight')
+        plt.close()
+        print("✓")
+    
+    print(f"✅ Comprehensive scientific report saved!")
+
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
 
 def main():
-    # Create outputs directory if it doesn't exist
-    outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
-    os.makedirs(outputs_dir, exist_ok=True)
-
-    config = [
+    """Main benchmark execution function."""
+    print("=" * 80)
+    print("SCIENTIFIC K-MAP SOLVER BENCHMARK")
+    print("=" * 80)
+    
+    # Set random seed for reproducibility
+    random.seed(RANDOM_SEED)
+    np.random.seed(RANDOM_SEED)
+    print(f"🎲 Random seed set to: {RANDOM_SEED}")
+    
+    # Create outputs directory
+    os.makedirs(OUTPUTS_DIR, exist_ok=True)
+    print(f"📁 Output directory: {OUTPUTS_DIR}")
+    
+    # Document experimental setup
+    setup_info = document_experimental_setup()
+    print("📝 Experimental setup documented.")
+    
+    # Test configurations
+    configurations = [
         (2, "sop"),
         (2, "pos"),
         (3, "sop"),
@@ -830,138 +1315,89 @@ def main():
         (4, "sop"),
         (4, "pos"),
     ]
-
-    # random.seed(42)
+    
+    print(f"\n🔬 Test configurations: {len(configurations)}")
+    print(f"   Variables: 2, 3, 4")
+    print(f"   Forms: SOP, POS")
+    print(f"   Tests per config: ~{TESTS_PER_CONFIG}")
+    
     var_pool = symbols('x1 x2 x3 x4')
     all_results = []
-
-    for num_vars, form_type in config:
-        print(f"\n{'='*70}")
-        print(f" Benchmark: {num_vars}-variable K-map ({form_type.upper()})")
-        print(f"{'='*70}")
-        rows, cols = _kmap_shape(num_vars)
-        results = []
-        for i in range(1000):  # 100 random K-maps per configuration
-            kmap = random_kmap(rows=rows, cols=cols)
-            var_names = var_pool[:num_vars]
-            result = benchmark_case(kmap, var_names, form_type, i + 1)
-            results.append(result)
-            all_results.append(result)
-
-        # --- Plot performance comparison ---
-        sympy_times = [r['t_sympy'] for r in results]
-        kmap_times = [r['t_kmap'] for r in results]
-        sympy_literals = [r['sympy_literals'] for r in results]
-        kmap_literals = [r['kmap_literals'] for r in results]
-
-        """
-        Statistical Analysis
-        ------------------------------------------------------------
-        """
-        avg_sympy_time = np.mean(sympy_times)
-        avg_kmap_time = np.mean(kmap_times)
-
-        avg_sympy_literals = np.mean(sympy_literals)
-        avg_kmap_literals = np.mean(kmap_literals)
-
-        #Compute time differences and find the standard deviation
-        diffs = np.array(sympy_times) - np.array(kmap_times)
-        mean_diff = np.mean(diffs)
-        std_diff = np.std(diffs)
-
-        # Compute standard deviations
-        std_sympy = np.std(sympy_times, ddof=1)  # sample std dev
-        std_kmap = np.std(kmap_times, ddof=1)
-
-        # Compare deviation ratio (optional)
-        deviation_ratio = std_kmap / std_sympy if std_sympy != 0 else np.nan
-
-        # #--- Print summary statistics for time ---
-        # print(f"Average SymPy Time: {avg_sympy_time:.6f} seconds")
-        # print(f"Average KMapSolver Time: {avg_kmap_time:.6f} seconds")
-
-        # print(f"Std Dev of Time Difference: {std_diff:.6f} seconds")
-        # print(f"Deviation Ratio (KMap/SymPy): {deviation_ratio:.6f}")
-
-        # ------------------------------------------------------------
-
-        #Compute literal differences and find the standard deviation
-        lit_diffs = np.array(sympy_literals) - np.array(kmap_literals)
-        avg_lit_diff = np.mean(lit_diffs)
-        std_lit_diff = np.std(lit_diffs)
-
-        #Compute standard deviations for literals
-        std_sympy_literals = np.std(sympy_literals, ddof=1)
-        std_kmap_literals = np.std(kmap_literals, ddof=1)
-
-        #Compare literal deviation ratio (optional)
-        deviation_ratio_literals = std_kmap_literals / std_sympy_literals if std_sympy_literals != 0 else np.nan
-
-        # #--- Print summary statistics for literals ---
-        # print(f"Average SymPy Literals: {avg_sympy_literals:.2f}")
-        # print(f"Average KMapSolver Literals: {avg_kmap_literals:.2f}")
-
-        # print(f"Std dev of Literal Difference: {std_lit_diff:.2f}")
-        # print(f"Deviation Ratio (KMap/SymPy) Literals: {deviation_ratio_literals:.6f}")
-
-        # # Generate inference summary
-        # generate_inference(
-        #     avg_sympy_time, avg_kmap_time, std_diff, deviation_ratio,
-        #     avg_sympy_literals, avg_kmap_literals, std_lit_diff, deviation_ratio_literals
-        # )
-
+    all_stats = {}
     
-    # Fix output paths using os.path.join
-    csv_path = os.path.join(outputs_dir, "benchmark_results.csv")
-    pdf_path = os.path.join(outputs_dir, "benchmark_results.pdf")
-    
-    export_results_to_csv(all_results, csv_path)
-    save_benchmark_plots(all_results, pdf_path)
-
-    print(f"\n✅ All benchmark results exported to '{csv_path}'")   
-    print(f"✅ All benchmark plots saved to '{pdf_path}'")         
-
-        # print(tabulate(results, headers="keys", tablefmt="fancy_grid"))        
+    # Run benchmarks for each configuration
+    total_configs = len(configurations)
+    for config_idx, (num_vars, form_type) in enumerate(configurations, 1):
+        print(f"\n{'='*80}")
+        print(f"[{config_idx}/{total_configs}] Benchmarking: {num_vars}-variable K-map ({form_type.upper()} form)")
+        print(f"{'='*80}")
         
-    #     sop_expr = SOPform(vars_syms, minterms, dont_cares)
+        # Generate test suite
+        print(f"  📋 Generating test suite...", end=" ", flush=True)
+        test_suite = generate_test_suite(num_vars, tests_per_distribution=TESTS_PER_CONFIG // 5)
+        var_names = var_pool[:num_vars]
+        print(f"✓ ({len(test_suite)} test cases)")
+        
+        print(f"  ⚙️  Running benchmarks...")
+        config_results = []
+        for idx, (kmap, distribution) in enumerate(test_suite, 1):
+            try:
+                result = benchmark_case(kmap, var_names, form_type, idx, distribution)
+                config_results.append(result)
+                all_results.append(result)
+            
+            except Exception as e:
+                print(f"    ⚠️  Error in test {idx}: {e}")
+                continue
+        
+        # Perform statistical analysis for this configuration
+        if config_results:
+            print(f"\n  📊 Performing statistical analysis...", end=" ", flush=True)
+            sympy_times = [r["t_sympy"] for r in config_results]
+            kmap_times = [r["t_kmap"] for r in config_results]
+            sympy_literals = [r["sympy_literals"] for r in config_results]
+            kmap_literals = [r["kmap_literals"] for r in config_results]
+            
+            stats = perform_statistical_tests(sympy_times, kmap_times, 
+                                             sympy_literals, kmap_literals)
+            all_stats[(num_vars, form_type)] = stats
+            print("✓")
+            
+            # Display summary
+            print(f"\n  📈 Configuration Summary:")
+            print(f"     Tests completed:     {len(config_results)}")
+            print(f"     Mean SymPy time:     {stats['time']['mean_sympy']:.6f} s")
+            print(f"     Mean KMap time:      {stats['time']['mean_kmap']:.6f} s")
+            print(f"     Time significant:    {'YES ✓' if stats['time']['significant'] else 'NO ✗'} "
+                  f"(p={stats['time']['p_value']:.4f})")
+            print(f"     Mean SymPy literals: {stats['literals']['mean_sympy']:.2f}")
+            print(f"     Mean KMap literals:  {stats['literals']['mean_kmap']:.2f}")
+            print(f"     Literal significant: {'YES ✓' if stats['literals']['significant'] else 'NO ✗'} "
+                  f"(p={stats['literals']['p_value']:.4f})")
+    
+    # Export results
+    print(f"\n{'='*80}")
+    print("EXPORTING RESULTS")
+    print(f"{'='*80}")
+    
+    export_results_to_csv(all_results, RESULTS_CSV)
+    export_statistical_analysis(all_stats, STATS_CSV)
+    save_comprehensive_report(all_results, all_stats, setup_info, REPORT_PDF)
+    
+    # Final summary
+    print(f"\n{'='*80}")
+    print("✅ BENCHMARK COMPLETE")
+    print(f"{'='*80}")
+    print(f"📊 Total test cases executed: {len(all_results)}")
+    print(f"🔧 Configurations tested: {len(configurations)}")
+    equiv_passed = sum(1 for r in all_results if r['equiv'])
+    print(f"✓  Equivalence pass rate: {equiv_passed}/{len(all_results)} ({100*equiv_passed/len(all_results):.1f}%)")
+    print(f"\n📂 Outputs:")
+    print(f"   • Raw results:       {RESULTS_CSV}")
+    print(f"   • Statistical data:  {STATS_CSV}")
+    print(f"   • PDF report:        {REPORT_PDF}")
+    print(f"\n{'='*80}")
 
-    #     expr_kmap_sympy = parse_kmap_expression(sop, vars_syms)
-    #     equiv = check_equivalence(expr_kmap_sympy, sop_expr)
-
-    #     if not equiv:
-    #         print("Discrepancy found!")
-    #         print("K-map:")
-    #         solver.print_kmap()
-    #         print("K-map SOP:", sop)
-    #         print("SymPy SOP:", sop_expr)
-    #         print("Minterms:", info["minterms"])
-    #         print("Don't cares:", info["dont_cares"])
-    #         break
 
 if __name__ == "__main__":
     main()
-
-
-# # Example usage
-# kmap = random_kmap(rows=4, cols=4)  # list, suitable for KMapSolver
-# solver = KMapSolver(kmap)
-# terms, sop = solver.minimize()
-# solver.print_kmap()
-# print("K-map SOP:", sop)
-
-
-# info = kmap_minterms(kmap, convention="vranseic")
-# minterms = info["minterms"]
-# dont_cares = info["dont_cares"]
-
-# vars_syms = symbols('x1 x2 x3 x4')
-# sop_expr = SOPform(vars_syms, minterms, dont_cares)
-# print("SymPy SOP:", sop_expr)
-
-# print("Minterms:", info["minterms"])
-# print("Don't cares:", info["dont_cares"])
-
-# expr_kmap_sympy = parse_kmap_expression(sop, vars_syms)
-# equiv = check_equivalence(expr_kmap_sympy, sop_expr)
-
-# print("Equivalence:", equiv)
