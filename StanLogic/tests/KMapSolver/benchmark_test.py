@@ -47,8 +47,9 @@ TIMING_WARMUP = 2       # Warm-up iterations before timing
 # Statistical significance threshold
 ALPHA = 0.05  # 95% confidence level
 
-# Output directories
-OUTPUTS_DIR = "outputs"
+# Output directories - relative to script location
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+OUTPUTS_DIR = os.path.join(SCRIPT_DIR, "outputs")
 RESULTS_CSV = os.path.join(OUTPUTS_DIR, "benchmark_results.csv")
 REPORT_PDF = os.path.join(OUTPUTS_DIR, "benchmark_scientific_report.pdf")
 STATS_CSV = os.path.join(OUTPUTS_DIR, "statistical_analysis.csv")
