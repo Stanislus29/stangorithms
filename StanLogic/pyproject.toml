@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stanlogic"
-version = "1.1.1"
+version = "1.1.2"
 authors = [
   { name = "Somtochukwu Stanislus Emeka-Onwuneme", email = "somtochukwueo@outlook.com" }
 ]
