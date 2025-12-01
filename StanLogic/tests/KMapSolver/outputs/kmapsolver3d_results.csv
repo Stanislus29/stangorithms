@@ -1,124 +1,164 @@
 # KMapSolver3D Scientific Benchmark Results
 "# For constant expressions, SymPy Literals and KMap Literals are 0"
 
-Test Number,Description,Variables,Result Category,Equivalent,SymPy Time (s),KMap Time (s),SymPy Literals,KMap Literals
-1,5-var: sparse,5,expression,True,0.00067660,0.00061100,20,13
-2,5-var: sparse,5,expression,True,0.00036130,0.00057980,12,8
-3,5-var: sparse,5,expression,True,0.00035830,0.00056170,13,7
-4,5-var: sparse,5,expression,True,0.00053400,0.00056110,22,14
-5,5-var: sparse,5,expression,True,0.00044340,0.00055120,18,12
-6,5-var: dense,5,expression,True,0.00241720,0.00081030,19,19
-7,5-var: dense,5,expression,True,0.00115120,0.00072100,13,11
-8,5-var: dense,5,expression,True,0.00223750,0.00086430,14,13
-9,5-var: dense,5,expression,True,0.00235680,0.00076070,31,25
-10,5-var: dense,5,expression,True,0.00123940,0.00070550,25,17
-11,5-var: balanced,5,expression,True,0.00085870,0.00062030,22,17
-12,5-var: balanced,5,expression,True,0.00119000,0.00076360,22,15
-13,5-var: balanced,5,expression,True,0.00168810,0.00089880,19,14
-14,5-var: balanced,5,expression,True,0.00083820,0.00066270,15,12
-15,5-var: balanced,5,expression,True,0.00147260,0.00073220,21,12
-16,5-var: minimal_dc,5,expression,True,0.00189000,0.00075120,30,18
-17,5-var: minimal_dc,5,expression,True,0.00116740,0.00075200,31,19
-18,5-var: minimal_dc,5,expression,True,0.00113600,0.00062220,32,22
-19,5-var: minimal_dc,5,expression,True,0.00089860,0.00061530,29,20
-20,5-var: minimal_dc,5,expression,True,0.00104400,0.00075270,18,12
-21,5-var: heavy_dc,5,expression,True,0.00060960,0.00064120,12,8
-22,5-var: heavy_dc,5,expression,True,0.00103740,0.00071500,23,18
-23,5-var: heavy_dc,5,expression,True,0.00065730,0.00068200,15,11
-24,5-var: heavy_dc,5,expression,True,0.00046440,0.00057740,15,11
-25,5-var: heavy_dc,5,expression,True,0.00064180,0.00068210,11,10
-26,5-var: edge_all_zeros,5,all_zeros,True,0.00000020,0.00049510,0,0
-27,5-var: edge_all_ones,5,all_ones,False,0.00175230,0.00100940,0,0
-28,5-var: edge_all_dc,5,all_dc,True,0.00000030,0.00076830,0,0
-29,5-var: edge_checkerboard,5,expression,True,0.00043150,0.00065090,1,1
-30,5-var: edge_single_one,5,expression,True,0.00016150,0.00053730,5,5
-31,6-var: sparse,6,expression,True,0.00083900,0.00115250,33,27
-32,6-var: sparse,6,expression,True,0.00073310,0.00108270,25,20
-33,6-var: sparse,6,expression,True,0.00147570,0.00110860,40,25
-34,6-var: sparse,6,expression,True,0.00263530,0.00141740,54,34
-35,6-var: sparse,6,expression,True,0.00114480,0.00106570,37,25
-36,6-var: dense,6,expression,True,0.01929440,0.00153170,41,35
-37,6-var: dense,6,expression,True,0.00508830,0.00143680,42,39
-38,6-var: dense,6,expression,True,0.00789810,0.00156460,40,40
-39,6-var: dense,6,expression,True,0.00809350,0.00145570,42,34
-40,6-var: dense,6,expression,True,0.01439050,0.00159370,50,33
-41,6-var: balanced,6,expression,True,0.00709430,0.00131560,58,45
-42,6-var: balanced,6,expression,True,0.00601130,0.00131010,48,43
-43,6-var: balanced,6,expression,True,0.00339440,0.00131520,42,34
-44,6-var: balanced,6,expression,True,0.00721790,0.00162750,66,40
-45,6-var: balanced,6,expression,True,0.00417870,0.00140800,51,43
-46,6-var: minimal_dc,6,expression,True,0.00375220,0.00123190,56,42
-47,6-var: minimal_dc,6,expression,True,0.00450760,0.00145030,55,39
-48,6-var: minimal_dc,6,expression,True,0.00384930,0.00137440,56,42
-49,6-var: minimal_dc,6,expression,True,0.00374700,0.00134540,65,46
-50,6-var: minimal_dc,6,expression,True,0.00376320,0.00156890,61,39
-51,6-var: heavy_dc,6,expression,True,0.00268180,0.00123100,46,32
-52,6-var: heavy_dc,6,expression,True,0.00314810,0.00130750,32,24
-53,6-var: heavy_dc,6,expression,True,0.00356190,0.00125300,50,34
-54,6-var: heavy_dc,6,expression,True,0.00143360,0.00112780,34,20
-55,6-var: heavy_dc,6,expression,True,0.00270960,0.00123550,49,34
-56,6-var: edge_all_zeros,6,all_zeros,True,0.00000020,0.00095280,0,0
-57,6-var: edge_all_ones,6,all_ones,False,0.01208420,0.00188810,0,0
-58,6-var: edge_all_dc,6,all_dc,True,0.00000040,0.00149830,0,0
-59,6-var: edge_checkerboard,6,expression,True,0.00176910,0.00125930,1,1
-60,6-var: edge_single_one,6,expression,True,0.00012670,0.00103220,6,6
-61,7-var: sparse,7,expression,True,0.00485310,0.00230400,98,53
-62,7-var: sparse,7,expression,True,0.00840050,0.00258990,110,68
-63,7-var: sparse,7,expression,True,0.00643190,0.00232130,109,66
-64,7-var: sparse,7,expression,True,0.00636310,0.00242270,108,66
-65,7-var: sparse,7,expression,True,0.00728380,0.00242180,115,71
-66,7-var: dense,7,expression,True,0.03160470,0.00298890,87,65
-67,7-var: dense,7,expression,True,0.13266070,0.00290130,111,89
-68,7-var: dense,7,expression,True,0.06814750,0.00350230,81,58
-69,7-var: dense,7,expression,True,0.28103200,0.00296550,93,57
-70,7-var: dense,7,expression,True,0.02988900,0.00279360,97,65
-71,7-var: balanced,7,expression,True,0.03205750,0.00262320,122,97
-72,7-var: balanced,7,expression,True,0.03775660,0.00270430,98,66
-73,7-var: balanced,7,expression,True,0.03668230,0.00262000,124,85
-74,7-var: balanced,7,expression,True,0.03301100,0.00288570,93,61
-75,7-var: balanced,7,expression,True,0.04544780,0.00250760,106,84
-76,7-var: minimal_dc,7,expression,True,0.05039650,0.00256020,144,77
-77,7-var: minimal_dc,7,expression,True,0.04785830,0.00260900,107,82
-78,7-var: minimal_dc,7,expression,True,0.02071900,0.00269010,127,80
-79,7-var: minimal_dc,7,expression,True,0.03791100,0.00241020,138,71
-80,7-var: minimal_dc,7,expression,True,0.01776790,0.00238990,113,79
-81,7-var: heavy_dc,7,expression,True,0.00890970,0.00236600,86,67
-82,7-var: heavy_dc,7,expression,True,0.01179300,0.00295450,86,57
-83,7-var: heavy_dc,7,expression,True,0.01140190,0.00247090,63,45
-84,7-var: heavy_dc,7,expression,True,0.02068860,0.00269510,87,66
-85,7-var: heavy_dc,7,expression,True,0.01842610,0.00256020,69,53
-86,7-var: edge_all_zeros,7,all_zeros,True,0.00000030,0.00184890,0,0
-87,7-var: edge_all_ones,7,all_ones,False,0.09329980,0.00372450,0,0
-88,7-var: edge_all_dc,7,all_dc,True,0.00000020,0.00288960,0,0
-89,7-var: edge_checkerboard,7,expression,True,0.01334640,0.00238950,1,1
-90,7-var: edge_single_one,7,expression,True,0.00031300,0.00205840,7,7
-91,8-var: sparse,8,expression,True,0.02651850,0.00464380,225,112
-92,8-var: sparse,8,expression,True,0.02335550,0.00455350,223,130
-93,8-var: sparse,8,expression,True,0.01930540,0.00459020,197,125
-94,8-var: sparse,8,expression,True,0.01515190,0.00489080,192,96
-95,8-var: sparse,8,expression,True,0.03843070,0.00462090,222,111
-96,8-var: dense,8,expression,True,2.23612750,0.00627430,210,121
-97,8-var: dense,8,expression,True,1.95875510,0.00653020,190,119
-98,8-var: dense,8,expression,True,2.59974960,0.00663040,190,112
-99,8-var: dense,8,expression,True,1.30999190,0.00607640,198,117
-100,8-var: dense,8,expression,True,1.84401050,0.00620990,228,137
-101,8-var: balanced,8,expression,True,0.24271990,0.00517750,264,138
-102,8-var: balanced,8,expression,True,0.17686810,0.00591060,180,118
-103,8-var: balanced,8,expression,True,0.22785620,0.00542300,259,135
-104,8-var: balanced,8,expression,True,0.84026480,0.00570150,265,155
-105,8-var: balanced,8,expression,True,0.47152080,0.00595700,232,152
-106,8-var: minimal_dc,8,expression,True,0.18955130,0.00516390,252,152
-107,8-var: minimal_dc,8,expression,True,0.68263650,0.00531700,268,153
-108,8-var: minimal_dc,8,expression,True,0.41404910,0.00611570,250,133
-109,8-var: minimal_dc,8,expression,True,0.21879800,0.00520470,290,164
-110,8-var: minimal_dc,8,expression,True,0.32629100,0.00534820,282,155
-111,8-var: heavy_dc,8,expression,True,0.09368660,0.00559030,182,107
-112,8-var: heavy_dc,8,expression,True,0.06135230,0.00638920,188,94
-113,8-var: heavy_dc,8,expression,True,0.15753090,0.00544820,178,115
-114,8-var: heavy_dc,8,expression,True,0.10902500,0.00573050,181,118
-115,8-var: heavy_dc,8,expression,True,0.11788040,0.00549730,168,108
-116,8-var: edge_all_zeros,8,all_zeros,True,0.00000020,0.00438710,0,0
-117,8-var: edge_all_ones,8,all_ones,False,0.81488840,0.00804820,0,0
-118,8-var: edge_all_dc,8,all_dc,True,0.00000020,0.00638490,0,0
-119,8-var: edge_checkerboard,8,expression,True,0.10638800,0.00536800,1,1
-120,8-var: edge_single_one,8,expression,True,0.00016370,0.00430470,8,8
+Test Number,Description,Variables,Form,Result Category,Equivalent,SymPy Time (s),KMap Time (s),SymPy Memory (MB),KMap Memory (MB),SymPy Literals,KMap Literals,SymPy Terms,KMap Terms
+1,5-var: sparse (SOP),5,sop,expression,True,0.00399230,0.00393170,0.01,0.01,20,13,5,5
+2,5-var: sparse (SOP),5,sop,expression,True,0.00169030,0.00374520,0.01,0.01,12,8,3,3
+3,5-var: sparse (SOP),5,sop,expression,True,0.00190130,0.00353330,0.01,0.01,13,7,3,3
+4,5-var: dense (SOP),5,sop,expression,True,0.01899770,0.00505880,0.02,0.01,25,22,8,10
+5,5-var: dense (SOP),5,sop,expression,True,0.01562370,0.00522920,0.01,0.01,23,17,8,9
+6,5-var: dense (SOP),5,sop,expression,True,0.01708170,0.00504740,0.01,0.01,19,19,7,9
+7,5-var: balanced (SOP),5,sop,expression,True,0.00868820,0.00451900,0.01,0.01,19,17,6,7
+8,5-var: balanced (SOP),5,sop,expression,True,0.00765160,0.00504270,0.01,0.01,25,17,7,8
+9,5-var: balanced (SOP),5,sop,expression,True,0.00916010,0.00429960,0.01,0.01,19,16,6,7
+10,5-var: minimal_dc (SOP),5,sop,expression,True,0.00446810,0.00937830,0.01,0.01,21,15,6,6
+11,5-var: minimal_dc (SOP),5,sop,expression,True,0.00669780,0.00484250,0.01,0.01,28,18,7,7
+12,5-var: minimal_dc (SOP),5,sop,expression,True,0.00881860,0.00429850,0.01,0.01,27,20,7,8
+13,5-var: heavy_dc (SOP),5,sop,expression,True,0.00559740,0.00420090,0.01,0.01,22,18,6,7
+14,5-var: heavy_dc (SOP),5,sop,expression,True,0.00542450,0.00405870,0.01,0.01,17,16,5,6
+15,5-var: heavy_dc (SOP),5,sop,expression,True,0.00773640,0.00429190,0.01,0.01,24,20,6,7
+16,5-var: edge_all_zeros (SOP),5,sop,all_zeros,True,0.00000050,0.00300970,0.00,0.00,0,0,0,0
+17,5-var: edge_all_ones (SOP),5,sop,all_ones,True,0.00718980,0.00682090,0.03,0.01,0,0,0,1
+18,5-var: edge_all_dc (SOP),5,sop,all_dc,True,0.00000070,0.00347480,0.00,0.00,0,0,0,0
+19,5-var: edge_checkerboard (SOP),5,sop,expression,True,0.00161540,0.00397860,0.01,0.01,1,1,1,1
+20,5-var: edge_single_one (SOP),5,sop,expression,True,0.00045930,0.00324020,0.00,0.00,5,5,1,1
+21,5-var: sparse (POS),5,pos,expression,True,0.00762900,0.00494400,0.01,0.01,16,24,6,8
+22,5-var: sparse (POS),5,pos,expression,True,0.00733970,0.00505430,0.02,0.01,12,14,6,6
+23,5-var: sparse (POS),5,pos,expression,True,0.01235250,0.00520840,0.02,0.01,13,16,6,7
+24,5-var: dense (POS),5,pos,expression,True,0.00300460,0.00431810,0.01,0.01,21,21,5,5
+25,5-var: dense (POS),5,pos,expression,True,0.00277440,0.00358820,0.01,0.01,22,22,5,5
+26,5-var: dense (POS),5,pos,expression,True,0.00275450,0.00372610,0.01,0.01,22,28,5,6
+27,5-var: balanced (POS),5,pos,expression,True,0.00428940,0.00433530,0.01,0.01,17,22,5,6
+28,5-var: balanced (POS),5,pos,expression,True,0.00508450,0.00427400,0.01,0.01,25,28,7,7
+29,5-var: balanced (POS),5,pos,expression,True,0.00575080,0.00404750,0.01,0.01,22,22,6,6
+30,5-var: minimal_dc (POS),5,pos,expression,True,0.00698740,0.00451690,0.01,0.01,23,29,7,8
+31,5-var: minimal_dc (POS),5,pos,expression,True,0.00776250,0.00465110,0.01,0.01,22,32,7,9
+32,5-var: minimal_dc (POS),5,pos,expression,True,0.01666430,0.00420970,0.01,0.01,27,35,7,9
+33,5-var: heavy_dc (POS),5,pos,expression,True,0.00460310,0.00465090,0.01,0.01,13,16,5,6
+34,5-var: heavy_dc (POS),5,pos,expression,True,0.00514010,0.00457780,0.01,0.01,14,19,5,6
+35,5-var: heavy_dc (POS),5,pos,expression,True,0.00795210,0.00454360,0.01,0.01,21,29,7,9
+36,5-var: edge_all_zeros (POS),5,pos,all_zeros,True,0.00000040,0.00645700,0.00,0.01,0,0,0,1
+37,5-var: edge_all_ones (POS),5,pos,all_ones,True,0.00026530,0.00314790,0.01,0.00,0,0,0,0
+38,5-var: edge_all_dc (POS),5,pos,all_dc,True,0.00000040,0.00348760,0.00,0.00,0,0,0,0
+39,5-var: edge_checkerboard (POS),5,pos,expression,True,0.00158120,0.00397070,0.01,0.01,1,1,1,1
+40,5-var: edge_single_one (POS),5,pos,expression,True,0.00891690,0.00632770,0.03,0.01,5,9,5,5
+41,6-var: sparse (SOP),6,sop,expression,True,0.01396160,0.00838300,0.02,0.01,65,38,13,13
+42,6-var: sparse (SOP),6,sop,expression,True,0.00469320,0.00721520,0.01,0.01,31,20,6,7
+43,6-var: sparse (SOP),6,sop,expression,True,0.01016670,0.00773640,0.02,0.01,49,31,10,10
+44,6-var: dense (SOP),6,sop,expression,True,0.05372250,0.00977530,0.04,0.01,34,29,11,13
+45,6-var: dense (SOP),6,sop,expression,True,0.06337860,0.00955700,0.04,0.01,42,37,12,15
+46,6-var: dense (SOP),6,sop,expression,True,0.03696300,0.01099470,0.03,0.01,49,34,13,14
+47,6-var: balanced (SOP),6,sop,expression,True,0.02004190,0.00925520,0.02,0.01,60,38,14,14
+48,6-var: balanced (SOP),6,sop,expression,True,0.02492260,0.00914530,0.02,0.01,38,29,10,11
+49,6-var: balanced (SOP),6,sop,expression,True,0.02654810,0.00894920,0.03,0.02,51,43,13,16
+50,6-var: minimal_dc (SOP),6,sop,expression,True,0.02221930,0.00879980,0.02,0.02,65,44,14,15
+51,6-var: minimal_dc (SOP),6,sop,expression,True,0.05096530,0.00877620,0.03,0.02,51,44,12,16
+52,6-var: minimal_dc (SOP),6,sop,expression,True,0.01707910,0.00795380,0.02,0.01,49,33,11,11
+53,6-var: heavy_dc (SOP),6,sop,expression,True,0.01127300,0.00761950,0.02,0.01,39,25,8,8
+54,6-var: heavy_dc (SOP),6,sop,expression,True,0.02285550,0.00808920,0.02,0.01,43,34,11,12
+55,6-var: heavy_dc (SOP),6,sop,expression,True,0.02604110,0.00855010,0.02,0.01,49,36,11,12
+56,6-var: edge_all_zeros (SOP),6,sop,all_zeros,True,0.00000050,0.00587950,0.00,0.01,0,0,0,0
+57,6-var: edge_all_ones (SOP),6,sop,all_ones,True,0.04451840,0.01302120,0.09,0.02,0,0,0,1
+58,6-var: edge_all_dc (SOP),6,sop,all_dc,True,0.00000040,0.00696600,0.00,0.00,0,0,0,0
+59,6-var: edge_checkerboard (SOP),6,sop,expression,True,0.00745730,0.00816970,0.03,0.01,1,1,1,1
+60,6-var: edge_single_one (SOP),6,sop,expression,True,0.00049970,0.00629210,0.00,0.01,6,6,1,1
+61,6-var: sparse (POS),6,pos,expression,True,0.03587230,0.00948620,0.04,0.02,44,60,12,15
+62,6-var: sparse (POS),6,pos,expression,True,0.04397490,0.01048660,0.05,0.02,24,44,9,13
+63,6-var: sparse (POS),6,pos,expression,True,0.04590010,0.00950680,0.04,0.02,40,55,11,14
+64,6-var: dense (POS),6,pos,expression,True,0.00833730,0.01000330,0.02,0.01,39,40,8,8
+65,6-var: dense (POS),6,pos,expression,True,0.01517670,0.00876030,0.02,0.01,44,52,9,10
+66,6-var: dense (POS),6,pos,expression,True,0.01802160,0.00910930,0.02,0.02,63,64,12,12
+67,6-var: balanced (POS),6,pos,expression,True,0.04641810,0.01046570,0.03,0.02,58,73,13,15
+68,6-var: balanced (POS),6,pos,expression,True,0.01516660,0.00838130,0.02,0.01,40,48,10,11
+69,6-var: balanced (POS),6,pos,expression,True,0.02310190,0.00817360,0.02,0.01,60,47,13,11
+70,6-var: minimal_dc (POS),6,pos,expression,True,0.02553950,0.00919320,0.03,0.02,57,72,14,16
+71,6-var: minimal_dc (POS),6,pos,expression,True,0.02621460,0.00912940,0.02,0.02,57,70,13,15
+72,6-var: minimal_dc (POS),6,pos,expression,True,0.03381940,0.00910400,0.03,0.02,53,63,13,14
+73,6-var: heavy_dc (POS),6,pos,expression,True,0.03089730,0.00922160,0.04,0.01,32,38,10,11
+74,6-var: heavy_dc (POS),6,pos,expression,True,0.02357440,0.00834660,0.03,0.01,40,47,10,11
+75,6-var: heavy_dc (POS),6,pos,expression,True,0.02053510,0.00873590,0.03,0.01,39,43,11,11
+76,6-var: edge_all_zeros (POS),6,pos,all_zeros,True,0.00000050,0.01370430,0.00,0.02,0,0,0,1
+77,6-var: edge_all_ones (POS),6,pos,all_ones,True,0.00048980,0.00609510,0.01,0.01,0,0,0,0
+78,6-var: edge_all_dc (POS),6,pos,all_dc,True,0.00000040,0.00687900,0.00,0.00,0,0,0,0
+79,6-var: edge_checkerboard (POS),6,pos,expression,True,0.00787860,0.00810410,0.04,0.01,1,1,1,1
+80,6-var: edge_single_one (POS),6,pos,expression,True,0.04422800,0.01232650,0.08,0.02,6,12,6,5
+81,7-var: sparse (SOP),7,sop,expression,True,0.02713120,0.01462410,0.02,0.02,103,65,16,16
+82,7-var: sparse (SOP),7,sop,expression,True,0.01897810,0.01465740,0.02,0.02,76,53,13,14
+83,7-var: sparse (SOP),7,sop,expression,True,0.02112340,0.01379230,0.02,0.02,88,47,14,13
+84,7-var: dense (SOP),7,sop,expression,True,0.36051820,0.01935380,0.14,0.02,99,60,22,24
+85,7-var: dense (SOP),7,sop,expression,True,0.61544360,0.01995670,0.13,0.03,111,82,24,28
+86,7-var: dense (SOP),7,sop,expression,True,0.51609690,0.02013720,0.14,0.03,110,90,24,32
+87,7-var: balanced (SOP),7,sop,expression,True,0.27460330,0.01824370,0.09,0.02,84,70,18,23
+88,7-var: balanced (SOP),7,sop,expression,True,0.18674170,0.01910570,0.10,0.03,126,97,26,30
+89,7-var: balanced (SOP),7,sop,expression,True,0.32569710,0.03033370,0.11,0.03,155,96,29,31
+90,7-var: minimal_dc (SOP),7,sop,expression,True,0.09900790,0.01708000,0.05,0.03,144,87,25,26
+91,7-var: minimal_dc (SOP),7,sop,expression,True,0.15123300,0.01719940,0.08,0.03,129,85,24,28
+92,7-var: minimal_dc (SOP),7,sop,expression,True,0.10493930,0.01729950,0.05,0.03,118,80,22,25
+93,7-var: heavy_dc (SOP),7,sop,expression,True,0.15733940,0.01772020,0.08,0.02,81,77,17,23
+94,7-var: heavy_dc (SOP),7,sop,expression,True,0.05532950,0.01617310,0.05,0.02,79,54,16,18
+95,7-var: heavy_dc (SOP),7,sop,expression,True,0.11729620,0.01864810,0.06,0.02,84,75,18,25
+96,7-var: edge_all_zeros (SOP),7,sop,all_zeros,True,0.00000040,0.01350730,0.00,0.01,0,0,0,0
+97,7-var: edge_all_ones (SOP),7,sop,all_ones,True,0.33425040,0.02581640,0.32,0.02,0,0,0,1
+98,7-var: edge_all_dc (SOP),7,sop,all_dc,True,0.00000050,0.01367560,0.00,0.01,0,0,0,0
+99,7-var: edge_checkerboard (SOP),7,sop,expression,True,0.04850560,0.01624720,0.10,0.01,1,1,1,1
+100,7-var: edge_single_one (SOP),7,sop,expression,True,0.00056880,0.01323480,0.00,0.01,7,7,1,1
+101,7-var: sparse (POS),7,pos,expression,True,0.76998920,0.02213200,0.20,0.03,88,114,22,26
+102,7-var: sparse (POS),7,pos,expression,True,0.29065290,0.02081610,0.12,0.02,62,69,17,18
+103,7-var: sparse (POS),7,pos,expression,True,0.42743830,0.02145040,0.14,0.03,79,107,21,24
+104,7-var: dense (POS),7,pos,expression,True,0.04377340,0.01637400,0.04,0.02,124,111,21,19
+105,7-var: dense (POS),7,pos,expression,True,0.05464570,0.01730200,0.04,0.02,124,103,20,18
+106,7-var: dense (POS),7,pos,expression,True,0.04633470,0.01700790,0.04,0.03,127,131,21,22
+107,7-var: balanced (POS),7,pos,expression,True,0.07842350,0.02040300,0.06,0.02,98,110,19,20
+108,7-var: balanced (POS),7,pos,expression,True,0.09200330,0.01896860,0.06,0.03,131,168,23,28
+109,7-var: balanced (POS),7,pos,expression,True,0.14110330,0.01823240,0.07,0.03,164,162,28,28
+110,7-var: minimal_dc (POS),7,pos,expression,True,0.40576500,0.01800960,0.10,0.03,133,128,26,25
+111,7-var: minimal_dc (POS),7,pos,expression,True,0.09940050,0.01943560,0.08,0.03,128,164,24,29
+112,7-var: minimal_dc (POS),7,pos,expression,True,0.59479580,0.01892120,0.11,0.03,117,147,23,28
+113,7-var: heavy_dc (POS),7,pos,expression,True,0.12673220,0.01886770,0.08,0.03,85,118,18,23
+114,7-var: heavy_dc (POS),7,pos,expression,True,0.11153080,0.01937880,0.08,0.02,72,108,17,22
+115,7-var: heavy_dc (POS),7,pos,expression,True,0.18538030,0.01789670,0.10,0.03,94,117,19,22
+116,7-var: edge_all_zeros (POS),7,pos,all_zeros,True,0.00000050,0.02696670,0.00,0.02,0,0,0,1
+117,7-var: edge_all_ones (POS),7,pos,all_ones,True,0.00110590,0.01390540,0.02,0.01,0,0,0,0
+118,7-var: edge_all_dc (POS),7,pos,all_dc,True,0.00000050,0.01462690,0.00,0.01,0,0,0,0
+119,7-var: edge_checkerboard (POS),7,pos,expression,True,0.04792450,0.01719590,0.11,0.01,1,1,1,1
+120,7-var: edge_single_one (POS),7,pos,expression,True,0.32211860,0.02561270,0.30,0.02,7,16,7,5
+121,8-var: sparse (SOP),8,sop,expression,True,0.14935480,0.02950810,0.07,0.03,210,109,31,28
+122,8-var: sparse (SOP),8,sop,expression,True,0.08021080,0.02972660,0.05,0.03,196,98,28,25
+123,8-var: sparse (SOP),8,sop,expression,True,0.12512540,0.02963520,0.07,0.03,215,95,31,26
+124,8-var: dense (SOP),8,sop,expression,True,5.36266180,0.03976790,0.55,0.04,188,89,37,31
+125,8-var: dense (SOP),8,sop,expression,True,7.84270380,0.03929290,0.67,0.04,217,105,41,36
+126,8-var: dense (SOP),8,sop,expression,True,6.73722780,0.04115720,0.58,0.04,178,110,35,37
+127,8-var: balanced (SOP),8,sop,expression,True,2.14748500,0.03635440,0.33,0.04,249,139,42,42
+128,8-var: balanced (SOP),8,sop,expression,True,1.72817870,0.03592950,0.30,0.04,219,111,38,37
+129,8-var: balanced (SOP),8,sop,expression,True,1.82503600,0.03995230,0.34,0.04,259,164,43,47
+130,8-var: minimal_dc (SOP),8,sop,expression,True,1.23229650,0.03774580,0.26,0.04,305,170,47,46
+131,8-var: minimal_dc (SOP),8,sop,expression,True,2.24315400,0.03442270,0.27,0.04,263,149,42,42
+132,8-var: minimal_dc (SOP),8,sop,expression,True,0.60882240,0.03439510,0.23,0.04,284,123,45,37
+133,8-var: heavy_dc (SOP),8,sop,expression,True,0.48773390,0.03386590,0.23,0.03,168,86,29,27
+134,8-var: heavy_dc (SOP),8,sop,expression,True,0.49310510,0.03398340,0.23,0.04,187,91,32,28
+135,8-var: heavy_dc (SOP),8,sop,expression,True,0.45569970,0.03275260,0.20,0.04,185,97,31,29
+136,8-var: edge_all_zeros (SOP),8,sop,all_zeros,True,0.00000050,0.02645080,0.00,0.01,0,0,0,0
+137,8-var: edge_all_ones (SOP),8,sop,all_ones,True,2.79688270,0.05357480,1.05,0.02,0,0,0,1
+138,8-var: edge_all_dc (SOP),8,sop,all_dc,True,0.00000040,0.02929030,0.00,0.01,0,0,0,0
+139,8-var: edge_checkerboard (SOP),8,sop,expression,True,0.35970180,0.03367340,0.33,0.02,1,1,1,1
+140,8-var: edge_single_one (SOP),8,sop,expression,True,0.00064290,0.02678620,0.00,0.01,8,8,1,1
+141,8-var: sparse (POS),8,pos,expression,True,4.58545130,0.04155810,0.56,0.04,149,192,31,38
+142,8-var: sparse (POS),8,pos,expression,True,7.70841310,0.05875570,0.64,0.04,163,141,34,32
+143,8-var: sparse (POS),8,pos,expression,True,5.31626180,0.05453200,0.55,0.04,166,174,34,36
+144,8-var: dense (POS),8,pos,expression,True,0.10803430,0.03004150,0.09,0.04,223,203,32,30
+145,8-var: dense (POS),8,pos,expression,True,0.14317720,0.02916630,0.11,0.04,246,173,36,28
+146,8-var: dense (POS),8,pos,expression,True,0.11466110,0.02935190,0.10,0.04,204,188,30,29
+147,8-var: balanced (POS),8,pos,expression,True,0.57748950,0.03451480,0.27,0.05,250,245,41,42
+148,8-var: balanced (POS),8,pos,expression,True,0.70245810,0.03432020,0.25,0.04,240,210,39,37
+149,8-var: balanced (POS),8,pos,expression,True,0.55924150,0.03335350,0.26,0.05,266,243,43,40
+150,8-var: minimal_dc (POS),8,pos,expression,True,1.64797800,0.03733330,0.37,0.06,276,289,45,49
+151,8-var: minimal_dc (POS),8,pos,expression,True,1.13471780,0.04076400,0.33,0.05,255,222,42,39
+152,8-var: minimal_dc (POS),8,pos,expression,True,1.80012170,0.04063420,0.34,0.05,261,230,44,41
+153,8-var: heavy_dc (POS),8,pos,expression,True,0.72239620,0.03564250,0.33,0.04,152,144,29,29
+154,8-var: heavy_dc (POS),8,pos,expression,True,0.66673540,0.03569510,0.32,0.04,171,177,32,33
+155,8-var: heavy_dc (POS),8,pos,expression,True,2.43994820,0.03652720,0.41,0.04,161,163,31,32
+156,8-var: edge_all_zeros (POS),8,pos,all_zeros,True,0.00000070,0.05343490,0.00,0.02,0,0,0,1
+157,8-var: edge_all_ones (POS),8,pos,all_ones,True,0.00255160,0.02589910,0.03,0.01,0,0,0,0
+158,8-var: edge_all_dc (POS),8,pos,all_dc,True,0.00000050,0.02859850,0.00,0.01,0,0,0,0
+159,8-var: edge_checkerboard (POS),8,pos,expression,True,0.34714980,0.03369250,0.35,0.02,1,1,1,1
+160,8-var: edge_single_one (POS),8,pos,expression,True,2.68248120,0.05070880,1.00,0.02,8,20,8,5

@@ -1,0 +1,68 @@
+{
+  "title": "StanLogic: A Python Package for Boolean Simplification and Logic Computation",
+  "description": "StanLogic is a Python package dedicated to Boolean expression simplification and logical reasoning. It provides computational tools that bridge mathematical formalism and algorithmic implementation for digital logic, electronics, and computer science education. The package includes KMapSolver for deriving minimal SOP and POS expressions for 2-4 variable Karnaugh Maps with support for don't-care conditions and efficient bitmask operations.",
+  "creators": [
+    {
+      "name": "Emeka-Onwuneme, Somtochukwu Stanislus",
+      "affiliation": "Stan's Technologies",
+      "orcid": "0009-0005-2357-0780"
+    }
+  ],
+  "contributors": [],
+  "keywords": [
+    "boolean algebra",
+    "karnaugh map",
+    "logic minimization",
+    "digital logic",
+    "boolean simplification",
+    "SOP",
+    "POS",
+    "quine-mccluskey",
+    "logic optimization",
+    "electronics",
+    "computer science education",
+    "algorithm",
+    "python"
+  ],
+  "license": {
+    "id": "AGPL-3.0-or-later"
+  },
+  "upload_type": "software",
+  "access_right": "open",
+  "language": "eng",
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/Stanislus29/stangorithms",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ],
+  "communities": [
+    {
+      "identifier": "zenodo"
+    }
+  ],
+  "subjects": [
+    {
+      "term": "Boolean algebra",
+      "scheme": "keyword"
+    },
+    {
+      "term": "Logic minimization",
+      "scheme": "keyword"
+    },
+    {
+      "term": "Digital logic design",
+      "scheme": "keyword"
+    },
+    {
+      "term": "Computer science education",
+      "scheme": "keyword"
+    }
+  ],
+  "grants": [],
+  "version": "1.0.0",
+  "publication_date": "2025-11-30",
+  "notes": "This project is part of a broader initiative by Stan's Technologies to develop computational educational tools in logic and mathematics. The software serves as both a pedagogical and research tool for students, educators, and developers working with Boolean logic and digital electronics.",
+  "references": []
+}

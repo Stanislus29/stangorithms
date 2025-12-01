@@ -45,3 +45,5 @@ tests/__pycache__/
 
 #files 
 kmap_report.html
+kmap_8var_report.html
+kmap_16var_report.html

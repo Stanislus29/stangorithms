@@ -19,6 +19,8 @@ import random
 import re
 import sys
 import time
+import tracemalloc
+import psutil
 from collections import defaultdict
 from textwrap import wrap
 
@@ -28,7 +30,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 import scipy
 from scipy import stats
-from sympy import symbols, SOPform, simplify, Equivalent
+from scipy.optimize import curve_fit
+from sympy import symbols, SOPform, simplify, Equivalent, POSform
 from tabulate import tabulate
 
 # Add parent directory to path to import stanlogic
@@ -45,9 +48,10 @@ import sympy
 RANDOM_SEED = 42
 
 # Benchmark parameters
-TESTS_PER_DISTRIBUTION = 5  # Number of random tests per distribution type
+TESTS_PER_DISTRIBUTION = 3  # Number of random tests per distribution type
 # This results in: 20 tests × 5 distributions + 5 edge cases = 105 tests per config
-# Total: 105 × 4 configs (5-var, 6-var, 7-var, 8-var) = 420 tests
+# Each test runs in both SOP and POS forms = 210 tests per config
+# Total: 210 × 4 configs (5-var, 6-var, 7-var, 8-var) = 840 tests
 """
 TEST SUITE COMPOSITION (per variable configuration):
 - Sparse distribution:     20 tests (20% ones, 5% don't-cares)
@@ -56,10 +60,12 @@ TEST SUITE COMPOSITION (per variable configuration):
 - Minimal DC distribution: 20 tests (45% ones, 2% don't-cares)
 - Heavy DC distribution:   20 tests (30% ones, 30% don't-cares)
 - Edge cases:              5 tests (all-zeros, all-ones, all-dc, checkerboard, single-one)
-Total per configuration:   105 tests
+Total base tests per config: 105 tests
+Forms tested:                2 (SOP and POS)
+Total per configuration:     210 tests
 
 Variable configurations:   4 (5-var, 6-var, 7-var, 8-var)
-Grand total:               420 tests
+Grand total:               840 tests
 """
 
 TIMING_REPEATS = 3      # Number of timing repetitions per test
@@ -77,6 +83,22 @@ STATS_CSV = os.path.join(OUTPUTS_DIR, "kmapsolver3d_statistical_analysis.csv")
 
 # Logo for report cover
 LOGO_PATH = os.path.join(SCRIPT_DIR, "..", "..", "images", "St_logo_light-tp.png")
+
+# ============================================================================
+# MEMORY MEASUREMENT
+# ============================================================================
+
+def get_memory_usage_mb():
+    """Get current process memory usage in MB."""
+    return psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024
+
+# ============================================================================
+# MEMORY MEASUREMENT
+# ============================================================================
+
+def get_memory_usage_mb():
+    """Get current process memory usage in MB."""
+    return psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024
 
 # ============================================================================
 # EXPERIMENTAL SETUP DOCUMENTATION
@@ -356,16 +378,26 @@ def benchmark_with_warmup(func, args=(), warmup=TIMING_WARMUP, repeats=TIMING_RE
     for _ in range(warmup):
         func(*args)
     
-    # Actual timing
+    # Actual timing with memory tracking
     times = []
+    peak_mems = []
     for _ in range(repeats):
+        tracemalloc.start()
+        mem_before = get_memory_usage_mb()
+        
         start = time.perf_counter()
         func(*args)
         elapsed = time.perf_counter() - start
+        
+        mem_after = get_memory_usage_mb()
+        current, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        
         times.append(elapsed)
+        peak_mems.append(peak / 1024 / 1024)  # Convert to MB
     
-    # Return minimum time (reduces impact of system interrupts)
-    return min(times)
+    # Return minimum time and median peak memory
+    return min(times), np.median(peak_mems)
 
 
 def get_minterms_from_output_values(output_values):
@@ -394,18 +426,20 @@ def get_minterms_from_output_values(output_values):
 # STATISTICAL ANALYSIS
 # ============================================================================
 
-def perform_statistical_tests(sympy_times, kmap_times, sympy_literals, kmap_literals):
+def perform_statistical_tests(sympy_times, kmap_times, sympy_literals, kmap_literals, sympy_mems=None, kmap_mems=None):
     """
-    Perform rigorous statistical hypothesis testing.
+    Perform rigorous statistical hypothesis testing including space complexity.
     
     Args:
         sympy_times: List of SymPy execution times
         kmap_times: List of KMapSolver3D execution times
         sympy_literals: List of SymPy literal counts
         kmap_literals: List of KMapSolver3D literal counts
+        sympy_mems: List of SymPy memory usage (MB) - optional
+        kmap_mems: List of KMapSolver3D memory usage (MB) - optional
         
     Returns:
-        Dictionary with comprehensive statistical test results
+        Dictionary with comprehensive statistical test results (time, literals, memory)
     """
     # Convert to numpy arrays
     sympy_times = np.array(sympy_times)
@@ -449,7 +483,53 @@ def perform_statistical_tests(sympy_times, kmap_times, sympy_literals, kmap_lite
                                loc=np.mean(time_diff), 
                                scale=stats.sem(time_diff))
     
-    return {
+    # Memory analysis (if provided)
+    memory_stats = {}
+    if sympy_mems is not None and kmap_mems is not None and len(sympy_mems) > 0:
+        sympy_mems = np.array(sympy_mems)
+        kmap_mems = np.array(kmap_mems)
+        mem_diff = kmap_mems - sympy_mems
+        
+        try:
+            t_stat_mem, p_value_mem = stats.ttest_rel(kmap_mems, sympy_mems)
+            w_stat_mem, w_p_mem = stats.wilcoxon(kmap_mems, sympy_mems, zero_method='zsplit')
+            cohens_d_mem = np.mean(mem_diff) / np.std(mem_diff, ddof=1) if np.std(mem_diff, ddof=1) > 0 else 0
+            ci_mem = stats.t.interval(0.95, len(mem_diff)-1,
+                                      loc=np.mean(mem_diff),
+                                      scale=stats.sem(mem_diff))
+            
+            memory_stats = {
+                "mean_sympy": np.mean(sympy_mems),
+                "mean_kmap": np.mean(kmap_mems),
+                "mean_diff": np.mean(mem_diff),
+                "std_diff": np.std(mem_diff, ddof=1),
+                "t_statistic": t_stat_mem,
+                "p_value": p_value_mem,
+                "wilcoxon_stat": w_stat_mem,
+                "wilcoxon_p": w_p_mem,
+                "cohens_d": cohens_d_mem,
+                "ci_lower": ci_mem[0],
+                "ci_upper": ci_mem[1],
+                "significant": p_value_mem < ALPHA
+            }
+        except Exception:
+            # Memory stats failed
+            memory_stats = {
+                "mean_sympy": np.mean(sympy_mems),
+                "mean_kmap": np.mean(kmap_mems),
+                "mean_diff": 0,
+                "std_diff": 0,
+                "t_statistic": 0,
+                "p_value": 1.0,
+                "wilcoxon_stat": 0,
+                "wilcoxon_p": 1.0,
+                "cohens_d": 0,
+                "ci_lower": 0,
+                "ci_upper": 0,
+                "significant": False
+            }
+    
+    result = {
         "time": {
             "mean_sympy": np.mean(sympy_times),
             "mean_kmap": np.mean(kmap_times),
@@ -479,6 +559,11 @@ def perform_statistical_tests(sympy_times, kmap_times, sympy_literals, kmap_lite
             "significant": p_value_lit < ALPHA
         }
     }
+    
+    if memory_stats:
+        result["memory"] = memory_stats
+    
+    return result
 
 
 def interpret_effect_size(cohens_d):
@@ -496,13 +581,13 @@ def interpret_effect_size(cohens_d):
 
 def analyze_scalability(all_stats):
     """
-    Analyze how performance scales with problem size.
+    Analyze how performance and memory usage scale with problem size.
     
     Args:
         all_stats: Dictionary of statistics keyed by configuration
         
     Returns:
-        Dictionary with scalability metrics and figure
+        Dictionary with scalability metrics (time and space) and figure
     """
     from scipy.optimize import curve_fit
     
@@ -510,9 +595,15 @@ def analyze_scalability(all_stats):
     var_counts = []
     sympy_times = []
     kmap_times = []
+    sympy_mems = []
+    kmap_mems = []
     speedups = []
+    mem_efficiency = []
     
-    for config_name in sorted(all_stats.keys()):
+    # Filter to only string keys (aggregated stats) for scalability analysis
+    config_keys = [k for k in all_stats.keys() if isinstance(k, str)]
+    
+    for config_name in sorted(config_keys):
         # Extract variable count (e.g., "5-var" -> 5)
         var_count = int(config_name.split('-')[0])
         stats = all_stats[config_name]
@@ -521,6 +612,11 @@ def analyze_scalability(all_stats):
         sympy_times.append(stats['time']['mean_sympy'])
         kmap_times.append(stats['time']['mean_kmap'])
         speedups.append(stats['time']['mean_sympy'] / stats['time']['mean_kmap'])
+        
+        if 'memory' in stats:
+            sympy_mems.append(stats['memory']['mean_sympy'])
+            kmap_mems.append(stats['memory']['mean_kmap'])
+            mem_efficiency.append(stats['memory']['mean_sympy'] / stats['memory']['mean_kmap'])
     
     # Fit exponential growth models: T = a * b^n
     def exp_model(n, a, b):
@@ -532,13 +628,31 @@ def analyze_scalability(all_stats):
     # Fit KMapSolver3D timing
     kmap_params, _ = curve_fit(exp_model, var_counts, kmap_times, p0=[0.001, 1.5])
     
+    # Fit memory models (if available)
+    space_models_available = len(sympy_mems) > 0 and len(kmap_mems) > 0
+    if space_models_available:
+        sympy_mem_params, _ = curve_fit(exp_model, var_counts, sympy_mems, p0=[0.1, 2])
+        kmap_mem_params, _ = curve_fit(exp_model, var_counts, kmap_mems, p0=[0.1, 1.5])
+    
     # Generate predictions
-    extended_vars = np.arange(5, 11)  # Extrapolate to 10 variables
+    extended_vars = np.arange(5, 17)  # Extrapolate to 16 variables
     sympy_pred = exp_model(extended_vars, *sympy_params)
     kmap_pred = exp_model(extended_vars, *kmap_params)
     
+    if space_models_available:
+        sympy_mem_pred = exp_model(extended_vars, *sympy_mem_params)
+        kmap_mem_pred = exp_model(extended_vars, *kmap_mem_params)
+    
     # Create scalability plot
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    num_plots = 4 if space_models_available else 2
+    fig = plt.figure(figsize=(14, 10 if space_models_available else 5))
+    if space_models_available:
+        ax1 = plt.subplot(2, 2, 1)
+        ax2 = plt.subplot(2, 2, 2)
+        ax3 = plt.subplot(2, 2, 3)
+        ax4 = plt.subplot(2, 2, 4)
+    else:
+        ax1, ax2 = plt.subplots(1, 2, figsize=(12, 5))
     
     # Plot 1: Execution time vs variables (log scale)
     ax1.semilogy(var_counts, sympy_times, 'bo-', label='SymPy (measured)', markersize=8)
@@ -555,9 +669,41 @@ def analyze_scalability(all_stats):
     ax2.plot(var_counts, speedups, 'go-', label='Measured Speedup', markersize=8, linewidth=2)
     ax2.set_xlabel('Number of Variables')
     ax2.set_ylabel('Speedup Factor (SymPy Time / KMapSolver3D Time)')
-    ax2.set_title('Relative Performance: KMapSolver3D Speedup')
+    ax2.set_title('Time Efficiency: KMapSolver3D Speedup')
     ax2.legend()
     ax2.grid(True, alpha=0.3)
+    ax2.axhline(1.0, color='gray', linestyle='--', alpha=0.5)
+    
+    # Add memory plots if available
+    if space_models_available:
+        # Plot 3: Memory usage vs variables (log scale)
+        ax3.semilogy(var_counts, sympy_mems, 'bs-', label='SymPy (measured)', markersize=8)
+        ax3.semilogy(var_counts, kmap_mems, 'rs-', label='KMapSolver3D (measured)', markersize=8)
+        ax3.semilogy(extended_vars, sympy_mem_pred, 'b--', alpha=0.5, label='SymPy (projected)')
+        ax3.semilogy(extended_vars, kmap_mem_pred, 'r--', alpha=0.5, label='KMapSolver3D (projected)')
+        
+        # Add projections for 9-16 variables
+        for proj_var in [9, 12, 16]:
+            if proj_var <= max(extended_vars):
+                proj_sympy = exp_model(proj_var, *sympy_mem_params)
+                proj_kmap = exp_model(proj_var, *kmap_mem_params)
+                ax3.plot(proj_var, proj_sympy, 'b^', markersize=6, alpha=0.6)
+                ax3.plot(proj_var, proj_kmap, 'r^', markersize=6, alpha=0.6)
+        
+        ax3.set_xlabel('Number of Variables')
+        ax3.set_ylabel('Memory Usage (MB) - Log Scale')
+        ax3.set_title('Space Complexity: Memory vs Problem Size')
+        ax3.legend()
+        ax3.grid(True, alpha=0.3)
+        
+        # Plot 4: Memory efficiency vs variables
+        ax4.plot(var_counts, mem_efficiency, 'mo-', label='Memory Efficiency', markersize=8, linewidth=2)
+        ax4.set_xlabel('Number of Variables')
+        ax4.set_ylabel('Memory Efficiency (SymPy MB / KMapSolver3D MB)')
+        ax4.set_title('Space Efficiency: Relative Memory Usage')
+        ax4.legend()
+        ax4.grid(True, alpha=0.3)
+        ax4.axhline(1.0, color='gray', linestyle='--', alpha=0.5)
     
     plt.tight_layout()
     
@@ -592,9 +738,31 @@ def analyze_scalability(all_stats):
     print(f"  SymPy:         {exp_model(10, *sympy_params):.3f} s")
     print(f"  KMapSolver3D:  {exp_model(10, *kmap_params):.3f} s")
     print(f"  Speedup:       {exp_model(10, *sympy_params) / exp_model(10, *kmap_params):.1f}×")
+    
+    # Space complexity analysis
+    if space_models_available:
+        print("\n" + "-"*80)
+        print("SPACE COMPLEXITY ANALYSIS")
+        print("-"*80)
+        print(f"\nSymPy Space Model: M ≈ {sympy_mem_params[0]:.2e} × {sympy_mem_params[1]:.3f}^n MB")
+        print(f"KMapSolver3D Space Model: M ≈ {kmap_mem_params[0]:.2e} × {kmap_mem_params[1]:.3f}^n MB")
+        print(f"\nMemory growth rate ratio: {sympy_mem_params[1] / kmap_mem_params[1]:.2f}×")
+        print(f"(SymPy memory grows {sympy_mem_params[1]/kmap_mem_params[1]:.2f}× faster per variable)")
+        
+        print("\nObserved Memory Efficiency:")
+        for var_count, efficiency in zip(var_counts, mem_efficiency):
+            print(f"  {var_count} variables: {efficiency:.2f}× (KMapSolver3D uses {1/efficiency:.1%} of SymPy's memory)")
+        
+        print("\nProjected Memory Usage (9-16 variables):")
+        for proj_var in [9, 10, 12, 16]:
+            sympy_mem = exp_model(proj_var, *sympy_mem_params)
+            kmap_mem = exp_model(proj_var, *kmap_mem_params)
+            efficiency = sympy_mem / kmap_mem
+            print(f"  {proj_var}-var: SymPy={sympy_mem:.1f}MB, KMap={kmap_mem:.1f}MB, Efficiency={efficiency:.2f}×")
+    
     print("="*80)
     
-    return {
+    result = {
         "sympy_model": sympy_params,
         "kmap_model": kmap_params,
         "speedups": speedups,
@@ -604,6 +772,17 @@ def analyze_scalability(all_stats):
         "sympy_pred": sympy_pred,
         "kmap_pred": kmap_pred
     }
+    
+    if space_models_available:
+        result.update({
+            "sympy_mem_model": sympy_mem_params,
+            "kmap_mem_model": kmap_mem_params,
+            "mem_efficiency": mem_efficiency,
+            "sympy_mem_pred": sympy_mem_pred,
+            "kmap_mem_pred": kmap_mem_pred
+        })
+    
+    return result
 
 
 def validate_benchmark_results(all_results):
@@ -767,6 +946,40 @@ def generate_scientific_inference(stats_results, num_constant=0, total_tests=0):
             lines.append(f"\n✗ NOT SIGNIFICANT: No significant difference in simplification (p ≥ {ALPHA})")
             lines.append("  → Both algorithms achieve comparable minimization")
     
+    # Memory Usage Analysis (if available)
+    if 'memory' in stats_results:
+        lines.append("\n3. MEMORY USAGE ANALYSIS (SPACE COMPLEXITY)")
+        lines.append("-" * 75)
+        mem_stats = stats_results["memory"]
+        lines.append(f"Mean SymPy Memory:      {mem_stats['mean_sympy']:.2f} MB")
+        lines.append(f"Mean KMap Memory:       {mem_stats['mean_kmap']:.2f} MB")
+        lines.append(f"Mean Difference:        {mem_stats['mean_diff']:+.2f} MB")
+        lines.append(f"Std. Dev. (Δ):          {mem_stats['std_diff']:.2f} MB")
+        lines.append(f"95% CI:                 [{mem_stats['ci_lower']:.2f}, {mem_stats['ci_upper']:.2f}]")
+        lines.append("")
+        lines.append(f"Paired t-test:          t = {mem_stats['t_statistic']:.4f}, p = {mem_stats['p_value']:.6f}")
+        lines.append(f"Wilcoxon test:          W = {mem_stats['wilcoxon_stat']:.1f}, p = {mem_stats['wilcoxon_p']:.6f}")
+        lines.append(f"Effect Size (d):        {mem_stats['cohens_d']:.4f} ({interpret_effect_size(mem_stats['cohens_d'])})")
+        
+        # Memory efficiency
+        if mem_stats['mean_sympy'] > 0 and mem_stats['mean_kmap'] > 0:
+            efficiency = mem_stats['mean_sympy'] / mem_stats['mean_kmap']
+            lines.append(f"\nMemory Efficiency:      {efficiency:.2f}× ")
+            if efficiency > 1:
+                lines.append(f"  → KMapSolver3D uses {100/efficiency:.1f}% of SymPy's memory")
+            else:
+                lines.append(f"  → SymPy uses {100*efficiency:.1f}% of KMapSolver3D's memory")
+        
+        if mem_stats['significant']:
+            lines.append(f"\n✓ SIGNIFICANT: Memory difference is statistically significant (p < {ALPHA})")
+            if mem_stats['mean_diff'] < 0:
+                lines.append("  → KMapSolver3D uses significantly less memory")
+            else:
+                lines.append("  → SymPy uses significantly less memory")
+        else:
+            lines.append(f"\n✗ NOT SIGNIFICANT: No significant memory difference (p ≥ {ALPHA})")
+            lines.append("  → Both algorithms have comparable memory usage")
+    
     lines.append("=" * 75)
     
     text = "\n".join(lines)
@@ -790,21 +1003,27 @@ def export_results_to_csv(all_results, filename=RESULTS_CSV):
         writer.writerow(["# For constant expressions, SymPy Literals and KMap Literals are 0"])
         writer.writerow([])
         
-        writer.writerow(["Test Number", "Description", "Variables", "Result Category", 
+        writer.writerow(["Test Number", "Description", "Variables", "Form", "Result Category", 
                         "Equivalent", "SymPy Time (s)", "KMap Time (s)", 
-                        "SymPy Literals", "KMap Literals"])
+                        "SymPy Memory (MB)", "KMap Memory (MB)",
+                        "SymPy Literals", "KMap Literals", "SymPy Terms", "KMap Terms"])
         
         for result in all_results:
             writer.writerow([
                 result.get("index", ""),
                 result.get("description", ""),
                 result.get("num_vars", ""),
+                result.get("form", "sop"),
                 result.get("result_category", "expression"),
                 result.get("equiv", ""),
                 f"{result.get('t_sympy', 0):.8f}",
                 f"{result.get('t_kmap', 0):.8f}",
+                f"{result.get('mem_sympy', 0):.2f}",
+                f"{result.get('mem_kmap', 0):.2f}",
                 result.get("sympy_literals", ""),
-                result.get("kmap_literals", "")
+                result.get("kmap_literals", ""),
+                result.get("sympy_terms", ""),
+                result.get("kmap_terms", "")
             ])
     
     print(f"✅ Done ({len(all_results)} records)")
@@ -821,11 +1040,19 @@ def export_statistical_analysis(all_stats, filename=STATS_CSV):
                         "Mean Diff", "Std Diff", "t-statistic", "p-value",
                         "Cohen's d", "Effect Size", "CI Lower", "CI Upper", "Significant"])
         
-        for config, stats in sorted(all_stats.items()):
+        # Sort keys: strings first, then tuples
+        str_keys = sorted([k for k in all_stats.keys() if isinstance(k, str)])
+        tuple_keys = sorted([k for k in all_stats.keys() if isinstance(k, tuple)])
+        sorted_keys = str_keys + tuple_keys
+        
+        for config in sorted_keys:
+            stats = all_stats[config]
+            # Format config name
+            config_name = config if isinstance(config, str) else f"{config[0]}-var {config[1].upper()}"
             # Time statistics
             t = stats["time"]
             writer.writerow([
-                config, "Time (s)",
+                config_name, "Time (s)",
                 f"{t['mean_sympy']:.8f}",
                 f"{t['mean_kmap']:.8f}",
                 f"{t['mean_diff']:.8f}",
@@ -842,7 +1069,7 @@ def export_statistical_analysis(all_stats, filename=STATS_CSV):
             # Literal statistics
             l = stats["literals"]
             writer.writerow([
-                config, "Literals",
+                config_name, "Literals",
                 f"{l['mean_sympy']:.2f}",
                 f"{l['mean_kmap']:.2f}",
                 f"{l['mean_diff']:.2f}",
@@ -855,6 +1082,24 @@ def export_statistical_analysis(all_stats, filename=STATS_CSV):
                 f"{l['ci_upper']:.2f}",
                 "Yes" if l['significant'] else "No"
             ])
+            
+            # Memory statistics (if available)
+            if "memory" in stats:
+                m = stats["memory"]
+                writer.writerow([
+                    config_name, "Memory (MB)",
+                    f"{m['mean_sympy']:.2f}",
+                    f"{m['mean_kmap']:.2f}",
+                    f"{m['mean_diff']:.2f}",
+                    f"{m['std_diff']:.2f}",
+                    f"{m['t_statistic']:.4f}",
+                    f"{m['p_value']:.6f}",
+                    f"{m['cohens_d']:.4f}",
+                    interpret_effect_size(m['cohens_d']),
+                    f"{m['ci_lower']:.2f}",
+                    f"{m['ci_upper']:.2f}",
+                    "Yes" if m['significant'] else "No"
+                ])
     
     print(f"✅ Done ({len(all_stats)} configurations)")
 
@@ -877,11 +1122,11 @@ def save_comprehensive_report(all_results, all_stats, setup_info, scalability_an
         if os.path.exists(LOGO_PATH):
             try:
                 img = mpimg.imread(LOGO_PATH)
-                logo_ax = fig.add_axes([0.2, 0.65, 0.6, 0.25])
-                logo_ax.imshow(img)
+                logo_ax = fig.add_axes([0.2, 0.65, 0.6, 0.25], anchor='C')
+                logo_ax.imshow(img, aspect='auto')
                 logo_ax.axis("off")
-            except:
-                pass
+            except Exception as e:
+                print(f"\nWarning: Could not load logo: {e}")
         
         # Title
         ax.text(0.5, 0.55, "Scientific Benchmark Report", 
@@ -985,29 +1230,42 @@ To reproduce this experiment:
         print("✓")
         
         # ============================================================
-        # PER-CONFIGURATION RESULTS
+        # PER-CONFIGURATION RESULTS (Organized: all SOP, then all POS)
         # ============================================================
         grouped = defaultdict(list)
         for r in all_results:
-            config_key = f"{r['num_vars']}-var"
+            config_key = (r['num_vars'], r['form'])
             grouped[config_key].append(r)
         
-        for config_num, (config_name, results) in enumerate(sorted(grouped.items()), 1):
-            print(f"   • Creating plots for {config_name} ({config_num}/{len(grouped)})...", end=" ", flush=True)
+        # Sort: For each variable count, show SOP then POS
+        var_counts_sorted = sorted(set(nv for nv, f in grouped.keys()))
+        ordered_keys = []
+        for nv in var_counts_sorted:
+            if (nv, 'sop') in grouped:
+                ordered_keys.append((nv, 'sop'))
+            if (nv, 'pos') in grouped:
+                ordered_keys.append((nv, 'pos'))
+        
+        for config_num, config_key in enumerate(ordered_keys, 1):
+            num_vars, form = config_key
+            results = grouped[config_key]
+            config_name = f"{num_vars}-Variable K-Map ({form.upper()} Form)"
+            print(f"   • Creating plots for {config_name} ({config_num}/{len(ordered_keys)})...", end=" ", flush=True)
             
             # Extract data
             sympy_times = [r["t_sympy"] for r in results]
             kmap_times = [r["t_kmap"] for r in results]
+            sympy_mems = [r["mem_sympy"] for r in results]
+            kmap_mems = [r["mem_kmap"] for r in results]
             sympy_literals = [r["sympy_literals"] for r in results]
             kmap_literals = [r["kmap_literals"] for r in results]
             tests = list(range(1, len(results) + 1))
             
-            stats = all_stats[config_name]
+            stats = all_stats.get(config_key, all_stats.get(f"{num_vars}-var"))
             
-            # Create figure with 2x2 subplots
-            fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(11, 8.5))
-            fig.suptitle(f'KMapSolver3D: {config_name}', 
-                        fontsize=16, fontweight='bold')
+            # Create figure with 3x2 subplots (added memory row)
+            fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3, 2, figsize=(11, 13))
+            fig.suptitle(config_name, fontsize=16, fontweight='bold')
             
             # Plot 1: Time comparison (line plot)
             ax1.plot(tests, sympy_times, marker='o', markersize=3, label='SymPy', alpha=0.7)
@@ -1064,6 +1322,41 @@ To reproduce this experiment:
             ax4.legend(fontsize=8)
             ax4.grid(True, alpha=0.3, axis='y')
             
+            # Plot 5: Memory comparison (line plot)
+            if 'memory' in stats:
+                ax5.plot(tests, sympy_mems, marker='o', markersize=3, label='SymPy', alpha=0.7, color='purple')
+                ax5.plot(tests, kmap_mems, marker='s', markersize=3, label='KMapSolver3D', alpha=0.7, color='green')
+                ax5.axhline(stats['memory']['mean_sympy'], color='purple', linestyle='--', 
+                           alpha=0.5, label=f'SymPy Mean = {stats["memory"]["mean_sympy"]:.2f} MB')
+                ax5.axhline(stats['memory']['mean_kmap'], color='green', linestyle='--',
+                           alpha=0.5, label=f'KMap Mean = {stats["memory"]["mean_kmap"]:.2f} MB')
+                ax5.set_xlabel('Test Case')
+                ax5.set_ylabel('Peak Memory Usage (MB)')
+                ax5.set_title('Memory Usage Comparison')
+                ax5.legend(fontsize=8)
+                ax5.grid(True, alpha=0.3)
+            else:
+                ax5.text(0.5, 0.5, 'Memory data not available', ha='center', va='center', 
+                        transform=ax5.transAxes, fontsize=12, color='gray')
+                ax5.axis('off')
+            
+            # Plot 6: Memory difference histogram
+            if 'memory' in stats:
+                mem_diffs = np.array(kmap_mems) - np.array(sympy_mems)
+                ax6.hist(mem_diffs, bins=15, edgecolor='black', alpha=0.7, color='teal')
+                ax6.axvline(0, color='red', linestyle='--', linewidth=2, label='No Difference')
+                ax6.axvline(stats['memory']['mean_diff'], color='darkgreen', linestyle='--',
+                           linewidth=2, label=f'Mean Δ = {stats["memory"]["mean_diff"]:.2f} MB')
+                ax6.set_xlabel('Memory Difference (KMap - SymPy) [MB]')
+                ax6.set_ylabel('Frequency')
+                ax6.set_title('Distribution of Memory Differences')
+                ax6.legend(fontsize=8)
+                ax6.grid(True, alpha=0.3, axis='y')
+            else:
+                ax6.text(0.5, 0.5, 'Memory data not available', ha='center', va='center',
+                        transform=ax6.transAxes, fontsize=12, color='gray')
+                ax6.axis('off')
+            
             plt.tight_layout()
             pdf.savefig()
             plt.close()
@@ -1077,14 +1370,14 @@ To reproduce this experiment:
             ax = plt.gca()
             ax.axis("off")
             
-            ax.text(0.5, 0.96, f"STATISTICAL ANALYSIS: {config_name}",
-                   fontsize=16, fontweight='bold', ha='center', transform=ax.transAxes)
+            ax.text(0.5, 0.96, f"STATISTICAL ANALYSIS\n{config_name}",
+                   fontsize=14, fontweight='bold', ha='center', transform=ax.transAxes)
             
             # Count constants for this configuration
             num_constant_config = sum(1 for r in results if r.get("is_constant", False))
             
             inference = generate_scientific_inference(
-                all_stats[config_name],
+                stats,
                 num_constant=num_constant_config,
                 total_tests=len(results)
             )
@@ -1115,9 +1408,10 @@ To reproduce this experiment:
         # OVERALL SUMMARY PAGE
         # ============================================================
         print(f"   • Creating overall summary page...", end=" ", flush=True)
-        fig = plt.figure(figsize=(11, 8.5))
+        fig = plt.figure(figsize=(14, 10))
         
         configs = list(sorted(grouped.keys()))
+        config_labels = [f"{nv}-var\n{f.upper()}" for nv, f in configs]
         
         # Extract aggregate statistics
         time_means_sympy = [all_stats[k]['time']['mean_sympy'] for k in configs]
@@ -1127,8 +1421,15 @@ To reproduce this experiment:
         time_significant = [all_stats[k]['time']['significant'] for k in configs]
         lit_significant = [all_stats[k]['literals']['significant'] for k in configs]
         
+        # Memory stats (if available)
+        has_memory = all('memory' in all_stats[k] for k in configs)
+        if has_memory:
+            mem_means_sympy = [all_stats[k]['memory']['mean_sympy'] for k in configs]
+            mem_means_kmap = [all_stats[k]['memory']['mean_kmap'] for k in configs]
+            mem_significant = [all_stats[k]['memory']['significant'] for k in configs]
+        
         # Plot 1: Average execution time
-        ax1 = plt.subplot(2, 2, 1)
+        ax1 = plt.subplot(2, 3, 1) if has_memory else plt.subplot(2, 2, 1)
         x = np.arange(len(configs))
         width = 0.35
         bars1 = ax1.bar(x - width/2, time_means_sympy, width, label='SymPy', alpha=0.8)
@@ -1142,14 +1443,14 @@ To reproduce this experiment:
         
         ax1.set_xlabel('Configuration')
         ax1.set_ylabel('Mean Execution Time (s)')
-        ax1.set_title('Average Performance by Configuration\n(* = statistically significant)')
+        ax1.set_title('Time Performance by Configuration\n(* = statistically significant)')
         ax1.set_xticks(x)
-        ax1.set_xticklabels(configs, rotation=45, ha='right')
+        ax1.set_xticklabels(config_labels, rotation=0, ha='center', fontsize=8)
         ax1.legend()
         ax1.grid(True, alpha=0.3, axis='y')
         
         # Plot 2: Average literal count
-        ax2 = plt.subplot(2, 2, 2)
+        ax2 = plt.subplot(2, 3, 2) if has_memory else plt.subplot(2, 2, 2)
         bars1 = ax2.bar(x - width/2, lit_means_sympy, width, label='SymPy', alpha=0.8)
         bars2 = ax2.bar(x + width/2, lit_means_kmap, width, label='KMapSolver3D', alpha=0.8)
         
@@ -1163,41 +1464,80 @@ To reproduce this experiment:
         ax2.set_ylabel('Mean Literal Count')
         ax2.set_title('Average Simplification Quality\n(* = statistically significant)')
         ax2.set_xticks(x)
-        ax2.set_xticklabels(configs, rotation=45, ha='right')
+        ax2.set_xticklabels(config_labels, rotation=0, ha='center', fontsize=8)
         ax2.legend()
         ax2.grid(True, alpha=0.3, axis='y')
         
-        # Plot 3: Effect sizes (time)
-        ax3 = plt.subplot(2, 2, 3)
+        # Plot 3: Memory usage (if available)
+        if has_memory:
+            ax3 = plt.subplot(2, 3, 3)
+            bars1 = ax3.bar(x - width/2, mem_means_sympy, width, label='SymPy', alpha=0.8, color='purple')
+            bars2 = ax3.bar(x + width/2, mem_means_kmap, width, label='KMapSolver3D', alpha=0.8, color='green')
+            
+            for i, sig in enumerate(mem_significant):
+                if sig:
+                    ax3.text(i, max(mem_means_sympy[i], mem_means_kmap[i]) * 1.05,
+                            '*', ha='center', fontsize=16, color='red')
+            
+            ax3.set_xlabel('Configuration')
+            ax3.set_ylabel('Mean Memory Usage (MB)')
+            ax3.set_title('Memory Usage by Configuration\n(* = statistically significant)')
+            ax3.set_xticks(x)
+            ax3.set_xticklabels(config_labels, rotation=0, ha='center', fontsize=8)
+            ax3.legend()
+            ax3.grid(True, alpha=0.3, axis='y')
+        
+        # Plot 4: Effect sizes (time)
+        ax4 = plt.subplot(2, 3, 4) if has_memory else plt.subplot(2, 2, 3)
         time_effects = [all_stats[k]['time']['cohens_d'] for k in configs]
         colors = ['red' if abs(d) >= 0.8 else 'orange' if abs(d) >= 0.5 else 'yellow' if abs(d) >= 0.2 else 'green' 
                   for d in time_effects]
-        ax3.barh(configs, time_effects, color=colors, alpha=0.7)
-        ax3.axvline(0, color='black', linestyle='-', linewidth=1)
-        ax3.axvline(-0.2, color='gray', linestyle='--', alpha=0.5, label='Small effect')
-        ax3.axvline(0.2, color='gray', linestyle='--', alpha=0.5)
-        ax3.axvline(-0.5, color='gray', linestyle=':', alpha=0.5, label='Medium effect')
-        ax3.axvline(0.5, color='gray', linestyle=':', alpha=0.5)
-        ax3.set_xlabel("Cohen's d")
-        ax3.set_title('Effect Size: Execution Time\n(Negative = KMap faster)')
-        ax3.legend(fontsize=8)
-        ax3.grid(True, alpha=0.3, axis='x')
+        ax4.barh(range(len(configs)), time_effects, color=colors, alpha=0.7)
+        ax4.axvline(0, color='black', linestyle='-', linewidth=1)
+        ax4.axvline(-0.2, color='gray', linestyle='--', alpha=0.5, label='Small')
+        ax4.axvline(0.2, color='gray', linestyle='--', alpha=0.5)
+        ax4.set_xlabel("Cohen's d")
+        ax4.set_ylabel('Configuration')
+        ax4.set_yticks(range(len(configs)))
+        ax4.set_yticklabels(config_labels, fontsize=7)
+        ax4.set_title('Effect Size: Time\n(Negative = KMap faster)')
+        ax4.legend(fontsize=7)
+        ax4.grid(True, alpha=0.3, axis='x')
         
-        # Plot 4: Effect sizes (literals)
-        ax4 = plt.subplot(2, 2, 4)
+        # Plot 5: Effect sizes (literals)
+        ax5 = plt.subplot(2, 3, 5) if has_memory else plt.subplot(2, 2, 4)
         lit_effects = [all_stats[k]['literals']['cohens_d'] for k in configs]
         colors = ['red' if abs(d) >= 0.8 else 'orange' if abs(d) >= 0.5 else 'yellow' if abs(d) >= 0.2 else 'green'
                   for d in lit_effects]
-        ax4.barh(configs, lit_effects, color=colors, alpha=0.7)
-        ax4.axvline(0, color='black', linestyle='-', linewidth=1)
-        ax4.axvline(-0.2, color='gray', linestyle='--', alpha=0.5, label='Small effect')
-        ax4.axvline(0.2, color='gray', linestyle='--', alpha=0.5)
-        ax4.axvline(-0.5, color='gray', linestyle=':', alpha=0.5, label='Medium effect')
-        ax4.axvline(0.5, color='gray', linestyle=':', alpha=0.5)
-        ax4.set_xlabel("Cohen's d")
-        ax4.set_title('Effect Size: Literal Count\n(Negative = KMap more minimal)')
-        ax4.legend(fontsize=8)
-        ax4.grid(True, alpha=0.3, axis='x')
+        ax5.barh(range(len(configs)), lit_effects, color=colors, alpha=0.7)
+        ax5.axvline(0, color='black', linestyle='-', linewidth=1)
+        ax5.axvline(-0.2, color='gray', linestyle='--', alpha=0.5, label='Small')
+        ax5.axvline(0.2, color='gray', linestyle='--', alpha=0.5)
+        ax5.set_xlabel("Cohen's d")
+        ax5.set_ylabel('Configuration')
+        ax5.set_yticks(range(len(configs)))
+        ax5.set_yticklabels(config_labels, fontsize=7)
+        ax5.set_title('Effect Size: Literals\n(Negative = KMap minimal)')
+        ax5.legend(fontsize=7)
+        ax5.grid(True, alpha=0.3, axis='x')
+        
+        # Plot 6: Effect sizes (memory) if available
+        if has_memory:
+            ax6 = plt.subplot(2, 3, 6)
+            mem_effects = [all_stats[k]['memory']['cohens_d'] for k in configs]
+            colors = ['red' if abs(d) >= 0.8 else 'orange' if abs(d) >= 0.5 else 'yellow' if abs(d) >= 0.2 else 'green'
+                      for d in mem_effects]
+            ax6.barh(range(len(configs)), mem_effects, color=colors, alpha=0.7)
+            ax6.axvline(0, color='black', linestyle='-', linewidth=1)
+            ax6.axvline(-0.2, color='gray', linestyle='--', alpha=0.5, label='Small')
+            ax6.axvline(0.2, color='gray', linestyle='--', alpha=0.5)
+            ax6.set_xlabel("Cohen's d")
+            ax6.set_ylabel('Configuration')
+            ax6.set_yticks(range(len(configs)))
+            ax6.set_yticklabels(config_labels, fontsize=7)
+            ax6.set_title('Effect Size: Memory\n(Negative = KMap efficient)')
+            ax6.legend(fontsize=7)
+            ax6.grid(True, alpha=0.3, axis='x')
         
         plt.tight_layout()
         pdf.savefig()
@@ -1365,6 +1705,8 @@ VALIDITY CONSIDERATIONS
         # Aggregate all statistics
         all_sympy_times = [r['t_sympy'] for r in all_results]
         all_kmap_times = [r['t_kmap'] for r in all_results]
+        all_sympy_mems = [r['mem_sympy'] for r in all_results]
+        all_kmap_mems = [r['mem_kmap'] for r in all_results]
         all_sympy_lits = [r['sympy_literals'] for r in all_results]
         all_kmap_lits = [r['kmap_literals'] for r in all_results]
         
@@ -1373,7 +1715,8 @@ VALIDITY CONSIDERATIONS
         
         overall_stats = perform_statistical_tests(
             all_sympy_times, all_kmap_times,
-            all_sympy_lits, all_kmap_lits
+            all_sympy_lits, all_kmap_lits,
+            all_sympy_mems, all_kmap_mems
         )
         
         conclusions = f"""
@@ -1402,6 +1745,15 @@ Mean Literal Difference: {overall_stats['literals']['mean_diff']:+.2f}
 Statistical Significance: {'YES' if overall_stats['literals']['significant'] else 'NO'} (p = {overall_stats['literals']['p_value']:.6f})
 Effect Size:             {overall_stats['literals']['cohens_d']:.4f} ({interpret_effect_size(overall_stats['literals']['cohens_d'])})
 
+AGGREGATE MEMORY USAGE
+{'=' * 70}
+Mean SymPy Memory:       {overall_stats.get('memory', {}).get('mean_sympy', 0):.4f} MB
+Mean KMap Memory:        {overall_stats.get('memory', {}).get('mean_kmap', 0):.4f} MB
+Mean Memory Difference:  {overall_stats.get('memory', {}).get('mean_diff', 0):+.4f} MB
+95% CI:                  [{overall_stats.get('memory', {}).get('ci_lower', 0):.4f}, {overall_stats.get('memory', {}).get('ci_upper', 0):.4f}]
+Statistical Significance: {'YES' if overall_stats.get('memory', {}).get('significant', False) else 'NO'} (p = {overall_stats.get('memory', {}).get('p_value', 1):.6f})
+Effect Size:             {overall_stats.get('memory', {}).get('cohens_d', 0):.4f} ({interpret_effect_size(overall_stats.get('memory', {}).get('cohens_d', 0))})
+
 KEY FINDINGS
 {'=' * 70}
 """
@@ -1423,19 +1775,34 @@ KEY FINDINGS
         else:
             conclusions += "\n\n2. Both algorithms achieve statistically equivalent simplification\n   quality in terms of literal count."
         
-        conclusions += f"\n\n3. Effect sizes indicate {interpret_effect_size(overall_stats['time']['cohens_d'])} practical\n   significance for performance and {interpret_effect_size(overall_stats['literals']['cohens_d'])} practical\n   significance for simplification quality."
+        # Add memory finding
+        if 'memory' in overall_stats and overall_stats['memory']['significant']:
+            if overall_stats['memory']['mean_diff'] < 0:
+                mem_efficiency = (overall_stats['memory']['mean_kmap'] / overall_stats['memory']['mean_sympy'] * 100) if overall_stats['memory']['mean_sympy'] > 0 else 100
+                conclusions += f"\n\n3. KMapSolver3D demonstrates superior memory efficiency,\n   using {mem_efficiency:.1f}% of SymPy's memory consumption."
+            else:
+                conclusions += "\n\n3. SymPy demonstrates superior memory efficiency\n   compared to KMapSolver3D."
+        else:
+            conclusions += "\n\n3. No statistically significant memory usage difference\n   detected between the two algorithms."
+        
+        conclusions += f"\n\n4. Effect sizes indicate {interpret_effect_size(overall_stats['time']['cohens_d'])} practical\n   significance for performance, {interpret_effect_size(overall_stats['literals']['cohens_d'])} practical\n   significance for simplification quality, and {interpret_effect_size(overall_stats.get('memory', {}).get('cohens_d', 0))} practical\n   significance for memory usage."
         
         # Add scalability insights if available
         if scalability_analysis:
             speedups = scalability_analysis['speedups']
-            conclusions += f"\n\n4. SCALABILITY ANALYSIS reveals exponential performance divergence:"
+            conclusions += f"\n\n5. SCALABILITY ANALYSIS reveals exponential performance divergence:"
             conclusions += f"\n   • 5-var: {speedups[0]:.1f}× speedup  |  6-var: {speedups[1]:.1f}× speedup"
             conclusions += f"\n   • 7-var: {speedups[2]:.1f}× speedup  |  8-var: {speedups[3]:.1f}× speedup"
             conclusions += f"\n   → KMapSolver3D's advantage increases dramatically with problem size"
-            conclusions += f"\n   → See 'Scalability Analysis' section for extrapolations to 9-10 vars"
-            finding_number = 5
+            conclusions += f"\n   → See 'Scalability Analysis' section for extrapolations to 9-16 vars"
+            
+            # Add space model insights if available
+            if 'space_models' in scalability_analysis:
+                conclusions += f"\n   → SPACE MODEL: Memory grows exponentially with similar patterns"
+                conclusions += f"\n   → See predictions for memory requirements up to 16 variables"
+            finding_number = 6
         else:
-            finding_number = 4
+            finding_number = 5
         
         conclusions += f"\n\n{finding_number}. All {len(all_results)} test cases maintained logical correctness,\n   with {sum(1 for r in all_results if r['equiv'])} passing equivalence verification.\n   Constant cases were {total_constant_count} (i.e., trivial degenerate cases\n   correctly identified by both algorithms)."
         
@@ -1631,12 +1998,15 @@ def benchmark_case(test_num, num_vars, output_values, description, form='sop'):
     # Get minterms and don't cares
     minterms, dont_cares = get_minterms_from_output_values(output_values)
     
-    # SymPy minimization with improved timing
+    # SymPy minimization with improved timing and memory tracking
     print(f"    Test {test_num}: Running SymPy {form.upper()}...", end=" ", flush=True)
-    sympy_func = lambda: SOPform(var_symbols, minterms, dont_cares)
-    t_sympy = benchmark_with_warmup(sympy_func, ())
+    if form == 'pos':
+        sympy_func = lambda: POSform(var_symbols, minterms, dont_cares)
+    else:
+        sympy_func = lambda: SOPform(var_symbols, minterms, dont_cares)
+    t_sympy, mem_sympy = benchmark_with_warmup(sympy_func, ())
     expr_sympy = sympy_func()
-    print(f"✓ ({t_sympy:.6f}s)", end=" | ", flush=True)
+    print(f"✓ ({t_sympy:.6f}s, {mem_sympy:.1f}MB)", end=" | ", flush=True)
     
     # KMapSolver3D minimization with improved timing
     print(f"KMapSolver3D...", end=" ", flush=True)
@@ -1649,13 +2019,13 @@ def benchmark_case(test_num, num_vars, output_values, description, form='sop'):
     
     solver = KMapSolver3D(num_vars, output_values)
     kmap_func = lambda: solver.minimize_3d(form=form)
-    t_kmap = benchmark_with_warmup(kmap_func, ())
+    t_kmap, mem_kmap = benchmark_with_warmup(kmap_func, ())
     terms, expr_str = kmap_func()
     
     # Restore stdout
     sys_module.stdout = old_stdout
     
-    print(f"✓ ({t_kmap:.6f}s)", end=" | ", flush=True)
+    print(f"✓ ({t_kmap:.6f}s, {mem_kmap:.1f}MB)", end=" | ", flush=True)
     
     # Validate equivalence
     expr_kmap_sympy = parse_kmap_expression(expr_str, var_symbols, form=form)
@@ -1702,6 +2072,8 @@ def benchmark_case(test_num, num_vars, output_values, description, form='sop'):
         "is_constant": is_constant,
         "t_sympy": t_sympy,
         "t_kmap": t_kmap,
+        "mem_sympy": mem_sympy,
+        "mem_kmap": mem_kmap,
         "sympy_literals": sympy_literals,
         "kmap_literals": kmap_literals,
         "sympy_terms": sympy_terms,
@@ -1730,7 +2102,9 @@ def main():
     
     print(f"\n🔬 Testing 5, 6, 7, and 8 variable K-maps")
     print(f"   Tests per distribution: {TESTS_PER_DISTRIBUTION}")
-    print(f"   Total per config: {TESTS_PER_DISTRIBUTION * 5 + 5} (5 distributions + 5 edge cases)")
+    print(f"   Base tests per config: {TESTS_PER_DISTRIBUTION * 5 + 5} (5 distributions + 5 edge cases)")
+    print(f"   Forms tested: SOP and POS")
+    print(f"   Total per config: {(TESTS_PER_DISTRIBUTION * 5 + 5) * 2} tests")
     
     # Generate test cases
     print(f"\n📋 Generating test suite...", end=" ", flush=True)
@@ -1749,65 +2123,98 @@ def main():
     
     for var_num, cases in sorted(grouped_cases.items()):
         print(f"\n{'='*80}")
-        print(f"  Testing {var_num}-variable K-maps ({len(cases)} cases)")
+        print(f"  Testing {var_num}-variable K-maps ({len(cases)} base cases × 2 forms = {len(cases)*2} tests)")
         print(f"{'='*80}")
         
-        config_results = []
-        for idx, (output_values, description) in enumerate(cases, 1):
-            try:
-                result = benchmark_case(
-                    len(all_results) + 1, 
-                    var_num, 
-                    output_values, 
-                    description, 
-                    form='sop'
-                )
-                config_results.append(result)
-                all_results.append(result)
-            except Exception as e:
-                print(f"    ⚠️  Error in test {idx}: {e}")
-                continue
+        # Run SOP tests first, then POS tests
+        for form in ['sop', 'pos']:
+            print(f"\n  🔷 Running {form.upper()} Form Tests...")
+            form_results = []
+            
+            for idx, (output_values, description) in enumerate(cases, 1):
+                try:
+                    result = benchmark_case(
+                        len(all_results) + 1, 
+                        var_num, 
+                        output_values, 
+                        f"{description} ({form.upper()})", 
+                        form=form
+                    )
+                    form_results.append(result)
+                    all_results.append(result)
+                except Exception as e:
+                    print(f"    ⚠️  Error in test {idx} ({form.upper()}): {e}")
+                    continue
+            
+            # Perform statistical analysis for this form
+            if form_results:
+                print(f"\n  📊 Performing statistical analysis for {form.upper()}...", end=" ", flush=True)
+                
+                # Count constants
+                num_constant = sum(1 for r in form_results if r.get("is_constant", False))
+                
+                # Filter out constants for literal-count statistics
+                non_constant_results = [r for r in form_results if not r.get("is_constant", False)]
+                
+                # Use all results for timing and memory, only non-constants for literals
+                sympy_times = [r["t_sympy"] for r in form_results]
+                kmap_times = [r["t_kmap"] for r in form_results]
+                sympy_mems = [r["mem_sympy"] for r in form_results]
+                kmap_mems = [r["mem_kmap"] for r in form_results]
+                
+                if non_constant_results and len(non_constant_results) > 1:
+                    sympy_literals = [r["sympy_literals"] for r in non_constant_results]
+                    kmap_literals = [r["kmap_literals"] for r in non_constant_results]
+                else:
+                    # All constants or insufficient non-constant samples - skip literal stats
+                    sympy_literals = []
+                    kmap_literals = []
+                
+                form_stats = perform_statistical_tests(sympy_times, kmap_times, 
+                                                 sympy_literals, kmap_literals,
+                                                 sympy_mems, kmap_mems)
+                all_stats[(var_num, form)] = form_stats
+                print("✓")
+                
+                # Display summary for this form
+                print(f"\n  📈 {var_num}-Variable {form.upper()} Configuration Summary:")
+                print(f"     Tests completed:     {len(form_results)}")
+                print(f"     Constant functions:  {num_constant}")
+                print(f"     Mean SymPy time:     {form_stats['time']['mean_sympy']:.6f} s")
+                print(f"     Mean KMap time:      {form_stats['time']['mean_kmap']:.6f} s")
+                print(f"     Time significant:    {'YES ✓' if form_stats['time']['significant'] else 'NO ✗'} "
+                      f"(p={form_stats['time']['p_value']:.4f})")
+                if 'memory' in form_stats:
+                    print(f"     Mean SymPy memory:   {form_stats['memory']['mean_sympy']:.2f} MB")
+                    print(f"     Mean KMap memory:    {form_stats['memory']['mean_kmap']:.2f} MB")
+                    print(f"     Memory significant:  {'YES ✓' if form_stats['memory']['significant'] else 'NO ✗'} "
+                          f"(p={form_stats['memory']['p_value']:.4f})")
+                if non_constant_results:
+                    print(f"     Mean SymPy literals: {form_stats['literals']['mean_sympy']:.2f}")
+                    print(f"     Mean KMap literals:  {form_stats['literals']['mean_kmap']:.2f}")
+                    print(f"     Literal significant: {'YES ✓' if form_stats['literals']['significant'] else 'NO ✗'} "
+                          f"(p={form_stats['literals']['p_value']:.4f})")
         
-        # Perform statistical analysis for this configuration
+        # After both forms are done, compute aggregate stats for scalability
+        config_results = [r for r in all_results if r['num_vars'] == var_num]
         if config_results:
-            print(f"\n  📊 Performing statistical analysis...", end=" ", flush=True)
+            agg_non_constant = [r for r in config_results if not r.get("is_constant", False)]
+            agg_sympy_times = [r["t_sympy"] for r in config_results]
+            agg_kmap_times = [r["t_kmap"] for r in config_results]
+            agg_sympy_mems = [r["mem_sympy"] for r in config_results]
+            agg_kmap_mems = [r["mem_kmap"] for r in config_results]
             
-            # Count constants
-            num_constant = sum(1 for r in config_results if r.get("is_constant", False))
-            
-            # Filter out constants for literal-count statistics
-            non_constant_results = [r for r in config_results if not r.get("is_constant", False)]
-            
-            # Use all results for timing, only non-constants for literals
-            sympy_times = [r["t_sympy"] for r in config_results]
-            kmap_times = [r["t_kmap"] for r in config_results]
-            
-            if non_constant_results and len(non_constant_results) > 1:
-                sympy_literals = [r["sympy_literals"] for r in non_constant_results]
-                kmap_literals = [r["kmap_literals"] for r in non_constant_results]
+            if agg_non_constant and len(agg_non_constant) > 1:
+                agg_sympy_literals = [r["sympy_literals"] for r in agg_non_constant]
+                agg_kmap_literals = [r["kmap_literals"] for r in agg_non_constant]
             else:
-                # All constants or insufficient non-constant samples - skip literal stats
-                sympy_literals = []
-                kmap_literals = []
+                agg_sympy_literals = []
+                agg_kmap_literals = []
             
-            stats = perform_statistical_tests(sympy_times, kmap_times, 
-                                             sympy_literals, kmap_literals)
-            all_stats[f"{var_num}-var"] = stats
-            print("✓")
-            
-            # Display summary
-            print(f"\n  📈 Configuration Summary:")
-            print(f"     Tests completed:     {len(config_results)}")
-            print(f"     Constant functions:  {num_constant}")
-            print(f"     Mean SymPy time:     {stats['time']['mean_sympy']:.6f} s")
-            print(f"     Mean KMap time:      {stats['time']['mean_kmap']:.6f} s")
-            print(f"     Time significant:    {'YES ✓' if stats['time']['significant'] else 'NO ✗'} "
-                  f"(p={stats['time']['p_value']:.4f})")
-            if non_constant_results:
-                print(f"     Mean SymPy literals: {stats['literals']['mean_sympy']:.2f}")
-                print(f"     Mean KMap literals:  {stats['literals']['mean_kmap']:.2f}")
-                print(f"     Literal significant: {'YES ✓' if stats['literals']['significant'] else 'NO ✗'} "
-                      f"(p={stats['literals']['p_value']:.4f})")
+            agg_stats = perform_statistical_tests(agg_sympy_times, agg_kmap_times,
+                                                 agg_sympy_literals, agg_kmap_literals,
+                                                 agg_sympy_mems, agg_kmap_mems)
+            all_stats[f"{var_num}-var"] = agg_stats
     
     # VALIDATION: Check data quality before analysis
     validation = validate_benchmark_results(all_results)

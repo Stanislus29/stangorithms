@@ -729,6 +729,10 @@
                     <button class="btn-secondary size-btn active" data-size="2">2×2 (2 vars)</button>
                     <button class="btn-secondary size-btn" data-size="3">2×4 (3 vars)</button>
                     <button class="btn-secondary size-btn" data-size="4">4×4 (4 vars)</button>
+                    <button class="btn-secondary size-btn" data-size="5">5 vars (3D)</button>
+                    <button class="btn-secondary size-btn" data-size="6">6 vars (3D)</button>
+                    <button class="btn-secondary size-btn" data-size="7">7 vars (3D)</button>
+                    <button class="btn-secondary size-btn" data-size="8">8 vars (3D)</button>
                 </div>
             </div>
 
@@ -797,7 +801,10 @@
             size: 2,
             form: 'sop',
             convention: 'vranesic',
-            kmap: [[0, 0], [0, 0]]
+            kmap: [[0, 0], [0, 0]],
+            is3D: false,
+            numExtraVars: 0,
+            kmaps3D: {} // For 3D: key = extra_var_combo, value = 4x4 array
         };
 
         // Initialize K-map display
@@ -807,6 +814,14 @@
                 3: { rows: 2, cols: 4, rowLabels: ['0', '1'], colLabels: ['00', '01', '11', '10'] },
                 4: { rows: 4, cols: 4, rowLabels: ['00', '01', '11', '10'], colLabels: ['00', '01', '11', '10'] }
             };
+
+            // Check if 3D mode (5+ variables)
+            state.is3D = state.size >= 5;
+            
+            if (state.is3D) {
+                init3DKMap();
+                return;
+            }
 
             const config = sizes[state.size];
             state.kmap = Array(config.rows).fill(0).map(() => Array(config.cols).fill(0));
@@ -839,6 +854,66 @@
             });
         }
 
+        // Initialize 3D K-map display (5+ variables)
+        function init3DKMap() {
+            state.numExtraVars = state.size - 4;
+            const numMaps = Math.pow(2, state.numExtraVars);
+            state.kmaps3D = {};
+            
+            // Generate all combinations for extra variables
+            for (let i = 0; i < numMaps; i++) {
+                const extraCombo = i.toString(2).padStart(state.numExtraVars, '0');
+                state.kmaps3D[extraCombo] = Array(4).fill(0).map(() => Array(4).fill(0));
+            }
+
+            const container = document.getElementById('kmapDisplay');
+            let html = '<div style="max-height: 600px; overflow-x: auto; overflow-y: auto; padding: 10px;">';
+            html += `<h3 style="color: #e9eef8; text-align: center; margin-bottom: 20px;">${state.size}-Variable 3D K-Map (${numMaps} sub-maps)</h3>`;
+            html += '<div style="display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; align-items: flex-start;">';
+            
+            const colLabels = ['00', '01', '11', '10'];
+            const rowLabels = ['00', '01', '11', '10'];
+            
+            // Create each 4x4 sub-map
+            for (let i = 0; i < numMaps; i++) {
+                const extraCombo = i.toString(2).padStart(state.numExtraVars, '0');
+                const extraVarLabels = [];
+                for (let v = 0; v < state.numExtraVars; v++) {
+                    extraVarLabels.push(`x${v+1}=${extraCombo[v]}`);
+                }
+                
+                html += `<div style="background: rgba(11, 24, 50, 0.5); padding: 15px; border-radius: 8px; border: 1px solid #1b2f55; flex: 0 0 auto;">`;
+                html += `<div style="color: #a8b3c7; font-weight: 600; margin-bottom: 10px; text-align: center;">${extraVarLabels.join(', ')}</div>`;
+                html += '<div class="kmap-wrapper" style="display: inline-block;">';
+                
+                // Column labels
+                html += '<div class="kmap-labels">';
+                colLabels.forEach(label => {
+                    html += `<div class="kmap-label">${label}</div>`;
+                });
+                html += '</div>';
+
+                // Rows
+                for (let r = 0; r < 4; r++) {
+                    html += '<div class="kmap-row">';
+                    html += `<div class="row-label">${rowLabels[r]}</div>`;
+                    for (let c = 0; c < 4; c++) {
+                        html += `<div class="kmap-cell" data-extra="${extraCombo}" data-row="${r}" data-col="${c}">0</div>`;
+                    }
+                    html += '</div>';
+                }
+                html += '</div></div>';
+            }
+            
+            html += '</div></div>'; // Close flexbox container and main wrapper
+            container.innerHTML = html;
+
+            // Add click handlers
+            document.querySelectorAll('.kmap-cell').forEach(cell => {
+                cell.addEventListener('click', toggleCell3D);
+            });
+        }
+
         function toggleCell(e) {
             const row = parseInt(e.target.dataset.row);
             const col = parseInt(e.target.dataset.col);
@@ -851,6 +926,22 @@
             else next = 0;
             
             state.kmap[row][col] = next;
+            updateCell(e.target, next);
+        }
+
+        function toggleCell3D(e) {
+            const extra = e.target.dataset.extra;
+            const row = parseInt(e.target.dataset.row);
+            const col = parseInt(e.target.dataset.col);
+            const current = state.kmaps3D[extra][row][col];
+            
+            // Cycle: 0 -> 1 -> 'd' -> 0
+            let next;
+            if (current === 0) next = 1;
+            else if (current === 1) next = 'd';
+            else next = 0;
+            
+            state.kmaps3D[extra][row][col] = next;
             updateCell(e.target, next);
         }
 
@@ -893,35 +984,240 @@
         });
 
         document.getElementById('clearBtn').addEventListener('click', () => {
-            state.kmap = state.kmap.map(row => row.map(() => 0));
-            document.querySelectorAll('.kmap-cell').forEach((cell, idx) => {
-                const row = Math.floor(idx / state.kmap[0].length);
-                const col = idx % state.kmap[0].length;
+            if (state.is3D) {
+                Object.keys(state.kmaps3D).forEach(extra => {
+                    state.kmaps3D[extra] = Array(4).fill(0).map(() => Array(4).fill(0));
+                });
+            } else {
+                state.kmap = state.kmap.map(row => row.map(() => 0));
+            }
+            document.querySelectorAll('.kmap-cell').forEach(cell => {
                 updateCell(cell, 0);
             });
             clearVisualization();
         });
 
         document.getElementById('randomBtn').addEventListener('click', () => {
-            state.kmap = state.kmap.map(row => 
-                row.map(() => {
-                    const rand = Math.random();
-                    if (rand < 0.4) return 0;
-                    if (rand < 0.8) return 1;
-                    return 'd';
-                })
-            );
-            document.querySelectorAll('.kmap-cell').forEach((cell, idx) => {
-                const cols = state.kmap[0].length;
-                const row = Math.floor(idx / cols);
-                const col = idx % cols;
-                updateCell(cell, state.kmap[row][col]);
-            });
+            if (state.is3D) {
+                Object.keys(state.kmaps3D).forEach(extra => {
+                    state.kmaps3D[extra] = Array(4).fill(0).map(() => 
+                        Array(4).fill(0).map(() => {
+                            const rand = Math.random();
+                            if (rand < 0.4) return 0;
+                            if (rand < 0.8) return 1;
+                            return 'd';
+                        })
+                    );
+                });
+                document.querySelectorAll('.kmap-cell').forEach(cell => {
+                    const extra = cell.dataset.extra;
+                    const row = parseInt(cell.dataset.row);
+                    const col = parseInt(cell.dataset.col);
+                    updateCell(cell, state.kmaps3D[extra][row][col]);
+                });
+            } else {
+                state.kmap = state.kmap.map(row => 
+                    row.map(() => {
+                        const rand = Math.random();
+                        if (rand < 0.4) return 0;
+                        if (rand < 0.8) return 1;
+                        return 'd';
+                    })
+                );
+                document.querySelectorAll('.kmap-cell').forEach((cell, idx) => {
+                    const cols = state.kmap[0].length;
+                    const row = Math.floor(idx / cols);
+                    const col = idx % cols;
+                    updateCell(cell, state.kmap[row][col]);
+                });
+            }
             clearVisualization();
         });
 
         function clearVisualization() {
             document.getElementById('visualizationArea').innerHTML = '';
+        }
+
+        // Simplified 3D visualization (5+ variables)
+        function render3DVisualization(result, viz) {
+            const numVars = result.num_vars;
+            const numExtraVars = numVars - 4;
+            const numMaps = Math.pow(2, numExtraVars);
+            const numTerms = result.steps.finalSelected.terms.length;
+            
+            viz.querySelector('.visualization').innerHTML += `
+                <div class="step-container">
+                    <div class="step-title">🎯 3D K-Map Solution (${numVars} Variables)</div>
+                    <div class="step-content">
+                        <div class="result">${result.expression || '0'}</div>
+                        <p style="margin-top: 15px;"><strong>Solution:</strong> ${numTerms} term(s)</p>
+                    </div>
+                </div>
+            `;
+            
+            // Step 1: Architecture Overview
+            const step1 = document.createElement('div');
+            step1.className = 'step-container';
+            step1.innerHTML = `
+                <div class="step-title">
+                    <span>Step 1: 3D K-Map Architecture</span>
+                </div>
+                <div class="step-content">
+                    <p><strong>Hierarchical Structure:</strong></p>
+                    <div style="background: rgba(11, 24, 50, 0.7); padding: 20px; border-radius: 10px; margin: 15px 0;">
+                        <div style="font-size: 1.2em; margin-bottom: 15px;">
+                            📊 <strong>${numVars} variables</strong> = <strong>${numExtraVars} extra vars</strong> + <strong>4 base vars</strong>
+                        </div>
+                        <div style="font-size: 1.1em; margin-bottom: 10px;">
+                            🗂️ <strong>${numMaps} hierarchical 4×4 K-maps</strong> created
+                        </div>
+                        <div style="font-size: 0.95em; color: #a8b3c7;">
+                            Each map handles one combination of the first ${numExtraVars} variable(s)
+                        </div>
+                    </div>
+                    <p><strong>Algorithm:</strong> Each 4×4 map is solved independently using our clustering algorithm, then results are combined using bitwise union operations.</p>
+                </div>
+            `;
+            viz.querySelector('.visualization').appendChild(step1);
+            
+            // Step 2: Individual Map Solving (animated)
+            const step2 = document.createElement('div');
+            step2.className = 'step-container';
+            step2.innerHTML = `
+                <div class="step-title">
+                    <span>Step 2: Solving Each Sub-Map</span>
+                    <button class="btn-replay">🔄 Replay</button>
+                </div>
+                <div class="step-content">
+                    <p><strong>Process:</strong> Apply clustering algorithm to each of the ${numMaps} sub-maps</p>
+                    <div id="map-solving-animation" style="background: rgba(11, 24, 50, 0.7); padding: 30px; border-radius: 10px; margin: 15px 0; text-align: center;">
+                        <div style="font-size: 3em; margin-bottom: 10px;">🗺️</div>
+                        <div id="solving-status" style="font-size: 1.2em; color: #7ee787; margin-bottom: 15px;">
+                            Ready to solve ${numMaps} maps...
+                        </div>
+                        <div id="progress-bar" style="width: 100%; height: 8px; background: #1b2f55; border-radius: 4px; overflow: hidden;">
+                            <div id="progress-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #4ea1ff, #7ee787); transition: width 0.3s ease;"></div>
+                        </div>
+                        <div id="map-counter" style="margin-top: 10px; color: #a8b3c7; font-size: 0.9em;">
+                            0 / ${numMaps} maps solved
+                        </div>
+                    </div>
+                    <p style="color: #a8b3c7; font-size: 0.9em;"><em>Each sub-map: Find groups → Filter primes → Essential detection → Greedy cover</em></p>
+                </div>
+            `;
+            viz.querySelector('.visualization').appendChild(step2);
+            
+            const animateMapSolving = async () => {
+                const status = step2.querySelector('#solving-status');
+                const progressFill = step2.querySelector('#progress-fill');
+                const counter = step2.querySelector('#map-counter');
+                
+                progressFill.style.width = '0%';
+                status.textContent = 'Solving maps...';
+                counter.textContent = `0 / ${numMaps} maps solved`;
+                
+                for (let i = 0; i < numMaps; i++) {
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    const progress = ((i + 1) / numMaps) * 100;
+                    progressFill.style.width = progress + '%';
+                    counter.textContent = `${i + 1} / ${numMaps} maps solved`;
+                    
+                    if (i === numMaps - 1) {
+                        status.textContent = '✅ All maps solved!';
+                        status.style.color = '#7ee787';
+                    }
+                }
+            };
+            
+            animateMapSolving();
+            step2.querySelector('.btn-replay').addEventListener('click', animateMapSolving);
+            
+            // Step 3: Pattern Grouping (animated)
+            const step3 = document.createElement('div');
+            step3.className = 'step-container';
+            step3.innerHTML = `
+                <div class="step-title">
+                    <span>Step 3: Bitwise Union - Pattern Grouping</span>
+                    <button class="btn-replay">🔄 Replay</button>
+                </div>
+                <div class="step-content">
+                    <p><strong>Combining Results:</strong> Group terms with identical 4-bit patterns across different maps</p>
+                    <div id="union-animation" style="background: rgba(11, 24, 50, 0.7); padding: 30px; border-radius: 10px; margin: 15px 0;">
+                        <div style="display: flex; justify-content: space-around; align-items: center; margin-bottom: 20px;">
+                            <div class="pattern-box" style="background: #1b2f55; padding: 15px; border-radius: 8px; border: 2px solid #4ea1ff;">
+                                <div style="font-size: 0.9em; color: #a8b3c7; margin-bottom: 5px;">Pattern A</div>
+                                <div style="font-family: monospace; color: #4ea1ff;">01--</div>
+                                <div style="font-size: 0.8em; color: #7ee787; margin-top: 5px;" id="pattern-a-maps">Maps: 0,1,2</div>
+                            </div>
+                            <div style="font-size: 2em; color: #c19a6b;">⊕</div>
+                            <div class="pattern-box" style="background: #1b2f55; padding: 15px; border-radius: 8px; border: 2px solid #4ea1ff;">
+                                <div style="font-size: 0.9em; color: #a8b3c7; margin-bottom: 5px;">Pattern B</div>
+                                <div style="font-family: monospace; color: #4ea1ff;">-101</div>
+                                <div style="font-size: 0.8em; color: #7ee787; margin-top: 5px;" id="pattern-b-maps">Maps: 0,3</div>
+                            </div>
+                        </div>
+                        <div style="text-align: center; color: #e9eef8; font-size: 1.1em; margin-top: 20px;">
+                            ↓ Simplify Extra Variables ↓
+                        </div>
+                        <div id="simplified-result" style="background: #2d3e50; padding: 15px; border-radius: 8px; margin-top: 15px; text-align: center; opacity: 0; transition: opacity 0.5s;">
+                            <div style="color: #7ee787; font-size: 1.1em;">Combined Terms Ready</div>
+                        </div>
+                    </div>
+                    <p><strong>Key Concept:</strong> When a pattern appears across multiple maps, we simplify the extra variable portion by finding which bits vary (set to '-') vs. stay constant.</p>
+                </div>
+            `;
+            viz.querySelector('.visualization').appendChild(step3);
+            
+            const animateUnion = async () => {
+                const result = step3.querySelector('#simplified-result');
+                result.style.opacity = '0';
+                
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Animate pattern boxes
+                const boxes = step3.querySelectorAll('.pattern-box');
+                boxes.forEach((box, i) => {
+                    setTimeout(() => {
+                        box.style.transform = 'scale(1.05)';
+                        box.style.borderColor = '#7ee787';
+                        setTimeout(() => {
+                            box.style.transform = 'scale(1)';
+                        }, 300);
+                    }, i * 400);
+                });
+                
+                await new Promise(resolve => setTimeout(resolve, 1200));
+                result.style.opacity = '1';
+            };
+            
+            animateUnion();
+            step3.querySelector('.btn-replay').addEventListener('click', animateUnion);
+            
+            // Step 4: Final Expression
+            const step4 = document.createElement('div');
+            step4.className = 'step-container';
+            step4.innerHTML = `
+                <div class="step-title">✨ Final Minimized Expression</div>
+                <div class="step-content">
+                    <p><strong>Result:</strong> Combined and simplified all patterns</p>
+                    <div class="result">${result.expression || '0'}</div>
+                    <br>
+                    <p><strong>Final solution uses ${numTerms} term(s):</strong></p>
+                    <div class="group-list">
+                        ${result.steps.finalSelected.terms.map(term =>
+                            `<div class="group-item essential">${term}</div>`).join('')}
+                    </div>
+                    <div style="background: rgba(126, 231, 135, 0.1); border-left: 4px solid #7ee787; padding: 15px; margin-top: 20px; border-radius: 5px;">
+                        <p style="margin: 0;"><strong>Algorithm Complexity Summary:</strong></p>
+                        <ul style="margin: 10px 0 0 20px; padding: 0; color: #a8b3c7;">
+                            <li>Sub-map solving: O(${numMaps} × standard K-map complexity)</li>
+                            <li>Pattern grouping: O(total terms × pattern length)</li>
+                            <li>Variable simplification: O(terms per pattern × ${numExtraVars})</li>
+                        </ul>
+                    </div>
+                </div>
+            `;
+            viz.querySelector('.visualization').appendChild(step4);
         }
 
         // Simplified KMapSolver class - ONLY for visualization
@@ -1306,14 +1602,46 @@
             viz.innerHTML = '<div class="visualization"><h2 style="color: #1a2942; margin-bottom: 20px;">🔍 Algorithm Visualization</h2><p class="subtitle">Connecting to Python backend...</p></div>';
             
             try {
+                // Prepare data based on 2D or 3D mode
+                const requestData = {
+                    form: state.form,
+                    convention: state.convention
+                };
+                
+                if (state.is3D) {
+                    // Convert 3D kmaps to flat output_values array
+                    const numVars = state.size;
+                    const totalCells = Math.pow(2, numVars);
+                    const output_values = new Array(totalCells);
+                    
+                    // Build index mapping based on convention
+                    Object.keys(state.kmaps3D).forEach(extra => {
+                        const kmap4x4 = state.kmaps3D[extra];
+                        for (let r = 0; r < 4; r++) {
+                            for (let c = 0; c < 4; c++) {
+                                const rowBits = ['00', '01', '11', '10'][r];
+                                const colBits = ['00', '01', '11', '10'][c];
+                                const bits = state.convention === 'mano_kime'
+                                    ? extra + rowBits + colBits
+                                    : extra + colBits + rowBits;
+                                const index = parseInt(bits, 2);
+                                output_values[index] = kmap4x4[r][c];
+                            }
+                        }
+                    });
+                    
+                    requestData.num_vars = numVars;
+                    requestData.output_values = output_values;
+                    requestData.is3D = true;
+                } else {
+                    requestData.kmap = state.kmap;
+                    requestData.is3D = false;
+                }
+                
                 const response = await fetch('http://localhost:5000/api/solve', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        kmap: state.kmap,
-                        convention: state.convention,
-                        form: state.form
-                    })
+                    body: JSON.stringify(requestData)
                 });
                 
                 if (!response.ok) {
@@ -1327,6 +1655,13 @@
                 const targetName = targetVal === 0 ? "0's" : "1's";
                 
                 viz.innerHTML = `<div class="visualization"><h2 style="color: #e9eef8; margin-bottom: 20px;">🔍 Algorithm Visualization (Python Backend)</h2></div>`;
+                
+                // Check if 3D mode
+                if (result.is3D) {
+                    // Simplified 3D visualization
+                    render3DVisualization(result, viz);
+                    return;
+                }
                 
                 // STEP 0: Show final result first
                 viz.querySelector('.visualization').innerHTML += `
