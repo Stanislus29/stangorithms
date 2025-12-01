@@ -11,8 +11,9 @@ sys.path.insert(0, os.path.join(BASE_DIR, 'src'))
 
 try:
     from stanlogic import KMapSolver
+    from stanlogic.kmapsolver3D import KMapSolver3D
 except ImportError as e:
-    print(f"Error: Could not import KMapSolver: {e}")
+    print(f"Error: Could not import stanlogic modules: {e}")
     print(f"BASE_DIR: {BASE_DIR}")
     print(f"Python path: {sys.path}")
     sys.exit(1)
@@ -40,30 +41,73 @@ def static_files(filename):
 def solve_kmap():
     """
     API endpoint to solve a K-map and return visualization steps.
-    Accepts a JSON payload with 'kmap', 'convention', and 'form'.
+    Accepts a JSON payload with either:
+    - 2D mode: 'kmap', 'convention', 'form'
+    - 3D mode: 'num_vars', 'output_values', 'convention', 'form', 'is3D'
     """
     try:
         data = request.get_json()
-        if not data or 'kmap' not in data:
-            return jsonify({'success': False, 'error': 'Invalid input: K-map data missing.'}), 400
+        if not data:
+            return jsonify({'success': False, 'error': 'Invalid input: No data provided.'}), 400
 
-        kmap_data = data['kmap']
         convention = data.get('convention', 'vranesic')
         form = data.get('form', 'sop')
+        is3D = data.get('is3D', False)
 
-        # Initialize the solver with the provided data
-        solver = KMapSolver(kmap=kmap_data, convention=convention)
-        
-        # Use the new visualization method to get detailed steps
-        expression, steps = solver.minimize_visualize(form=form)
+        if is3D:
+            # 3D K-Map mode (5+ variables)
+            if 'num_vars' not in data or 'output_values' not in data:
+                return jsonify({'success': False, 'error': 'Invalid input: num_vars and output_values required for 3D mode.'}), 400
+            
+            num_vars = data['num_vars']
+            output_values = data['output_values']
+            
+            # Initialize 3D solver
+            solver = KMapSolver3D(num_vars=num_vars, output_values=output_values)
+            
+            # Get minimized expression
+            terms, expression = solver.minimize_3d(form=form)
+            
+            # For now, return simplified steps (visualization for 3D is complex)
+            # You can extend this to provide detailed 3D visualization steps
+            steps = {
+                'allGroups': {'count': 0, 'coords': [], 'terms': []},
+                'primeImplicants': {'count': len(terms), 'coords': [], 'terms': terms},
+                'primeWithCoverage': {'coords': [], 'terms': terms, 'coverageCounts': []},
+                'essentialPrimes': {'indices': [], 'coords': [], 'terms': []},
+                'greedySelections': [],
+                'finalSelected': {'coords': [], 'terms': terms}
+            }
+            
+            return jsonify({
+                'success': True,
+                'expression': expression if expression else '0' if form == 'sop' else '1',
+                'steps': steps,
+                'targetValue': 0 if form == 'pos' else 1,
+                'is3D': True,
+                'num_vars': num_vars
+            })
+        else:
+            # 2D K-Map mode (2-4 variables)
+            if 'kmap' not in data:
+                return jsonify({'success': False, 'error': 'Invalid input: kmap data missing.'}), 400
 
-        # Return the successful result in the format expected by the frontend
-        return jsonify({
-            'success': True,
-            'expression': expression,
-            'steps': steps,
-            'targetValue': 0 if form == 'pos' else 1
-        })
+            kmap_data = data['kmap']
+            
+            # Initialize the solver with the provided data
+            solver = KMapSolver(kmap=kmap_data, convention=convention)
+            
+            # Use the new visualization method to get detailed steps
+            expression, steps = solver.minimize_visualize(form=form)
+
+            # Return the successful result in the format expected by the frontend
+            return jsonify({
+                'success': True,
+                'expression': expression,
+                'steps': steps,
+                'targetValue': 0 if form == 'pos' else 1,
+                'is3D': False
+            })
 
     except Exception as e:
         # Return a generic error message for any exceptions during solving

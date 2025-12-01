@@ -38,7 +38,6 @@ from stanlogic.kmapsolver3D import KMapSolver3D
 # ============================================================================
 
 RANDOM_SEED = 42
-TESTS_PER_DISTRIBUTION = 3  # Tests per distribution type
 TIMING_REPEATS = 1
 TIMING_WARMUP = 0
 
@@ -135,73 +134,67 @@ def format_time(seconds):
 # TEST DATA GENERATION
 # ============================================================================
 
-class TestDistribution:
-    SPARSE = "sparse"
-    DENSE = "dense"
-    BALANCED = "balanced"
-    MINIMAL_DC = "minimal_dc"
-    HEAVY_DC = "heavy_dc"
-
-
-def random_output_values(size, p_one=0.45, p_dc=0.1, seed=None):
-    """Generate random output values with controlled probability distribution."""
+def generate_random_dense_function(num_vars, seed=None):
+    """
+    Generate a random dense Boolean function for extreme-scale K-maps.
+    
+    Instead of storing the full truth table (which would require exabytes of memory),
+    we use a generator-based approach that computes values on-demand.
+    
+    For extreme scales (32-bit, 64-bit), the function is represented as:
+    - A random seed that determines the pseudo-random pattern
+    - Dense distribution: ~70% ones, ~5% don't-cares, ~25% zeros
+    """
     if seed is not None:
         random.seed(seed)
     
-    if p_one < 0 or p_dc < 0 or p_one + p_dc > 1:
-        raise ValueError("Probabilities invalid")
+    # For dense functions, we'll use a simple pseudo-random generator
+    # that KMapSolver3D can work with efficiently
+    # Dense: 70% ones, 5% don't-care, 25% zeros
     
-    p_zero = 1 - p_one - p_dc
-    choices = [1, 0, 'd']
-    weights = [p_one, p_zero, p_dc]
+    # Create a function that generates the output based on the seed
+    # For practical purposes, we'll use a compact representation
+    rng_state = random.getstate()
     
-    return [random.choices(choices, weights=weights, k=1)[0] for _ in range(size)]
-
-
-def generate_test_suite(num_vars, tests_per_distribution=TESTS_PER_DISTRIBUTION):
-    """Generate comprehensive test suite with diverse distributions."""
-    size = 2**num_vars
-    test_cases = []
+    class DenseFunction:
+        def __init__(self, num_vars, rng_state):
+            self.num_vars = num_vars
+            self.size = 2**num_vars
+            self.rng_state = rng_state
+        
+        def __len__(self):
+            return self.size
+        
+        def __getitem__(self, index):
+            # Use index as seed modifier for deterministic pseudo-random generation
+            random.seed(hash((self.rng_state, index)) % (2**31))
+            r = random.random()
+            if r < 0.70:
+                return 1
+            elif r < 0.75:
+                return 'd'
+            else:
+                return 0
     
-    print(f"      Truth table size: {format_large_number(size)} entries")
-    
-    distributions = {
-        TestDistribution.SPARSE: {"p_one": 0.2, "p_dc": 0.05},
-        TestDistribution.DENSE: {"p_one": 0.7, "p_dc": 0.05},
-        TestDistribution.BALANCED: {"p_one": 0.5, "p_dc": 0.1},
-        TestDistribution.MINIMAL_DC: {"p_one": 0.45, "p_dc": 0.02},
-        TestDistribution.HEAVY_DC: {"p_one": 0.3, "p_dc": 0.3},
-    }
-    
-    for dist_name, params in distributions.items():
-        for i in range(tests_per_distribution):
-            output_values = random_output_values(size=size, **params)
-            test_cases.append((output_values, dist_name))
-    
-    # Add edge cases
-    test_cases.append(([0] * size, "edge_all_zeros"))
-    test_cases.append(([1] * size, "edge_all_ones"))
-    test_cases.append((['d'] * size, "edge_all_dc"))
-    test_cases.append(([(i % 2) for i in range(size)], "edge_checkerboard"))
-    single_one = [0] * size
-    single_one[0] = 1
-    test_cases.append((single_one, "edge_single_one"))
-    
-    return test_cases
+    return DenseFunction(num_vars, rng_state)
 
 
 def generate_test_cases():
-    """Generate all test cases for 32-bit and 64-bit K-maps."""
+    """Generate test cases for 32-bit and 64-bit K-maps (one dense case each)."""
     random.seed(RANDOM_SEED)
     test_cases = []
     
     for num_vars in [32, 64]:
         bit_size = num_vars
-        print(f"\n  Generating {num_vars}-variable ({bit_size}-bit) test suite...")
-        suite = generate_test_suite(num_vars, tests_per_distribution=TESTS_PER_DISTRIBUTION)
-        for output_values, distribution in suite:
-            test_cases.append((num_vars, output_values, f"{bit_size}-bit: {distribution}"))
-        print(f"      ✓ {len(suite)} test cases generated")
+        size = 2**num_vars
+        print(f"\n  Generating {num_vars}-variable ({bit_size}-bit) test case...")
+        print(f"      Truth table size: {format_large_number(size)} entries")
+        print(f"      Using memory-efficient representation (dense distribution)")
+        
+        # Generate one random dense function
+        output_values = generate_random_dense_function(num_vars, seed=RANDOM_SEED + num_vars)
+        test_cases.append((num_vars, output_values, f"{bit_size}-bit: dense_random"))
+        print(f"      ✓ Test case generated")
     
     return test_cases
 
@@ -332,7 +325,7 @@ def save_performance_report(all_results, pdf_path):
                 fontsize=11, ha='center')
         ax.text(0.5, 0.21, f"Random Seed: {RANDOM_SEED}",
                 fontsize=11, ha='center')
-        ax.text(0.5, 0.17, f"Total Test Cases: {len(all_results)}",
+        ax.text(0.5, 0.17, f"Test Cases: {len(all_results)} (one dense case per bit size)",
                 fontsize=11, ha='center')
         
         ax.text(0.5, 0.08, "Testing extreme-scale Boolean minimization capabilities",
@@ -494,7 +487,8 @@ def main():
     print("\n⚠️  WARNING: These tests involve extremely large truth tables:")
     print(f"    32-bit: {format_large_number(2**32)} entries (4.3 billion)")
     print(f"    64-bit: {format_large_number(2**64)} entries (18.4 quintillion)")
-    print("\n    Execution may take considerable time and memory.")
+    print("\n    Using memory-efficient representation (one dense case per bit size)")
+    print("    Execution may take considerable time.")
     
     # Set random seed
     random.seed(RANDOM_SEED)

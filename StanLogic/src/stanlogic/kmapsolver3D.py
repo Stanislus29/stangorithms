@@ -546,8 +546,528 @@ class KMapSolver3D:
                 elif bit == '1':
                     literals.append(vars_[i])
             return "".join(literals) if literals else "1"
+    
+    def generate_verilog(self, module_name="logic_circuit", form='sop'):
+        """
+        Generate Verilog HDL code for the minimized Boolean expression.
+        
+        Args:
+            module_name: Name of the Verilog module (default: "logic_circuit")
+            form: 'sop' for Sum of Products or 'pos' for Product of Sums
+            
+        Returns:
+            String containing complete Verilog module code
+        """
+        terms, expression = self.minimize_3d(form=form)
+        
+        # Generate input port list
+        inputs = ", ".join([f"x{i+1}" for i in range(self.num_vars)])
+        
+        # Build Verilog code
+        verilog_code = f"""module {module_name}({inputs}, F);
+        // Inputs
+        input {inputs};
+        
+        // Output
+        output F;
+        
+        // Minimized expression: {expression}
+        """
+        
+        if form.lower() == 'sop':
+            # Generate SOP logic
+            if not terms:
+                verilog_code += "    assign F = 1'b0;\n"
+            elif len(terms) == 1:
+                verilog_code += f"    assign F = {self._term_to_verilog(terms[0])};\n"
+            else:
+                # Multiple terms - create intermediate wires
+                verilog_code += f"\n    // Intermediate product terms\n"
+                for i, term in enumerate(terms):
+                    verilog_code += f"    wire p{i};\n"
+                verilog_code += "\n"
+                
+                for i, term in enumerate(terms):
+                    verilog_code += f"    assign p{i} = {self._term_to_verilog(term)};\n"
+                
+                verilog_code += f"\n    // Sum of products\n"
+                sum_terms = " | ".join([f"p{i}" for i in range(len(terms))])
+                verilog_code += f"    assign F = {sum_terms};\n"
+        else:  # POS
+            if not terms:
+                verilog_code += "    assign F = 1'b1;\n"
+            elif len(terms) == 1:
+                verilog_code += f"    assign F = {self._term_to_verilog_pos(terms[0])};\n"
+            else:
+                # Multiple terms - create intermediate wires
+                verilog_code += f"\n    // Intermediate sum terms\n"
+                for i, term in enumerate(terms):
+                    verilog_code += f"    wire s{i};\n"
+                verilog_code += "\n"
+                
+                for i, term in enumerate(terms):
+                    verilog_code += f"    assign s{i} = {self._term_to_verilog_pos(term)};\n"
+                
+                verilog_code += f"\n    // Product of sums\n"
+                prod_terms = " & ".join([f"s{i}" for i in range(len(terms))])
+                verilog_code += f"    assign F = {prod_terms};\n"
+        
+        verilog_code += "\nendmodule"
+        return verilog_code
+
+    def _term_to_verilog(self, term):
+        """Convert SOP term to Verilog syntax (e.g., "x1x2'x3" -> "x1 & ~x2 & x3")"""
+        if not term:
+            return "1'b1"
+        
+        verilog_parts = []
+        i = 0
+        while i < len(term):
+            if term[i] == 'x':
+                # Extract variable number
+                var_num = ""
+                i += 1
+                while i < len(term) and term[i].isdigit():
+                    var_num += term[i]
+                    i += 1
+                
+                # Check for complement
+                if i < len(term) and term[i] == "'":
+                    verilog_parts.append(f"~x{var_num}")
+                    i += 1
+                else:
+                    verilog_parts.append(f"x{var_num}")
+            else:
+                i += 1
+        
+        return " & ".join(verilog_parts) if verilog_parts else "1'b1"
+
+    def _term_to_verilog_pos(self, term):
+        """Convert POS term to Verilog syntax (e.g., "(x1 + x2' + x3)" -> "(x1 | ~x2 | x3)")"""
+        # Remove parentheses
+        term = term.strip("()")
+        
+        if not term:
+            return "1'b0"
+        
+        # Split by '+'
+        literals = term.split(" + ")
+        verilog_parts = []
+        
+        for lit in literals:
+            lit = lit.strip()
+            if lit.endswith("'"):
+                # Complemented variable
+                var = lit[:-1]
+                verilog_parts.append(f"~{var}")
+            else:
+                verilog_parts.append(lit)
+        
+        return "(" + " | ".join(verilog_parts) + ")"
+
+    def generate_html_report(self, filename="kmap_output.html", form='sop', module_name="logic_circuit"):
+        """
+        Generate a complete HTML file with:
+        - Minimized expression display
+        - Logic gate diagram (Graphviz DOT rendered to SVG via Viz.js)
+        - Verilog code with syntax highlighting
+        """
+        terms, expression = self.minimize_3d(form=form)
+        verilog_code = self.generate_verilog(module_name=module_name, form=form)
+
+        # Get Graphviz DOT
+        dot_source = self._generate_logic_gates_graphviz(terms, form=form)
+
+        # Escape for JS template literal (keep backslashes for \n in DOT labels)
+        dot_js = dot_source.replace("\\", "\\\\").replace("`", "\\`")
+
+        html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>K-Map Minimization Results ({self.num_vars} Variables)</title>
+<!-- Viz.js for Graphviz DOT -> SVG -->
+<script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/viz.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/full.render.js"></script>
+<style>
+    body {{
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f5f5;
+    }}
+    .container {{
+        background: white; border-radius: 8px; padding: 30px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px;
+    }}
+    h1 {{ color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }}
+    h2 {{ color: #34495e; margin-top: 30px; }}
+    .expression {{
+        background: #ecf0f1; padding: 20px; border-radius: 5px;
+        font-family: 'Courier New', monospace; font-size: 24px; text-align: center;
+        color: #2c3e50; border-left: 4px solid #3498db;
+    }}
+    .logic-diagram {{ margin: 20px 0; padding: 20px; background: #fafafa; border-radius: 5px; overflow-x: auto; }}
+    .verilog-code {{
+        background: #2c3e50; color: #ecf0f1; padding: 20px; border-radius: 5px;
+        font-family: 'Courier New', monospace; font-size: 14px; overflow-x: auto; white-space: pre;
+    }}
+    .keyword {{ color: #3498db; }}
+    .comment {{ color: #95a5a6; }}
+    .wire {{ color: #e74c3c; }}
+    .info {{
+        background: #d4edda; border: 1px solid #c3e6cb; color: #155724;
+        padding: 15px; border-radius: 5px; margin: 15px 0;
+    }}
+    .copy-btn {{
+        background: #3498db; color: white; border: none; padding: 10px 20px;
+        border-radius: 5px; cursor: pointer; font-size: 14px; margin-top: 10px;
+    }}
+    .copy-btn:hover {{ background: #2980b9; }}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>K-Map Minimization Results ({self.num_vars} Variables)</h1>
+
+    <div class="info">
+        <strong>Form:</strong> {form.upper()} ({'Sum of Products' if form.lower() == 'sop' else 'Product of Sums'})<br>
+        <strong>Variables:</strong> {self.num_vars}<br>
+        <strong>Terms:</strong> {len(terms)}<br>
+        <strong>4x4 K-maps:</strong> {self.num_maps}<br>
+        <strong>Extra Variables:</strong> {self.num_extra_vars}
+    </div>
+
+    <h2>Minimized Expression</h2>
+    <div class="expression">
+        F = {expression if expression else ('0' if form.lower() == 'sop' else '1')}
+    </div>
+
+    <h2>Logic Gate Diagram</h2>
+    <div class="logic-diagram">
+        <div id="graphviz"></div>
+    </div>
+
+    <h2>Verilog HDL Code</h2>
+    <button class="copy-btn" onclick="copyVerilog()">Copy Verilog Code</button>
+    <div class="verilog-code" id="verilog">{self._highlight_verilog(verilog_code)}</div>
+</div>
+
+<script>
+    // Render DOT to SVG
+    const dot = `{dot_js}`;
+    const viz = new Viz();
+    viz.renderSVGElement(dot)
+      .then(svg => {{
+        const container = document.getElementById('graphviz');
+        container.innerHTML = '';
+        container.appendChild(svg);
+      }})
+      .catch(err => {{
+        const container = document.getElementById('graphviz');
+        container.innerHTML = '<pre style="color:#c0392b;white-space:pre-wrap"></pre>';
+        container.firstChild.textContent = 'Failed to render Graphviz diagram:\\n' + err;
+      }});
+
+    function copyVerilog() {{
+        const code = `{verilog_code.replace('`', '\\`')}`;
+        navigator.clipboard.writeText(code).then(() => {{
+            alert('Verilog code copied to clipboard!');
+        }});
+    }}
+</script>
+</body>
+</html>"""
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        return filename
+
+    def _highlight_verilog(self, code):
+        """Apply basic syntax highlighting to Verilog code"""
+        # Escape HTML
+        code = code.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        
+        # Highlight keywords
+        keywords = ['module', 'endmodule', 'input', 'output', 'wire', 'assign']
+        for kw in keywords:
+            code = code.replace(kw, f'<span class="keyword">{kw}</span>')
+        
+        # Highlight comments
+        lines = code.split('\n')
+        highlighted_lines = []
+        for line in lines:
+            if '//' in line:
+                parts = line.split('//', 1)
+                line = parts[0] + '<span class="comment">//' + parts[1] + '</span>'
+            highlighted_lines.append(line)
+        
+        return '\n'.join(highlighted_lines)
+
+    def _generate_logic_gates_graphviz(self, terms, form='sop'):
+        """
+        Generate Graphviz DOT language for logic circuit with actual gate symbols.
+        
+        Args:
+            terms: List of minimized terms
+            form: 'sop' or 'pos'
+            
+        Returns:
+            String containing Graphviz DOT code
+        """
+        if not terms:
+            # Constant output
+            value = '0' if form.lower() == 'sop' else '1'
+            dot = """digraph LogicCircuit {
+        rankdir=LR;
+        node [shape=circle, style=filled, fillcolor=lightblue];
+        
+        CONST [label=\"""" + value + """\" shape=box, fillcolor=lightgray];
+        F [label="F", fillcolor=salmon];
+        
+        CONST -> F;
+    }"""
+            return dot
+        
+        if form.lower() == 'sop':
+            return self._generate_sop_graphviz(terms)
+        else:
+            return self._generate_pos_graphviz(terms)
+
+    def _generate_sop_graphviz(self, terms):
+        """Generate Graphviz DOT for Sum of Products circuit"""
+        dot = """digraph SOP_Circuit {
+        rankdir=LR;
+        node [fontname="Arial"];
+        edge [arrowsize=0.8];
+        
+        // Graph attributes
+        graph [splines=ortho, nodesep=0.8, ranksep=1.2];
+        
+    """
+        
+        # Collect all variables
+        all_vars = set()
+        for term in terms:
+            vars_in_term = self._extract_variables(term)
+            all_vars.update([var for var, _ in vars_in_term])
+        
+        sorted_vars = sorted(list(all_vars), key=lambda x: int(x[1:]))
+        
+        # Input nodes
+        dot += "    // Input variables\n"
+        dot += "    subgraph cluster_inputs {\n"
+        dot += "        rank=same;\n"
+        dot += "        style=invis;\n"
+        for var in sorted_vars:
+            dot += f'        {var} [label="{var}", shape=plaintext, fontsize=14];\n'
+        dot += "    }\n\n"
+        
+        # NOT gates for complemented variables
+        need_not = set()
+        for term in terms:
+            vars_in_term = self._extract_variables(term)
+            for var, comp in vars_in_term:
+                if comp:
+                    need_not.add(var)
+        
+        if need_not:
+            dot += "    // NOT gates\n"
+            for var in sorted(need_not):
+                dot += f'    NOT_{var} [label="NOT", shape=invtriangle, style=filled, fillcolor=lightyellow, width=0.6, height=0.6];\n'
+                dot += f'    {var} -> NOT_{var};\n'
+            dot += "\n"
+        
+        # AND gates for each term
+        dot += "    // AND gates (product terms)\n"
+        for i, term in enumerate(terms):
+            vars_in_term = self._extract_variables(term)
+            
+            # Clean term label for display
+            term_label = term.replace("'", "̄")
+            
+            dot += f'    AND{i} [label="AND\\n{term_label}", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];\n'
+            
+            # Connect inputs to AND gate
+            for var, comp in vars_in_term:
+                if comp:
+                    dot += f'    NOT_{var} -> AND{i};\n'
+                else:
+                    dot += f'    {var} -> AND{i};\n'
+        
+        dot += "\n"
+        
+        # OR gate (if multiple terms)
+        if len(terms) > 1:
+            dot += "    // OR gate (final sum)\n"
+            dot += '    OR [label="OR", shape=trapezium, style=filled, fillcolor=lightcoral, width=1.0, height=0.8];\n'
+            for i in range(len(terms)):
+                dot += f'    AND{i} -> OR;\n'
+            dot += '    OR -> F;\n\n'
+        else:
+            dot += '    AND0 -> F;\n\n'
+        
+        # Output node
+        dot += "    // Output\n"
+        dot += '    F [label="F", shape=doublecircle, style=filled, fillcolor=salmon, width=0.7, height=0.7];\n'
+        
+        dot += "}\n"
+        return dot
+
+    def _generate_pos_graphviz(self, terms):
+        """Generate Graphviz DOT for Product of Sums circuit"""
+        dot = """digraph POS_Circuit {
+        rankdir=LR;
+        node [fontname="Arial"];
+        edge [arrowsize=0.8];
+        
+        // Graph attributes
+        graph [splines=ortho, nodesep=0.8, ranksep=1.2];
+        
+    """
+        
+        # Collect all variables
+        all_vars = set()
+        for term in terms:
+            vars_in_term = self._extract_variables(term)
+            all_vars.update([var for var, _ in vars_in_term])
+        
+        sorted_vars = sorted(list(all_vars), key=lambda x: int(x[1:]))
+        
+        # Input nodes
+        dot += "    // Input variables\n"
+        dot += "    subgraph cluster_inputs {\n"
+        dot += "        rank=same;\n"
+        dot += "        style=invis;\n"
+        for var in sorted_vars:
+            dot += f'        {var} [label="{var}", shape=plaintext, fontsize=14];\n'
+        dot += "    }\n\n"
+        
+        # NOT gates
+        need_not = set()
+        for term in terms:
+            vars_in_term = self._extract_variables(term)
+            for var, comp in vars_in_term:
+                if comp:
+                    need_not.add(var)
+        
+        if need_not:
+            dot += "    // NOT gates\n"
+            for var in sorted(need_not):
+                dot += f'    NOT_{var} [label="NOT", shape=invtriangle, style=filled, fillcolor=lightyellow, width=0.6, height=0.6];\n'
+                dot += f'    {var} -> NOT_{var};\n'
+            dot += "\n"
+        
+        # OR gates for each term
+        dot += "    // OR gates (sum terms)\n"
+        for i, term in enumerate(terms):
+            vars_in_term = self._extract_variables(term)
+            
+            # Clean term label
+            term_label = term.replace("'", "̄").strip("()")
+            
+            dot += f'    OR{i} [label="OR\\n({term_label})", shape=trapezium, style=filled, fillcolor=lightcoral, width=1.2, height=0.8, fontsize=10];\n'
+            
+            # Connect inputs
+            for var, comp in vars_in_term:
+                if comp:
+                    dot += f'    NOT_{var} -> OR{i};\n'
+                else:
+                    dot += f'    {var} -> OR{i};\n'
+        
+        dot += "\n"
+        
+        # AND gate (if multiple terms)
+        if len(terms) > 1:
+            dot += "    // AND gate (final product)\n"
+            dot += '    AND [label="AND", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.0, height=0.8];\n'
+            for i in range(len(terms)):
+                dot += f'    OR{i} -> AND;\n'
+            dot += '    AND -> F;\n\n'
+        else:
+            dot += '    OR0 -> F;\n\n'
+        
+        # Output node
+        dot += "    // Output\n"
+        dot += '    F [label="F", shape=doublecircle, style=filled, fillcolor=salmon, width=0.7, height=0.7];\n'
+        
+        dot += "}\n"
+        return dot
+
+    def _extract_variables(self, term):
+        """
+        Extract variables and their complementation status from a term.
+        Returns list of tuples: [(var_name, is_complemented), ...]
+        """
+        # Remove parentheses for POS terms
+        term = term.strip("()")
+        
+        if " + " in term:
+            # POS term - split by +
+            literals = term.split(" + ")
+            result = []
+            for lit in literals:
+                lit = lit.strip()
+                if lit.endswith("'"):
+                    result.append((lit[:-1], True))
+                else:
+                    result.append((lit, False))
+            return result
+        else:
+            # SOP term
+            result = []
+            i = 0
+            while i < len(term):
+                if term[i] == 'x':
+                    var_num = ""
+                    i += 1
+                    while i < len(term) and term[i].isdigit():
+                        var_num += term[i]
+                        i += 1
+                    
+                    var_name = f"x{var_num}"
+                    
+                    if i < len(term) and term[i] == "'":
+                        result.append((var_name, True))
+                        i += 1
+                    else:
+                        result.append((var_name, False))
+                else:
+                    i += 1
+            return result
             
 def main():
+    import random
+    
+    # Example: 8-variable K-map with random pattern
+    print("EXAMPLE: 8-VARIABLE K-MAP (Random Pattern)")
+    print("="*60)
+    num_vars = 8
+    
+    # Generate random output values (256 total for 8 variables)
+    # Set random seed for reproducibility
+    random.seed(42)
+    output_values_8 = [random.choice([0, 1, 'd']) for _ in range(2**num_vars)]
+    
+    # Create and minimize
+    kmap_solver_8 = KMapSolver3D(num_vars, output_values_8)
+    kmap_solver_8.print_kmaps()
+    
+    # Minimize the 8-variable K-map
+    terms, expression = kmap_solver_8.minimize_3d(form='sop')
+    
+    # Generate HTML report
+    print("\n" + "="*60)
+    print("GENERATING HTML REPORT")
+    print("="*60)
+    html_file = kmap_solver_8.generate_html_report(
+        filename="kmap_8var_report.html",
+        form='sop',
+        module_name="logic_circuit_8var"
+    )
+    print(f"✓ HTML report generated: {html_file}")
+    print(f"  Open this file in a web browser to view the interactive report.")
+    
+    # Commented out examples
+    """
     # Example 1: 5-variable K-map
     print("EXAMPLE 1: 5-VARIABLE K-MAP")
     print("="*60)
@@ -607,6 +1127,7 @@ def main():
     
     # Minimize the 6-variable K-map
     terms, expression = kmap_solver_6b.minimize_3d(form='sop')
+    """
 
 if __name__ == "__main__":
     main()
