@@ -1,2 +1,18 @@
-Flask>=2.0
-Flask-Cors>=3.0
+# StanLogic Core Requirements
+# These dependencies are automatically installed with: pip install stanlogic
+
+# Visualization and reporting
+matplotlib>=3.5.0
+numpy>=1.21.0
+
+# Optional dependencies (installed separately):
+# For web interface: pip install stanlogic[web]
+#   Flask>=2.0
+#   Flask-Cors>=3.0
+#
+# For development: pip install stanlogic[dev]
+#   pytest>=7.0.0
+#   pytest-cov>=3.0.0
+
+# Note: The following are Python standard library modules (no installation needed):
+# csv, collections, os, sys, time, random, multiprocessing, subprocess, datetime, re, io, gc
