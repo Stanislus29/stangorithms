@@ -1,17 +1,35 @@
 """
-KMapSolver3D Extreme Scale Test: 32-bit and 64-bit Boolean Minimization
-=========================================================================
+KMapSolver3D Extreme Scale Test: 32-bit Boolean Minimization
+==============================================================
 
-Performance evaluation of KMapSolver3D for extreme-scale Boolean function 
-minimization (32 and 64 variables). These correspond to 32-bit and 64-bit 
-computer architectures.
+Performance evaluation of KMapSolver3D for 32-bit Boolean function 
+minimization using chunked processing with step-by-step truth table generation.
 
 32-bit: 2^32 = 4,294,967,296 truth table entries
-64-bit: 2^64 = 18,446,744,073,709,551,616 truth table entries
+
+Algorithm (matching KMapSolver3D structure):
+- Process truth table in chunks (2^16 = 65,536 entries per chunk)
+- For each chunk (defined by first 16 variables fixed):
+  - First 16 variables (bits 0-15) = chunk_index (constant for this chunk)
+  - Last 16 variables (bits 16-31) = vary through all 65,536 combinations
+  - Build 16-variable K-map with these combinations
+  - Minimize using KMapSolver3D (which uses first 12 as extra_vars, last 4 as map)
+  - Extract ESSENTIAL prime implicant bitmasks using _solve_single_kmap()
+  - Write essential prime implicants to CSV
+- After all chunks processed, perform bitwise union on bitmasks
+- Extract final minimal terms
+
+Bit structure (32 variables total):
+  Bits 0-15:  chunk_index (first 16 variables)
+  Bits 16-27: extra_combo (next 12 variables, selects 4×4 map)
+  Bits 28-31: map position (last 4 variables, position in 4×4 map)
+
+This approach ensures efficient stack management by completing and 
+discarding each chunk before processing the next.
 
 Author: Stan's Technologies
-Date: November 2025
-Version: 1.0 (Extreme Scale Performance)
+Date: December 2025
+Version: 2.0 (Chunked Processing with 16-Variable Maps and CSV Storage)
 """
 
 import csv
@@ -31,7 +49,7 @@ import numpy as np
 # Add parent directory to path to import stanlogic
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'src')))
 
-from stanlogic.kmapsolver3D import KMapSolver3D
+from stanlogic import KMapSolver3D
 
 # ============================================================================
 # CONFIGURATION
@@ -44,9 +62,17 @@ TIMING_WARMUP = 0
 # Output files
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUTS_DIR = os.path.join(SCRIPT_DIR, "outputs")
-RESULTS_CSV = os.path.join(OUTPUTS_DIR, "kmapsolver3d_32_64bit_performance.csv")
-REPORT_PDF = os.path.join(OUTPUTS_DIR, "kmapsolver3d_32_64bit_performance_report.pdf")
+RESULTS_CSV = os.path.join(OUTPUTS_DIR, "kmapsolver3d_32bit_performance.csv")
+INTERMEDIATE_CSV = os.path.join(OUTPUTS_DIR, "kmapsolver3d_32bit_terms.csv")
+REPORT_PDF = os.path.join(OUTPUTS_DIR, "kmapsolver3d_32bit_performance_report.pdf")
 LOGO_PATH = os.path.join(SCRIPT_DIR, "..", "..", "images", "St_logo_light-tp.png")
+
+# Configuration for 32-bit chunked processing
+NUM_VARS = 32
+NUM_KMAP_VARS = 16  # Variables used for K-map gray code labeling (16-variable maps)
+NUM_EXTRA_VARS = NUM_VARS - NUM_KMAP_VARS  # 16 extra variables per chunk
+CHUNK_SIZE = 2**NUM_KMAP_VARS  # 65,536 truth table entries per K-map
+TOTAL_CHUNKS = 2**NUM_EXTRA_VARS  # 65,536 chunks to process
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -131,165 +157,396 @@ def format_time(seconds):
 
 
 # ============================================================================
-# TEST DATA GENERATION
+# CHUNKED PROCESSING FUNCTIONS
 # ============================================================================
 
-def generate_random_dense_function(num_vars, seed=None):
+def generate_chunk_output(chunk_index, seed=None):
     """
-    Generate a random dense Boolean function for extreme-scale K-maps.
+    Generate outputs for a single chunk of the 32-bit truth table.
     
-    Instead of storing the full truth table (which would require exabytes of memory),
-    we use a generator-based approach that computes values on-demand.
+    A chunk represents all 2^16 = 65,536 combinations where:
+    - The first 16 variables (bits 0-15) are fixed to chunk_index
+    - The last 16 variables (bits 16-31) vary through all combinations
     
-    For extreme scales (32-bit, 64-bit), the function is represented as:
-    - A random seed that determines the pseudo-random pattern
-    - Dense distribution: ~70% ones, ~5% don't-cares, ~25% zeros
+    This matches KMapSolver3D's structure where first variables are extra_vars.
+    
+    Returns:
+        List of 65,536 output values (0, 1, or 'd') for this chunk
     """
     if seed is not None:
-        random.seed(seed)
+        random.seed(seed + chunk_index)
     
-    # For dense functions, we'll use a simple pseudo-random generator
-    # that KMapSolver3D can work with efficiently
-    # Dense: 70% ones, 5% don't-care, 25% zeros
+    # Dense distribution: ~70% ones, ~5% don't-cares, ~25% zeros
+    outputs = []
+    for _ in range(CHUNK_SIZE):
+        r = random.random()
+        if r < 0.70:
+            outputs.append(1)
+        elif r < 0.75:
+            outputs.append('d')
+        else:
+            outputs.append(0)
     
-    # Create a function that generates the output based on the seed
-    # For practical purposes, we'll use a compact representation
-    rng_state = random.getstate()
-    
-    class DenseFunction:
-        def __init__(self, num_vars, rng_state):
-            self.num_vars = num_vars
-            self.size = 2**num_vars
-            self.rng_state = rng_state
-        
-        def __len__(self):
-            return self.size
-        
-        def __getitem__(self, index):
-            # Use index as seed modifier for deterministic pseudo-random generation
-            random.seed(hash((self.rng_state, index)) % (2**31))
-            r = random.random()
-            if r < 0.70:
-                return 1
-            elif r < 0.75:
-                return 'd'
-            else:
-                return 0
-    
-    return DenseFunction(num_vars, rng_state)
+    return outputs
 
 
-def generate_test_cases():
-    """Generate test cases for 32-bit and 64-bit K-maps (one dense case each)."""
-    random.seed(RANDOM_SEED)
-    test_cases = []
+def process_single_chunk(chunk_index, csv_writer, seed=None, verbose=False):
+    """
+    Process a single chunk: generate outputs, minimize with 16-variable K-map, write bitmasks to CSV.
     
-    for num_vars in [32, 64]:
-        bit_size = num_vars
-        size = 2**num_vars
-        print(f"\n  Generating {num_vars}-variable ({bit_size}-bit) test case...")
-        print(f"      Truth table size: {format_large_number(size)} entries")
-        print(f"      Using memory-efficient representation (dense distribution)")
+    Args:
+        chunk_index: Index of the current chunk (0 to 2^16 - 1 = 65,535)
+        csv_writer: CSV writer for intermediate bitmask storage
+        seed: Random seed for reproducibility
+        verbose: If True, print detailed feedback about sub-maps being solved
+    
+    Returns:
+        Dictionary with chunk statistics
+    """
+    # Print chunk being processed
+    if verbose:
+        print(f"\n{'-'*70}")
+        print(f"CHUNK {chunk_index:,} / {TOTAL_CHUNKS:,} (bits 0-15 = {format(chunk_index, '016b')})")
+        print(f"{'-'*70}")
+    
+    # Generate outputs for this chunk
+    chunk_outputs = generate_chunk_output(chunk_index, seed=seed)
+    
+    # Check if chunk is constant (all 0, all 1, or all don't-care)
+    defined_vals = [v for v in chunk_outputs if v != 'd']
+    if not defined_vals:
+        # All don't-care - skip minimization
+        if verbose:
+            print("  [x] All don't-care - skipping minimization")
+        del chunk_outputs
+        return {"chunk": chunk_index, "type": "all_dc", "terms": 0, "time": 0}
+    
+    if all(v == 0 for v in defined_vals):
+        # All zeros - no terms needed
+        if verbose:
+            print("  [x] All zeros - no terms")
+        del chunk_outputs
+        return {"chunk": chunk_index, "type": "all_zeros", "terms": 0, "time": 0}
+    
+    if all(v == 1 for v in defined_vals):
+        # All ones - single bitmask covering entire chunk
+        # For 16 variables, all bits set = 0xFFFF
+        bitmask = (chunk_index << NUM_KMAP_VARS) | 0xFFFF
+        csv_writer.writerow([chunk_index, hex(bitmask), "all_ones"])
+        if verbose:
+            print("  [+] All ones - constant function")
+        del chunk_outputs
+        return {"chunk": chunk_index, "type": "all_ones", "terms": 1, "time": 0}
+    
+    # Minimize using KMapSolver3D
+    if verbose:
+        print(f"  → Processing 16-variable K-map ({CHUNK_SIZE:,} entries)...")
+        print(f"     Solving {solver.num_maps if 'solver' in locals() else 2**(NUM_KMAP_VARS-4)} sub-maps (4×4 each)...")
+    
+    start_time = time.perf_counter()
+    
+    # Suppress verbose output
+    import io
+    import sys as sys_module
+    old_stdout = sys_module.stdout
+    sys_module.stdout = io.StringIO()
+    
+    solver = KMapSolver3D(NUM_KMAP_VARS, chunk_outputs)
+    terms, expr_str = solver.minimize_3d(form='sop')
+    
+    sys_module.stdout = old_stdout
+    
+    elapsed = time.perf_counter() - start_time
+    
+    # Access internal bitmask data from KMapSolver3D
+    # The solver stores all_map_results which contain bitmasks
+    # We need to extract these directly
+    term_count = 0
+    
+    # Get ESSENTIAL prime implicant bitmasks from all solved K-maps within this chunk
+    # KMapSolver3D._solve_single_kmap() returns only essential prime implicants
+    # Each essential prime implicant is a bitmask covering multiple minterms in the 16-var space
+    # Write directly to CSV without storing in RAM
+    
+    total_submaps = len(solver.kmaps)
+    solved_submaps = 0
+    
+    for extra_combo in sorted(solver.kmaps.keys()):
+        solved_submaps += 1
         
-        # Generate one random dense function
-        output_values = generate_random_dense_function(num_vars, seed=RANDOM_SEED + num_vars)
-        test_cases.append((num_vars, output_values, f"{bit_size}-bit: dense_random"))
-        print(f"      ✓ Test case generated")
+        if verbose:
+            extra_combo_int = int(extra_combo, 2) if extra_combo else 0
+            print(f"     Sub-map {solved_submaps}/{total_submaps}: bits 16-27 = {extra_combo} (decimal {extra_combo_int})", end="")
+        
+        # _solve_single_kmap returns ESSENTIAL prime implicants (not all primes)
+        result = solver._solve_single_kmap(extra_combo, form='sop')
+        extra_combo_int = int(extra_combo, 2) if extra_combo else 0
+        
+        # Each bitmask from the 4x4 map represents an ESSENTIAL prime implicant
+        # Write directly to CSV without storing in RAM
+        for idx, (bitmask_4x4, term_bits) in enumerate(zip(result['bitmasks'], result['terms_bits'])):
+            # term_bits is like "01-1" showing which of the 4 variables are fixed
+            # extra_combo shows which of the 12 extra variables are fixed
+            # Together they form a 16-variable ESSENTIAL prime implicant pattern
+            
+            # Write to CSV with structured representation
+            # Format: chunk_index | extra_combo | bitmask_4x4 | pattern | type
+            # Type = "essential_prime" indicates this is an essential prime implicant
+            csv_writer.writerow([
+                chunk_index, 
+                extra_combo,
+                hex(bitmask_4x4),
+                term_bits,
+                "essential_prime"
+            ])
+            term_count += 1
+        
+        if verbose:
+            print(f" → {len(result['bitmasks'])} essential prime implicants covering {sum(bin(bm).count('1') for bm in result['bitmasks'])} minterms")
     
-    return test_cases
+    if verbose:
+        print(f"  [+] Chunk complete: {term_count} essential prime implicants in {elapsed:.3f}s")
+    
+    # Explicitly clean up chunk data to free memory
+    del chunk_outputs
+    del solver
+    del terms
+    del expr_str
+    
+    return {
+        "chunk": chunk_index,
+        "type": "minimized",
+        "terms": term_count,
+        "time": elapsed,
+        "literals": 0  # Not tracking literals to save memory
+    }
+
+
+def perform_bitwise_union(csv_path):
+    """
+    Read all bitmasks from CSV and perform bitwise union to extract final terms.
+    
+    Args:
+        csv_path: Path to intermediate bitmask CSV file
+    
+    Returns:
+        List of final minimized terms
+    """
+    print(f"\n   • Reading bitmasks from CSV...")
+    bitmasks = []
+    
+    with open(csv_path, 'r', encoding='utf-8') as f:
+        reader = csv.reader(f)
+        next(reader)  # Skip header
+        
+        for row in reader:
+            chunk_idx, bitmask_hex, term_type = row
+            if term_type != "all_dc" and term_type != "all_zeros":
+                # Convert hex string to integer
+                bitmasks.append(int(bitmask_hex, 16))
+    
+    print(f"      Found {len(bitmasks)} bitmasks")
+    
+    # Perform bitwise union to merge overlapping terms
+    print(f"   • Performing bitwise union...")
+    
+    if not bitmasks:
+        return {"total_bitmasks": 0, "unique_bitmasks": 0, "final_terms": 0}
+    
+    # Remove duplicates
+    unique_bitmasks = sorted(set(bitmasks))
+    print(f"      Unique bitmasks: {len(unique_bitmasks)}")
+    
+    # Simple union: combine bitmasks that differ by only one bit
+    final_terms = []
+    processed = set()
+    
+    for mask in unique_bitmasks:
+        if mask in processed:
+            continue
+        
+        # Try to merge with other masks
+        merged = mask
+        processed.add(mask)
+        
+        for other_mask in unique_bitmasks:
+            if other_mask in processed:
+                continue
+            # Check if they differ by exactly one bit
+            diff = merged ^ other_mask
+            if bin(diff).count('1') == 1:
+                merged |= other_mask
+                processed.add(other_mask)
+        
+        final_terms.append(merged)
+    
+    print(f"      Final term count after union: {len(final_terms)}")
+    
+    return {
+        "total_bitmasks": len(bitmasks),
+        "unique_bitmasks": len(unique_bitmasks),
+        "final_terms": len(final_terms)
+    }
 
 
 # ============================================================================
 # TEST EXECUTION
 # ============================================================================
 
-def benchmark_case(test_num, num_vars, output_values, description, form='sop'):
-    """Run a single performance test case for KMapSolver3D."""
-    bit_size = num_vars
-    print(f"    Test {test_num}: {bit_size}-bit ({description})...", end=" ", flush=True)
+def run_chunked_32bit_test(seed=None, progress_interval=10000):
+    """
+    Run the complete 32-bit test using chunked processing.
     
-    # Suppress verbose output from minimize_3d
-    import io
-    import sys as sys_module
-    old_stdout = sys_module.stdout
-    sys_module.stdout = io.StringIO()
+    Process all 2^16 = 65,536 chunks sequentially:
+    - Generate outputs for each chunk (65,536 entries per chunk)
+    - Minimize using KMapSolver3D with 16 variables
+    - Write intermediate terms to CSV
+    - Consolidate terms across all chunks
     
-    solver = KMapSolver3D(num_vars, output_values)
-    kmap_func = lambda: solver.minimize_3d(form=form)
+    Args:
+        seed: Random seed for reproducibility
+        progress_interval: Print progress every N chunks (default 10,000)
+    
+    Returns:
+        Dictionary with test results
+    """
+    print(f"\n{'='*80}")
+    print("CHUNKED 32-BIT PROCESSING")
+    print(f"{'='*80}")
+    print(f"   Total chunks to process: {format_large_number(TOTAL_CHUNKS)}")
+    print(f"   Entries per chunk: {CHUNK_SIZE}")
+    print(f"   Total truth table entries: {format_large_number(2**NUM_VARS)}")
+    print(f"   Progress updates every: {format_large_number(progress_interval)} chunks")
+    
+    # Initialize intermediate CSV
+    print(f"\n   • Initializing intermediate bitmask CSV...")
+    with open(INTERMEDIATE_CSV, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(["chunk_index", "bitmask", "type"])
+    
+    print(f"      {INTERMEDIATE_CSV}")
+    
+    # Statistics tracking
+    stats = {
+        "total_chunks": TOTAL_CHUNKS,
+        "processed_chunks": 0,
+        "all_dc_chunks": 0,
+        "all_zeros_chunks": 0,
+        "all_ones_chunks": 0,
+        "minimized_chunks": 0,
+        "total_terms": 0,
+        "total_time": 0,
+        "chunk_times": []
+    }
     
     start_time = time.perf_counter()
-    t_kmap = benchmark_with_warmup(kmap_func, ())
-    terms, expr_str = kmap_func()
-    elapsed_time = time.perf_counter() - start_time
     
-    sys_module.stdout = old_stdout
+    print(f"\n   • Processing chunks...")
+    print(f"      Verbose mode: Showing detailed feedback for first 3 chunks\n")
     
-    # Compute metrics
-    kmap_terms, kmap_literals = count_literals(expr_str, form=form)
+    # Process chunks in batches to manage CSV writing
+    with open(INTERMEDIATE_CSV, 'a', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        
+        for chunk_idx in range(TOTAL_CHUNKS):
+            # Enable verbose output for first 3 chunks only
+            verbose = (chunk_idx < 3)
+            
+            # Process single chunk
+            chunk_result = process_single_chunk(chunk_idx, writer, seed=seed, verbose=True)
+            
+            # Force garbage collection after each chunk to free memory immediately
+            import gc
+            gc.collect()
+            
+            # Update statistics
+            stats["processed_chunks"] += 1
+            stats["total_terms"] += chunk_result.get("terms", 0)
+            
+            chunk_type = chunk_result["type"]
+            if chunk_type == "all_dc":
+                stats["all_dc_chunks"] += 1
+            elif chunk_type == "all_zeros":
+                stats["all_zeros_chunks"] += 1
+            elif chunk_type == "all_ones":
+                stats["all_ones_chunks"] += 1
+            elif chunk_type == "minimized":
+                stats["minimized_chunks"] += 1
+                stats["total_time"] += chunk_result.get("time", 0)
+                stats["chunk_times"].append(chunk_result.get("time", 0))
+            
+            # Progress update (standard mode)
+            if (chunk_idx + 1) % progress_interval == 0:
+                elapsed = time.perf_counter() - start_time
+                progress_pct = 100 * (chunk_idx + 1) / TOTAL_CHUNKS
+                chunks_per_sec = (chunk_idx + 1) / elapsed
+                eta = (TOTAL_CHUNKS - chunk_idx - 1) / chunks_per_sec if chunks_per_sec > 0 else 0
+                
+                print(f"\n      ═══ PROGRESS UPDATE ═══")
+                print(f"      Chunks: {format_large_number(chunk_idx + 1)} / {format_large_number(TOTAL_CHUNKS)} ({progress_pct:.2f}%)")
+                print(f"      Speed: {chunks_per_sec:.2f} chunks/s | Avg time/chunk: {elapsed/(chunk_idx+1):.3f}s")
+                print(f"      Terms so far: {format_large_number(stats['total_terms'])}")
+                print(f"      Minimized: {stats['minimized_chunks']:,} | Constant: {stats['all_ones_chunks']+stats['all_zeros_chunks']:,} | DC: {stats['all_dc_chunks']:,}")
+                print(f"      ETA: {format_time(eta)}\n")
     
-    # Detect constants
-    is_constant, constant_type = is_truly_constant_function(output_values)
-    result_category = constant_type if is_constant else "expression"
+    total_elapsed = time.perf_counter() - start_time
+    stats["total_elapsed"] = total_elapsed
     
-    if is_constant:
-        print(f"✓ {format_time(elapsed_time)} [CONSTANT: {constant_type}]")
-    else:
-        print(f"✓ {format_time(elapsed_time)} | Literals: {kmap_literals}")
+    print(f"\n   [+] All chunks processed in {format_time(total_elapsed)}")
+    print(f"      Average: {stats['processed_chunks']/total_elapsed:.1f} chunks/second")
     
-    return {
-        "index": test_num,
-        "num_vars": num_vars,
-        "bit_size": bit_size,
-        "description": description,
-        "form": form,
-        "result_category": result_category,
-        "is_constant": is_constant,
-        "t_kmap": t_kmap,
-        "elapsed_time": elapsed_time,
-        "kmap_literals": kmap_literals,
-        "kmap_terms": kmap_terms,
-    }
+    # Perform bitwise union
+    print(f"\n   • Performing final bitwise union...")
+    union_result = perform_bitwise_union(INTERMEDIATE_CSV)
+    stats["total_bitmasks"] = union_result["total_bitmasks"]
+    stats["unique_bitmasks"] = union_result["unique_bitmasks"]
+    stats["final_terms"] = union_result["final_terms"]
+    
+    return stats
 
 
 # ============================================================================
 # RESULTS EXPORT
 # ============================================================================
 
-def export_results_to_csv(all_results, csv_path):
-    """Export results to CSV file."""
-    print(f"\n   • Exporting to CSV...", end=" ", flush=True)
+def export_results_to_csv(stats, csv_path):
+    """Export test statistics to CSV file."""
+    print(f"\n   • Exporting statistics to CSV...", end=" ", flush=True)
     
     with open(csv_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         
         # Header
         writer.writerow([
-            "Index", "Variables", "Bit_Size", "Description", "Form",
-            "Category", "Is_Constant", "Time_KMap(s)", "Elapsed_Time(s)",
-            "KMap_Literals", "KMap_Terms"
+            "Metric", "Value"
         ])
         
         # Data rows
-        for r in all_results:
-            writer.writerow([
-                r["index"],
-                r["num_vars"],
-                r["bit_size"],
-                r["description"],
-                r["form"],
-                r["result_category"],
-                r["is_constant"],
-                f"{r['t_kmap']:.6f}",
-                f"{r['elapsed_time']:.6f}",
-                r["kmap_literals"],
-                r["kmap_terms"]
-            ])
+        writer.writerow(["Variables", NUM_VARS])
+        writer.writerow(["Bit_Size", "32-bit"])
+        writer.writerow(["Total_Chunks", stats["total_chunks"]])
+        writer.writerow(["Processed_Chunks", stats["processed_chunks"]])
+        writer.writerow(["All_DC_Chunks", stats["all_dc_chunks"]])
+        writer.writerow(["All_Zeros_Chunks", stats["all_zeros_chunks"]])
+        writer.writerow(["All_Ones_Chunks", stats["all_ones_chunks"]])
+        writer.writerow(["Minimized_Chunks", stats["minimized_chunks"]])
+        writer.writerow(["Total_Intermediate_Terms", stats["total_terms"]])
+        writer.writerow(["Total_Bitmasks", stats.get("total_bitmasks", 0)])
+        writer.writerow(["Unique_Bitmasks", stats.get("unique_bitmasks", 0)])
+        writer.writerow(["Final_Terms_After_Union", stats["final_terms"]])
+        writer.writerow(["Total_Elapsed_Time_s", f"{stats['total_elapsed']:.6f}"])
+        writer.writerow(["Total_Minimization_Time_s", f"{stats['total_time']:.6f}"])
+        
+        if stats["chunk_times"]:
+            writer.writerow(["Avg_Chunk_Time_s", f"{np.mean(stats['chunk_times']):.6f}"])
+            writer.writerow(["Min_Chunk_Time_s", f"{np.min(stats['chunk_times']):.6f}"])
+            writer.writerow(["Max_Chunk_Time_s", f"{np.max(stats['chunk_times']):.6f}"])
     
-    print("✓")
+    print("[+] Done")
     print(f"      {csv_path}")
 
 
-def save_performance_report(all_results, pdf_path):
+def save_performance_report(stats, pdf_path):
     """Generate comprehensive PDF performance report."""
     print(f"\n   • Generating PDF report...")
     
@@ -309,169 +566,171 @@ def save_performance_report(all_results, pdf_path):
             except:
                 pass
         
-        ax.text(0.5, 0.55, "KMapSolver3D Extreme Scale Report", 
+        ax.text(0.5, 0.55, "KMapSolver3D 32-bit Test Report", 
                 fontsize=26, fontweight='bold', ha='center')
-        ax.text(0.5, 0.49, "32-bit & 64-bit Boolean Minimization",
+        ax.text(0.5, 0.49, "Chunked Processing with CSV Storage",
                 fontsize=16, ha='center')
         
         ax.plot([0.2, 0.8], [0.45, 0.45], 'k-', linewidth=2, alpha=0.3)
         
-        ax.text(0.5, 0.38, f"32-bit: 2³² = {format_large_number(2**32)} entries",
+        ax.text(0.5, 0.38, f"32-bit: 2³² = {format_large_number(2**NUM_VARS)} entries",
                 fontsize=11, ha='center', family='monospace')
-        ax.text(0.5, 0.34, f"64-bit: 2⁶⁴ = {format_large_number(2**64)} entries",
+        ax.text(0.5, 0.34, f"Chunks: 2²⁸ = {format_large_number(TOTAL_CHUNKS)} chunks",
+                fontsize=11, ha='center', family='monospace')
+        ax.text(0.5, 0.30, f"Chunk size: 2⁴ = {CHUNK_SIZE} entries per chunk",
                 fontsize=11, ha='center', family='monospace')
         
-        ax.text(0.5, 0.25, f"Date: {datetime.datetime.now().strftime('%Y-%m-%d')}",
+        ax.text(0.5, 0.22, f"Date: {datetime.datetime.now().strftime('%Y-%m-%d')}",
                 fontsize=11, ha='center')
-        ax.text(0.5, 0.21, f"Random Seed: {RANDOM_SEED}",
+        ax.text(0.5, 0.18, f"Random Seed: {RANDOM_SEED}",
                 fontsize=11, ha='center')
-        ax.text(0.5, 0.17, f"Test Cases: {len(all_results)} (one dense case per bit size)",
+        ax.text(0.5, 0.14, f"Processing Time: {format_time(stats['total_elapsed'])}",
                 fontsize=11, ha='center')
         
-        ax.text(0.5, 0.08, "Testing extreme-scale Boolean minimization capabilities",
+        ax.text(0.5, 0.08, "Step-by-step truth table generation with efficient stack management",
                 fontsize=9, ha='center', style='italic', color='gray')
         ax.text(0.5, 0.04, f"© Stan's Technologies {datetime.datetime.now().year}",
                 fontsize=9, ha='center', color='gray')
         
         pdf.savefig(bbox_inches='tight')
         plt.close()
-        print("✓")
+        print("[+] Done")
         
-        # Performance Summary
-        print(f"      • Creating performance summary...", end=" ", flush=True)
-        
-        grouped = defaultdict(list)
-        for r in all_results:
-            grouped[r['num_vars']].append(r)
+        # Chunk Processing Statistics
+        print(f"      • Creating chunk processing statistics...", end=" ", flush=True)
         
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(11, 8.5))
-        fig.suptitle('32-bit & 64-bit Performance Analysis', fontsize=16, fontweight='bold')
+        fig.suptitle('32-bit Chunked Processing Analysis', fontsize=16, fontweight='bold')
         
-        bit_sizes = sorted(grouped.keys())
-        colors = ['#1f77b4', '#ff7f0e']
+        # Plot 1: Chunk Type Distribution
+        chunk_types = ['All DC', 'All Zeros', 'All Ones', 'Minimized']
+        chunk_counts = [
+            stats['all_dc_chunks'],
+            stats['all_zeros_chunks'],
+            stats['all_ones_chunks'],
+            stats['minimized_chunks']
+        ]
+        colors = ['#d62728', '#8c564b', '#2ca02c', '#1f77b4']
         
-        for idx, bit_size in enumerate(bit_sizes):
-            results = grouped[bit_size]
-            non_const = [r for r in results if not r.get('is_constant', False)]
-            
-            times = [r['elapsed_time'] for r in results]
-            literals = [r['kmap_literals'] for r in non_const] if non_const else [0]
-            
-            label = f"{bit_size}-bit"
-            
-            # Plot 1: Execution Time Distribution
-            ax1.hist(times, bins=10, alpha=0.7, label=label, color=colors[idx])
-            
-            # Plot 2: Mean Time
-            ax2.bar(idx, np.mean(times), color=colors[idx], alpha=0.7)
-            ax2.text(idx, np.mean(times), f"{format_time(np.mean(times))}", 
-                    ha='center', va='bottom', fontsize=9)
-            
-            # Plot 3: Literal Count Distribution
-            if non_const:
-                ax3.hist(literals, bins=10, alpha=0.7, label=label, color=colors[idx])
-            
-            # Plot 4: Mean Literals
-            if non_const:
-                ax4.bar(idx, np.mean(literals), color=colors[idx], alpha=0.7)
-                ax4.text(idx, np.mean(literals), f"{np.mean(literals):.1f}", 
-                        ha='center', va='bottom', fontsize=9)
+        wedges, texts, autotexts = ax1.pie(chunk_counts, labels=chunk_types, colors=colors,
+                                             autopct='%1.1f%%', startangle=90)
+        ax1.set_title('Chunk Type Distribution')
         
-        ax1.set_xlabel('Execution Time (s)')
-        ax1.set_ylabel('Frequency')
-        ax1.set_title('Execution Time Distribution')
-        ax1.legend()
-        ax1.grid(True, alpha=0.3)
+        # Plot 2: Processing Time Breakdown
+        time_data = [stats['total_time'], stats['total_elapsed'] - stats['total_time']]
+        time_labels = ['Minimization', 'Overhead']
+        ax2.pie(time_data, labels=time_labels, colors=['#1f77b4', '#ff7f0e'],
+                autopct='%1.1f%%', startangle=90)
+        ax2.set_title('Time Distribution')
         
-        ax2.set_ylabel('Mean Execution Time (s)')
-        ax2.set_title('Average Performance')
-        ax2.set_xticks(range(len(bit_sizes)))
-        ax2.set_xticklabels([f"{b}-bit" for b in bit_sizes])
-        ax2.grid(True, alpha=0.3, axis='y')
+        # Plot 3: Chunk Processing Time (if available)
+        if stats['chunk_times']:
+            ax3.hist(stats['chunk_times'], bins=50, color='#1f77b4', alpha=0.7, edgecolor='black')
+            ax3.set_xlabel('Chunk Processing Time (s)')
+            ax3.set_ylabel('Frequency')
+            ax3.set_title('Minimization Time Distribution')
+            ax3.grid(True, alpha=0.3)
+            ax3.axvline(np.mean(stats['chunk_times']), color='red', linestyle='--',
+                       label=f"Mean: {np.mean(stats['chunk_times']):.6f}s")
+            ax3.legend()
         
-        ax3.set_xlabel('Literal Count')
-        ax3.set_ylabel('Frequency')
-        ax3.set_title('Solution Complexity Distribution')
-        ax3.legend()
-        ax3.grid(True, alpha=0.3)
-        
-        ax4.set_ylabel('Mean Literal Count')
-        ax4.set_title('Average Solution Size')
-        ax4.set_xticks(range(len(bit_sizes)))
-        ax4.set_xticklabels([f"{b}-bit" for b in bit_sizes])
+        # Plot 4: Term Count Comparison
+        term_labels = ['Intermediate\nTerms', 'Final Terms\n(After Union)']
+        term_counts = [stats['total_terms'], stats['final_terms']]
+        bars = ax4.bar(term_labels, term_counts, color=['#ff7f0e', '#2ca02c'], alpha=0.7)
+        ax4.set_ylabel('Term Count')
+        ax4.set_title('Term Count: Intermediate vs Final')
         ax4.grid(True, alpha=0.3, axis='y')
+        
+        for bar, count in zip(bars, term_counts):
+            height = bar.get_height()
+            ax4.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{format_large_number(count)}',
+                    ha='center', va='bottom', fontsize=9)
         
         plt.tight_layout()
         pdf.savefig(bbox_inches='tight')
         plt.close()
-        print("✓")
+        print("[+] Done")
         
         # Detailed Statistics Page
-        print(f"      • Creating statistics page...", end=" ", flush=True)
+        print(f"      • Creating detailed statistics page...", end=" ", flush=True)
         
         fig, ax = plt.subplots(figsize=(8.5, 11))
         ax.axis('off')
         
         y_pos = 0.95
-        ax.text(0.5, y_pos, 'Detailed Performance Statistics', 
+        ax.text(0.5, y_pos, '32-bit Performance Statistics', 
                 fontsize=16, fontweight='bold', ha='center')
         y_pos -= 0.08
         
-        for bit_size in bit_sizes:
-            results = grouped[bit_size]
-            non_const = [r for r in results if not r.get('is_constant', False)]
-            const_count = len(results) - len(non_const)
-            
-            times = [r['elapsed_time'] for r in results]
-            literals = [r['kmap_literals'] for r in non_const] if non_const else [0]
-            
-            ax.text(0.5, y_pos, f'{bit_size}-bit Performance ({2**bit_size:,} entries)', 
-                    fontsize=14, fontweight='bold', ha='center')
-            y_pos -= 0.05
-            
-            stats_text = f"""
-Test Cases: {len(results)}
-  • Constant Functions: {const_count} ({100*const_count/len(results):.1f}%)
-  • Non-constant: {len(non_const)} ({100*len(non_const)/len(results):.1f}%)
+        stats_text = f"""
+CHUNKED PROCESSING SUMMARY
+{'='*70}
 
-Execution Time:
-  • Mean: {format_time(np.mean(times))}
-  • Median: {format_time(np.median(times))}
-  • Min: {format_time(np.min(times))}
-  • Max: {format_time(np.max(times))}
-  • Std Dev: {np.std(times):.3f}s
+Configuration:
+  • Variables: {NUM_VARS} (32-bit architecture)
+  • K-map Variables: {NUM_KMAP_VARS}
+  • Extra Variables per Chunk: {NUM_EXTRA_VARS}
+  • Chunk Size: {CHUNK_SIZE} entries (2^{NUM_KMAP_VARS})
+  • Total Chunks: {format_large_number(TOTAL_CHUNKS)} (2^{NUM_EXTRA_VARS})
+  • Truth Table Size: {format_large_number(2**NUM_VARS)} entries (2^{NUM_VARS})
+
+Chunk Processing Results:
+  • Processed Chunks: {format_large_number(stats['processed_chunks'])}
+  • All Don't-Care: {format_large_number(stats['all_dc_chunks'])} ({100*stats['all_dc_chunks']/stats['total_chunks']:.2f}%)
+  • All Zeros: {format_large_number(stats['all_zeros_chunks'])} ({100*stats['all_zeros_chunks']/stats['total_chunks']:.2f}%)
+  • All Ones: {format_large_number(stats['all_ones_chunks'])} ({100*stats['all_ones_chunks']/stats['total_chunks']:.2f}%)
+  • Minimized: {format_large_number(stats['minimized_chunks'])} ({100*stats['minimized_chunks']/stats['total_chunks']:.2f}%)
+
+Time Statistics:
+  • Total Elapsed Time: {format_time(stats['total_elapsed'])}
+  • Minimization Time: {format_time(stats['total_time'])}
+  • Overhead Time: {format_time(stats['total_elapsed'] - stats['total_time'])}
+  • Average Chunks/Second: {stats['processed_chunks']/stats['total_elapsed']:.2f}
 """
-            
-            if non_const:
-                stats_text += f"""
-Solution Complexity (Non-constant):
-  • Mean Literals: {np.mean(literals):.2f}
-  • Median Literals: {np.median(literals):.2f}
-  • Min Literals: {int(np.min(literals))}
-  • Max Literals: {int(np.max(literals))}
+
+        if stats['chunk_times']:
+            stats_text += f"""
+  • Avg Chunk Time: {np.mean(stats['chunk_times']):.6f}s
+  • Min Chunk Time: {np.min(stats['chunk_times']):.6f}s
+  • Max Chunk Time: {np.max(stats['chunk_times']):.6f}s
+  • Std Dev: {np.std(stats['chunk_times']):.6f}s
 """
-            
-            ax.text(0.1, y_pos, stats_text, fontsize=10, va='top', family='monospace')
-            y_pos -= 0.35
-            
-            if y_pos < 0.15:
-                break
+
+        stats_text += f"""
+
+Term Statistics:
+  • Total Intermediate Terms: {format_large_number(stats['total_terms'])}
+  • Final Terms (After Union): {format_large_number(stats['final_terms'])}
+  • Reduction: {100*(1-stats['final_terms']/stats['total_terms']) if stats['total_terms'] > 0 else 0:.2f}%
+
+Algorithm Details:
+  • Step-by-step truth table generation
+  • Chunk-wise K-map minimization
+  • CSV-based intermediate storage
+  • Bitwise union for final term extraction
+  • Efficient stack management (completed chunks discarded)
+
+Random Seed: {RANDOM_SEED}
+Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
         
-        ax.text(0.5, 0.05, f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", 
-                fontsize=8, ha='center', color='gray')
+        ax.text(0.05, y_pos, stats_text, fontsize=9, va='top', family='monospace')
         
         pdf.savefig(bbox_inches='tight')
         plt.close()
-        print("✓")
+        print("[+] Done")
         
         # Set PDF metadata
         d = pdf.infodict()
-        d['Title'] = 'KMapSolver3D 32-bit & 64-bit Performance Report'
+        d['Title'] = 'KMapSolver3D 32-bit Chunked Processing Report'
         d['Author'] = "Stan's Technologies"
-        d['Subject'] = 'Extreme Scale Boolean Minimization Performance'
-        d['Keywords'] = '32-bit, 64-bit, Boolean minimization, K-map, performance'
+        d['Subject'] = '32-bit Boolean Minimization with Chunked Processing'
+        d['Keywords'] = '32-bit, Boolean minimization, K-map, chunked processing, CSV storage'
         d['CreationDate'] = datetime.datetime.now()
     
+    print(f"      [+] PDF report saved")
     print(f"      {pdf_path}")
 
 
@@ -482,83 +741,76 @@ Solution Complexity (Non-constant):
 def main():
     """Main test execution function."""
     print("=" * 80)
-    print("KMapSolver3D EXTREME SCALE TEST (32-bit & 64-bit)")
+    print("KMapSolver3D 32-BIT CHUNKED PROCESSING TEST")
     print("=" * 80)
-    print("\n⚠️  WARNING: These tests involve extremely large truth tables:")
-    print(f"    32-bit: {format_large_number(2**32)} entries (4.3 billion)")
-    print(f"    64-bit: {format_large_number(2**64)} entries (18.4 quintillion)")
-    print("\n    Using memory-efficient representation (one dense case per bit size)")
-    print("    Execution may take considerable time.")
+    print("\n[*] Test Configuration:")
+    print(f"    Architecture: 32-bit")
+    print(f"    Truth Table Size: {format_large_number(2**NUM_VARS)} entries")
+    print(f"    Processing Strategy: Chunked (16-variable K-maps per chunk)")
+    print(f"    Chunk Count: {format_large_number(TOTAL_CHUNKS)}")
+    print(f"    Chunk Size: {format_large_number(CHUNK_SIZE)} entries per chunk")
+    print(f"    K-map Variables: {NUM_KMAP_VARS}")
+    print(f"    Extra Variables (chunk selectors): {NUM_EXTRA_VARS}")
+    
+    print("\n[!] NOTE: This test processes the truth table in chunks to manage memory efficiently.")
+    print("    Each chunk is minimized, results written to CSV, then discarded.")
+    print("    Final terms extracted via bitwise union of all chunk results.")
+    print("    Execution may take considerable time due to the large number of chunks.")
     
     # Set random seed
     random.seed(RANDOM_SEED)
     np.random.seed(RANDOM_SEED)
-    print(f"\n🎲 Random seed: {RANDOM_SEED}")
+    print(f"\n[#] Random seed: {RANDOM_SEED}")
     
     # Create outputs directory
     os.makedirs(OUTPUTS_DIR, exist_ok=True)
-    print(f"📁 Output directory: {OUTPUTS_DIR}")
+    print(f"[>] Output directory: {OUTPUTS_DIR}")
     
-    # Generate test cases
-    print(f"\n📋 Generating test suite...")
-    test_cases = generate_test_cases()
-    print(f"\n   Total: {len(test_cases)} test cases")
+    # Run chunked processing test
+    print(f"\n[~] Starting chunked 32-bit test...")
     
-    # Run tests
-    print(f"\n⚙️  Running extreme scale performance tests...")
-    print(f"\n{'='*80}")
-    all_results = []
-    
-    grouped_cases = defaultdict(list)
-    for num_vars, output_values, description in test_cases:
-        grouped_cases[num_vars].append((output_values, description))
-    
-    for var_num, cases in sorted(grouped_cases.items()):
-        bit_size = var_num
-        print(f"\n  {bit_size}-bit K-maps ({len(cases)} cases)")
-        print(f"  " + "-" * 60)
-        
-        for idx, (output_values, description) in enumerate(cases, 1):
-            try:
-                result = benchmark_case(
-                    len(all_results) + 1,
-                    var_num,
-                    output_values,
-                    description,
-                    form='sop'
-                )
-                all_results.append(result)
-            except Exception as e:
-                print(f"    ⚠️  Error in test {idx}: {e}")
-                import traceback
-                traceback.print_exc()
-                continue
+    try:
+        stats = run_chunked_32bit_test(seed=RANDOM_SEED, progress_interval=10000)
+    except Exception as e:
+        print(f"\n[ERROR] ERROR during chunked processing: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
     
     # Export results
     print(f"\n{'='*80}")
     print("EXPORTING RESULTS")
     print(f"{'='*80}")
     
-    export_results_to_csv(all_results, RESULTS_CSV)
-    save_performance_report(all_results, REPORT_PDF)
+    export_results_to_csv(stats, RESULTS_CSV)
+    save_performance_report(stats, REPORT_PDF)
     
     # Final summary
     print(f"\n{'='*80}")
-    print("✅ EXTREME SCALE TEST COMPLETE")
+    print("[SUCCESS] 32-BIT CHUNKED PROCESSING TEST COMPLETE")
     print(f"{'='*80}")
-    print(f"📊 Total tests: {len(all_results)}")
-    constant_count = sum(1 for r in all_results if r.get('is_constant', False))
-    print(f"   Constant functions: {constant_count} ({100*constant_count/len(all_results):.1f}%)")
-    print(f"   Non-constant: {len(all_results) - constant_count}")
+    print(f"[*] Processing Statistics:")
+    print(f"   Total chunks: {format_large_number(stats['total_chunks'])}")
+    print(f"   Processed: {format_large_number(stats['processed_chunks'])} (100%)")
+    print(f"   Minimized chunks: {format_large_number(stats['minimized_chunks'])} ({100*stats['minimized_chunks']/stats['total_chunks']:.2f}%)")
+    print(f"   Constant chunks: {format_large_number(stats['all_dc_chunks'] + stats['all_zeros_chunks'] + stats['all_ones_chunks'])} ({100*(stats['all_dc_chunks'] + stats['all_zeros_chunks'] + stats['all_ones_chunks'])/stats['total_chunks']:.2f}%)")
     
-    # Time statistics
-    total_time = sum(r['elapsed_time'] for r in all_results)
-    print(f"\n⏱️  Total execution time: {format_time(total_time)}")
-    print(f"   Average per test: {format_time(total_time/len(all_results))}")
+    print(f"\n[*] Time Statistics:")
+    print(f"   Total elapsed: {format_time(stats['total_elapsed'])}")
+    print(f"   Minimization time: {format_time(stats['total_time'])}")
+    print(f"   Overhead: {format_time(stats['total_elapsed'] - stats['total_time'])}")
+    print(f"   Average: {stats['processed_chunks']/stats['total_elapsed']:.2f} chunks/second")
     
-    print(f"\n📂 Outputs:")
-    print(f"   • CSV results:  {RESULTS_CSV}")
-    print(f"   • PDF report:   {REPORT_PDF}")
+    print(f"\n[*] Term Statistics:")
+    print(f"   Intermediate terms: {format_large_number(stats['total_terms'])}")
+    print(f"   Final terms: {format_large_number(stats['final_terms'])}")
+    if stats['total_terms'] > 0:
+        print(f"   Reduction: {100*(1-stats['final_terms']/stats['total_terms']):.2f}%")
+    
+    print(f"\n[*] Output Files:")
+    print(f"   • Statistics CSV:    {RESULTS_CSV}")
+    print(f"   • Intermediate CSV:  {INTERMEDIATE_CSV}")
+    print(f"   • PDF Report:        {REPORT_PDF}")
     print(f"\n{'='*80}")
     
     return True
