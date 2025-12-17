@@ -38,7 +38,7 @@ from scipy import stats
 from scipy.optimize import curve_fit
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'src')))
-from stanlogic.kmapsolver3D import KMapSolver3D
+from stanlogic import KMapSolver3D
 
 # ============================================================================
 # CONFIGURATION

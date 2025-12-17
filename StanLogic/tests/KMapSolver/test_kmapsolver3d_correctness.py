@@ -37,7 +37,7 @@ from tabulate import tabulate
 # Add parent directory to path to import stanlogic
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'src')))
 
-from stanlogic.kmapsolver3D import KMapSolver3D
+from stanlogic import KMapSolver3D
 import sympy
 
 # ============================================================================

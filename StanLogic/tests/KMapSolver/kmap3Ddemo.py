@@ -1,4 +1,4 @@
-from stanlogic.kmapsolver3D import KMapSolver3D
+from stanlogic import KMapSolver3D
 import random
 
 # Example: 8-variable K-map with random pattern
