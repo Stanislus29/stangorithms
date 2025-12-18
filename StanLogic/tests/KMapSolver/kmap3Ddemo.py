@@ -4,7 +4,7 @@ import random
 # Example: 8-variable K-map with random pattern
 print("EXAMPLE: 16-VARIABLE K-MAP (Random Pattern)")
 print("="*60)
-num_vars = 16
+num_vars = 8
 
 # Generate random output values (256 total for 8 variables)
 # Set random seed for reproducibility

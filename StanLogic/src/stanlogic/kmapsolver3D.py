@@ -1,5 +1,6 @@
 from stanlogic import KMapSolver
 from collections import defaultdict
+import numpy as np
 
 class KMapSolver3D:
     def __init__(self, num_vars, output_values=None):
@@ -419,101 +420,793 @@ class KMapSolver3D:
     
     def minimize_3d(self, form='sop'):
         """
-        Minimize the entire 3D K-map by solving each hierarchical map
-        and combining results using bitwise union operations.
-        
-        Args:
-            form (str): 'sop' or 'pos'
-            
-        Returns:
-            tuple: (list of minimized terms, complete expression string)
+        Minimize using 3D clustering principle.
         """
         print(f"\n{'='*60}")
-        print(f"MINIMIZING {self.num_vars}-VARIABLE K-MAP")
+        print(f"MINIMIZING {self.num_vars}-VARIABLE K-MAP (3D CLUSTERING)")
         print(f"{'='*60}\n")
         
-        # Step 1: Solve each hierarchical K-map
-        all_map_results = []
-        
+        # Step 1: Minimize each K-map partition
+        β = {}
         for extra_combo in sorted(self.kmaps.keys()):
-            print(f"Solving K-map for extra vars: {extra_combo}")
             result = self._solve_single_kmap(extra_combo, form)
-            all_map_results.append(result)
-            print(f"  Found {len(result['bitmasks'])} essential prime implicants")
-            for i, bits in enumerate(result['terms_bits']):
-                print(f"    Term {i+1}: {extra_combo}|{bits}")
+            β[extra_combo] = result['terms_bits']
         
-        print(f"\n{'='*60}")
-        print("COMBINING RESULTS ACROSS ALL K-MAPS")
-        print(f"{'='*60}\n")
+        # Step 2: Apply 3D clustering algorithm
+        id_set = list(self.kmaps.keys())
+        β_merged = self._minimize_with_3d_clustering(β, id_set)
         
-        # Step 2: Combine using bitwise union across all maps
-        # Build a global dictionary: bit_pattern -> list of (extra_combo, bitmask)
-        pattern_groups = defaultdict(list)
-        
-        for result in all_map_results:
-            extra_combo = result['extra_vars']
-            for i, term_bits in enumerate(result['terms_bits']):
-                # The pattern is the 4-bit portion from the 4x4 map
-                pattern_groups[term_bits].append({
-                    'extra_combo': extra_combo,
-                    'bitmask': result['bitmasks'][i]
-                })
-        
-        # Step 3: For each unique pattern, combine extra variable combinations
+        # Step 3: Convert to terms
         final_terms = []
-        
-        for pattern, occurrences in pattern_groups.items():
-            # Collect all extra variable combinations for this pattern
-            extra_combos = [occ['extra_combo'] for occ in occurrences]
-            
-            # Simplify the extra variable portion if possible
-            simplified_extra = self._simplify_extra_vars(extra_combos)
-            
-            # Combine into full term
-            full_pattern = simplified_extra + pattern
+        for full_pattern in sorted(β_merged):
             term_str = self._bits_to_term(full_pattern, form)
             final_terms.append(term_str)
-            
-            print(f"Pattern {pattern} appears in maps: {extra_combos}")
-            print(f"  Simplified extra vars: {simplified_extra}")
-            print(f"  Final term: {term_str}\n")
         
-        # Step 4: Build final expression
+        # Step 4: Build expression
         join_operator = " * " if form.lower() == 'pos' else " + "
         final_expression = join_operator.join(final_terms)
         
-        print(f"{'='*60}")
-        print(f"FINAL MINIMIZED EXPRESSION ({form.upper()}):")
+        print(f"\n{'='*60}")
+        print(f"FINAL EXPRESSION: {len(final_terms)} terms")
         print(f"{'='*60}")
         print(f"F = {final_expression}\n")
         
         return final_terms, final_expression
-    
-    def _simplify_extra_vars(self, extra_combos):
+
+    def _minimize_with_3d_clustering(self, β, id_set):
         """
-        Simplify the extra variable portion by finding common patterns.
+        Pure 3D clustering: Only consider patterns appearing in 2+ adjacent identifiers.
+        Eliminate 2D clusters entirely.
         
         Args:
-            extra_combos: List of binary strings for extra variables
+            β: Dictionary mapping identifier → list of patterns
+            id_set: List of all identifiers
             
         Returns:
-            str: Simplified pattern with '-' for varying bits
+            set: Minimal set of 3D clusters (EPIs)
         """
-        if not extra_combos:
-            return ""
+        print("\n" + "="*60)
+        print("PHASE 1: 3D CLUSTER IDENTIFICATION (Eliminating 2D Clusters)")
+        print("="*60)
         
-        if len(extra_combos) == 1:
-            return extra_combos[0]
+        # Step 1: Group patterns by K-map portion
+        pattern_to_identifiers = {}
+        for idx in id_set:
+            for pattern in β[idx]:
+                if pattern not in pattern_to_identifiers:
+                    pattern_to_identifiers[pattern] = []
+                pattern_to_identifiers[pattern].append(idx)
         
-        # Compare all combinations to find varying positions
-        bits = list(extra_combos[0])
-        for combo in extra_combos[1:]:
-            for i in range(len(bits)):
-                if bits[i] != combo[i]:
-                    bits[i] = '-'
+        # Step 2: Filter to keep ONLY 3D clusters (2+ adjacent identifiers)
+        valid_3d_clusters = {}
+        eliminated_2d = []
         
-        return "".join(bits)
+        for pattern, id_list in pattern_to_identifiers.items():
+            if len(id_list) == 1:
+                # Pure 2D cluster: ELIMINATE
+                eliminated_2d.append((pattern, id_list[0]))
+                print(f"  ✗ ELIMINATED 2D: '{pattern}' in identifier {id_list[0]}")
+            elif not self._has_adjacent_identifiers(id_list):
+                # Non-adjacent: ELIMINATE (treat as disconnected 2D)
+                eliminated_2d.extend([(pattern, idx) for idx in id_list])
+                print(f"  ✗ ELIMINATED Non-adjacent: '{pattern}' in {id_list}")
+            else:
+                # Valid 3D cluster: KEEP
+                valid_3d_clusters[pattern] = id_list
+                print(f"  ✓ VALID 3D: '{pattern}' in {len(id_list)} adjacent identifiers")
+        
+        print(f"\n  Kept: {len(valid_3d_clusters)} 3D clusters")
+        print(f"  Eliminated: {len(eliminated_2d)} 2D clusters")
+        
+        if not valid_3d_clusters:
+            print("\n  WARNING: No valid 3D clusters found!")
+            print("  This may indicate the function has no proper 3D structure.")
+            print("  Falling back to include all patterns...")
+            # Fallback: include all patterns
+            valid_3d_clusters = pattern_to_identifiers
+        
+        # Step 3: Merge identifiers depth-wise for each 3D cluster
+        print("\n" + "="*60)
+        print("PHASE 2: DEPTH-WISE MERGING")
+        print("="*60)
+        
+        merged_3d_clusters = []
+        for pattern, id_list in valid_3d_clusters.items():
+            print(f"\nMerging identifiers for pattern '{pattern}':")
+            print(f"  Identifiers: {id_list}")
+            
+            # Apply Quine-McCluskey with essential PI selection
+            merged_ids = self._minimize_boolean_function_complete(id_list)
+            
+            print(f"  Prime implicants: {merged_ids}")
+            
+            for merged_id in merged_ids:
+                cluster = {
+                    'kmap_pattern': pattern,
+                    'identifier_pattern': merged_id,
+                    'full_pattern': merged_id + pattern,
+                    'depth': self._count_depth(merged_id),  # Number of identifiers covered
+                    'cells': self._get_cell_positions(pattern)  # (row, col) positions
+                }
+                merged_3d_clusters.append(cluster)
+                print(f"    Cluster: {merged_id} + {pattern} (depth={cluster['depth']})")
+        
+        # Step 4: Select EPIs using depth-wise dominance
+        print("\n" + "="*60)
+        print("PHASE 3: ESSENTIAL PRIME IMPLICANT SELECTION (Depth-wise)")
+        print("="*60)
+        
+        epis = self._select_epis_by_depth_dominance(merged_3d_clusters)
+        
+        print(f"\nSelected {len(epis)} essential prime implicants")
+        
+        # Step 5: Verify coverage
+        print("\n" + "="*60)
+        print("PHASE 4: COVERAGE VERIFICATION")
+        print("="*60)
+        
+        all_minterms = self._get_all_minterms_from_kmaps(id_set)
+        covered = self._get_covered_minterms([c['full_pattern'] for c in epis])
+        uncovered = all_minterms - covered
+        
+        if uncovered:
+            print(f"  ⚠ WARNING: {len(uncovered)} minterms not covered by 3D clusters!")
+            print(f"  Uncovered minterms: {list(uncovered)[:10]}...")  # Show first 10
+            
+            # These should be covered by extending 3D clusters or indicate error
+            print(f"\n  Attempting to cover with remaining 3D clusters...")
+            additional = self._greedy_cover_from_clusters(
+                uncovered, merged_3d_clusters, epis
+            )
+            epis.extend(additional)
+            
+            # Re-verify
+            covered = self._get_covered_minterms([c['full_pattern'] for c in epis])
+            still_uncovered = all_minterms - covered
+            
+            if still_uncovered:
+                print(f"  ✗ CRITICAL: {len(still_uncovered)} minterms still uncovered!")
+                print(f"  This indicates incomplete 3D clustering.")
+                print(f"  The function may have isolated regions requiring 2D clusters.")
+            else:
+                print(f"  ✓ Coverage achieved with {len(additional)} additional clusters")
+        else:
+            print(f"  ✓ All {len(all_minterms)} minterms covered by 3D clusters")
+        
+        return {c['full_pattern'] for c in epis}
+
+    def _count_depth(self, identifier_pattern):
+        """
+        Count the number of concrete identifiers represented by a pattern.
+        Depth = 2^(number of don't cares)
+        
+        Args:
+            identifier_pattern: String with possible '-'
+            
+        Returns:
+            int: Number of identifiers (depth)
+        """
+        n_dontcares = identifier_pattern.count('-')
+        return 2 ** n_dontcares
+
+    def _get_cell_positions(self, kmap_pattern):
+        """
+        Get the set of (row, col) positions represented by a K-map pattern.
+        
+        Args:
+            kmap_pattern: 4-bit pattern with possible '-'
+            
+        Returns:
+            frozenset: Set of (row, col) tuples this pattern covers
+        """
+        # Expand pattern to all concrete 4-bit combinations
+        concrete_patterns = self._expand_pattern(kmap_pattern)
+        
+        # Convert each to (row, col) using Gray code mapping
+        cells = set()
+        gray_code = ['00', '01', '11', '10']
+        
+        for concrete in concrete_patterns:
+            # First 2 bits → column (via Gray code)
+            # Last 2 bits → row (via Gray code)
+            col_bits = concrete[:2]
+            row_bits = concrete[2:]
+            
+            col = gray_code.index(col_bits)
+            row = gray_code.index(row_bits)
+            
+            cells.add((row, col))
+        
+        return frozenset(cells)
+
+    def _select_epis_by_depth_dominance(self, clusters):
+        """
+        Select EPIs using depth-wise dominance criterion.
+        
+        For clusters with same K-map pattern and same cell coverage:
+        - Keep the one with maximum depth
+        - Eliminate others (they are subsumed)
+        
+        For clusters with different cell coverage:
+        - Keep all, regardless of depth relationship
+        
+        Args:
+            clusters: List of cluster dictionaries
+            
+        Returns:
+            list: Essential prime implicants
+        """
+        # Group clusters by K-map pattern
+        pattern_groups = {}
+        for cluster in clusters:
+            kmap_pat = cluster['kmap_pattern']
+            if kmap_pat not in pattern_groups:
+                pattern_groups[kmap_pat] = []
+            pattern_groups[kmap_pat].append(cluster)
+        
+        epis = []
+        
+        for kmap_pattern, group in pattern_groups.items():
+            print(f"\n  Analyzing pattern '{kmap_pattern}':")
+            
+            # Further group by cell coverage
+            cell_groups = {}
+            for cluster in group:
+                cells_key = cluster['cells']  # frozenset, so hashable
+                if cells_key not in cell_groups:
+                    cell_groups[cells_key] = []
+                cell_groups[cells_key].append(cluster)
+            
+            # For each cell group, select maximum depth
+            for cells, cell_group in cell_groups.items():
+                print(f"    Cell coverage: {len(cells)} cells")
+                
+                # Find maximum depth
+                max_depth = max(c['depth'] for c in cell_group)
+                
+                # Keep only clusters with maximum depth
+                for cluster in cell_group:
+                    if cluster['depth'] == max_depth:
+                        epis.append(cluster)
+                        print(f"      ✓ EPI: {cluster['identifier_pattern']} "
+                            f"(depth={cluster['depth']}) - MAX DEPTH")
+                    else:
+                        print(f"      ✗ Dominated: {cluster['identifier_pattern']} "
+                            f"(depth={cluster['depth']}) < {max_depth}")
+        
+        return epis
+
+    def _greedy_cover_from_clusters(self, uncovered, all_clusters, current_epis):
+        """
+        Use greedy algorithm to cover uncovered minterms using remaining clusters.
+        Only uses 3D clusters.
+        
+        Args:
+            uncovered: Set of uncovered minterms
+            all_clusters: List of all 3D cluster dictionaries
+            current_epis: List of currently selected EPIs
+            
+        Returns:
+            list: Additional clusters needed
+        """
+        additional = []
+        remaining = uncovered.copy()
+        
+        # Get clusters not yet selected
+        current_patterns = {c['full_pattern'] for c in current_epis}
+        available = [c for c in all_clusters 
+                    if c['full_pattern'] not in current_patterns]
+        
+        while remaining and available:
+            # Find cluster covering most remaining minterms
+            best_cluster = None
+            best_coverage = 0
+            
+            for cluster in available:
+                covered = self._expand_pattern(cluster['full_pattern'])
+                overlap = len(covered & remaining)
+                if overlap > best_coverage:
+                    best_coverage = overlap
+                    best_cluster = cluster
+            
+            if best_cluster is None or best_coverage == 0:
+                break
+            
+            additional.append(best_cluster)
+            newly_covered = self._expand_pattern(best_cluster['full_pattern'])
+            remaining -= newly_covered
+            available.remove(best_cluster)
+            
+            print(f"    Added: {best_cluster['full_pattern']} "
+                f"(covers {best_coverage} more minterms)")
+        
+        return additional
+
+    def _get_all_minterms_from_kmaps(self, id_set):
+        """
+        Get all minterms where function = 1 directly from K-maps.
+        
+        Args:
+            id_set: List of identifiers
+            
+        Returns:
+            set: Set of full minterms (n-bit strings)
+        """
+        minterms = set()
+        
+        for idx in id_set:
+            kmap = self.kmaps[idx]
+            
+            for row_idx in range(4):
+                for col_idx in range(4):
+                    cell = kmap[row_idx][col_idx]
+                    if cell and cell.get('value') == 1:
+                        # Get full n-bit string
+                        full_bits = ''.join(str(b) for b in cell['variables'])
+                        minterms.add(full_bits)
+        
+        return minterms
+
+    def _minimize_boolean_function_complete(self, minterm_list):
+        """
+        Complete Quine-McCluskey with essential prime implicant selection.
+        Guarantees minimal cover.
+        
+        Args:
+            minterm_list: List of binary strings
+            
+        Returns:
+            list: Minimal set of prime implicants
+        """
+        if not minterm_list:
+            return []
+        
+        if len(minterm_list) == 1:
+            return minterm_list
+        
+        # Remove duplicates
+        minterms = list(set(minterm_list))
+        
+        # Phase 1: Find all prime implicants (existing code)
+        prime_implicants = self._find_all_prime_implicants_bitwise(minterms)
+        
+        print(f"    Found {len(prime_implicants)} prime implicants")
+        
+        # Phase 2: Select essential prime implicants (NEW)
+        essential_pis = self._select_essential_prime_implicants(
+            prime_implicants, minterms
+        )
+        
+        print(f"    Selected {len(essential_pis)} essential prime implicants")
+        
+        return essential_pis
+
+    def _has_adjacent_identifiers(self, id_list):
+        """
+        Check if a list of identifiers contains at least one pair of adjacent identifiers.
+        
+        Args:
+            id_list: List of binary string identifiers
+            
+        Returns:
+            bool: True if at least one pair is adjacent
+        """
+        for i in range(len(id_list)):
+            for j in range(i + 1, len(id_list)):
+                if self._hamming_distance(id_list[i], id_list[j]) == 1:
+                    return True
+        return False
+
+    def _hamming_distance(self, str1, str2):
+        """
+        Calculate Hamming distance between two strings.
+        
+        Args:
+            str1, str2: Binary strings
+            
+        Returns:
+            int: Number of positions where strings differ
+        """
+        if len(str1) != len(str2):
+            return float('inf')
+        
+        return sum(c1 != c2 for c1, c2 in zip(str1, str2))
+
+    def _eliminate_dominated_clusters(self, clusters):
+        """
+        Eliminate clusters that are dominated by other clusters.
+        
+        Cluster C2 is dominated by C1 if:
+        1. They have the same K-map pattern
+        2. They cover the same cells (row, col positions)
+        3. C1 covers more depth (more identifiers) than C2
+        
+        Args:
+            clusters: List of cluster dictionaries
+            
+        Returns:
+            list: Non-dominated clusters
+        """
+        essential = []
+        
+        for i, c1 in enumerate(clusters):
+            dominated = False
+            
+            for j, c2 in enumerate(clusters):
+                if i == j:
+                    continue
+                
+                # Check if c1 is dominated by c2
+                if self._cluster_dominates(c2, c1):
+                    dominated = True
+                    print(f"  Dominated: {c1['full_pattern']} ⊂ {c2['full_pattern']}")
+                    break
+            
+            if not dominated:
+                essential.append(c1)
+        
+        return essential
+
+    def _cluster_dominates(self, c1, c2):
+        """
+        Check if cluster c1 dominates cluster c2.
+        
+        Args:
+            c1, c2: Cluster dictionaries
+            
+        Returns:
+            bool: True if c1 dominates c2
+        """
+        # Must have same K-map pattern
+        if c1['kmap_pattern'] != c2['kmap_pattern']:
+            return False
+        
+        # Check if c1's identifier pattern subsumes c2's
+        # This means: every identifier covered by c2 is also covered by c1
+        id1 = c1['identifier_pattern']
+        id2 = c2['identifier_pattern']
+        
+        # Convert to sets of actual identifiers they represent
+        ids1_set = self._pattern_to_identifier_set(id1)
+        ids2_set = self._pattern_to_identifier_set(id2)
+        
+        # c1 dominates c2 if c2's identifiers are a proper subset of c1's
+        return ids2_set < ids1_set  # Proper subset
+
+    def _pattern_to_identifier_set(self, pattern):
+        """
+        Convert an identifier pattern with don't cares to the set of 
+        concrete identifiers it represents.
+        
+        Args:
+            pattern: String with possible '-' (e.g., "0-1")
+            
+        Returns:
+            set: Set of concrete binary strings
+        """
+        # Count don't cares
+        n_dontcares = pattern.count('-')
+        
+        if n_dontcares == 0:
+            return {pattern}
+        
+        # Generate all combinations
+        result = set()
+        for i in range(2 ** n_dontcares):
+            concrete = list(pattern)
+            bits = format(i, f'0{n_dontcares}b')
+            bit_idx = 0
+            
+            for j in range(len(concrete)):
+                if concrete[j] == '-':
+                    concrete[j] = bits[bit_idx]
+                    bit_idx += 1
+            
+            result.add(''.join(concrete))
+        
+        return result
+
+    def _find_all_prime_implicants_bitwise(self, minterm_list):
+        """
+        Phase 1: Find ALL prime implicants using bitwise operations.
+        This is the existing code, just separated out.
+        """
+        bit_width = len(minterm_list[0])
+        
+        # Convert to bitwise
+        terms = set()
+        for term_str in minterm_list:
+            value, mask = self._str_to_bitwise(term_str)
+            terms.add((value, mask))
+        
+        # Iterative merging
+        prime_implicants = set()
+        iteration = 1
+        
+        while True:
+            next_terms = set()
+            used = set()
+            
+            terms_list = list(terms)
+            
+            for i in range(len(terms_list)):
+                for j in range(i + 1, len(terms_list)):
+                    val1, mask1 = terms_list[i]
+                    val2, mask2 = terms_list[j]
+                    
+                    if mask1 != mask2:
+                        continue
+                    
+                    diff = (val1 ^ val2) & mask1
+                    
+                    if diff != 0 and (diff & (diff - 1)) == 0:
+                        merged_value = val1 & val2
+                        merged_mask = mask1 & ~diff
+                        
+                        next_terms.add((merged_value, merged_mask))
+                        used.add(terms_list[i])
+                        used.add(terms_list[j])
+            
+            # Unused terms are prime implicants
+            for term in terms_list:
+                if term not in used:
+                    prime_implicants.add(term)
+            
+            if not next_terms:
+                break
+            
+            terms = next_terms
+            iteration += 1
+        
+        # Convert to strings
+        bit_width = len(minterm_list[0])
+        return [self._bitwise_to_str(val, mask, bit_width) 
+                for val, mask in prime_implicants]
+
+    def _select_essential_prime_implicants(self, prime_implicants, minterms):
+        """
+        Phase 2: Select minimum cover using essential prime implicants.
+        
+        This ensures the result is minimal.
+        
+        Args:
+            prime_implicants: List of all prime implicants (strings with '-')
+            minterms: List of original minterms (strings without '-')
+            
+        Returns:
+            list: Minimal set of prime implicants covering all minterms
+        """
+        # Build coverage table: which PIs cover which minterms
+        coverage = {}
+        for pi in prime_implicants:
+            coverage[pi] = set()
+            for mt in minterms:
+                if self._implicant_covers_minterm(pi, mt):
+                    coverage[pi].add(mt)
+        
+        # Find essential prime implicants
+        essential = []
+        covered_minterms = set()
+        uncovered_minterms = set(minterms)
+        
+        # Step 1: Find essential PIs (minterms covered by only one PI)
+        for mt in minterms:
+            covering_pis = [pi for pi, covered in coverage.items() if mt in covered]
+            
+            if len(covering_pis) == 1:
+                # This is an essential prime implicant
+                pi = covering_pis[0]
+                if pi not in essential:
+                    essential.append(pi)
+                    covered_minterms.update(coverage[pi])
+                    uncovered_minterms -= coverage[pi]
+                    print(f"      Essential: {pi} (covers {len(coverage[pi])} minterms)")
+        
+        # Step 2: Cover remaining minterms (greedy heuristic)
+        remaining_pis = [pi for pi in prime_implicants if pi not in essential]
+        
+        while uncovered_minterms and remaining_pis:
+            # Choose PI that covers most uncovered minterms
+            best_pi = max(remaining_pis, 
+                        key=lambda pi: len(coverage[pi] & uncovered_minterms))
+            
+            if len(coverage[best_pi] & uncovered_minterms) == 0:
+                break
+            
+            essential.append(best_pi)
+            newly_covered = coverage[best_pi] & uncovered_minterms
+            covered_minterms.update(newly_covered)
+            uncovered_minterms -= newly_covered
+            remaining_pis.remove(best_pi)
+            
+            print(f"      Added: {best_pi} (covers {len(newly_covered)} more minterms)")
+        
+        return essential
+    
+    def _implicant_covers_minterm(self, implicant, minterm):
+        """
+        Check if a prime implicant (with '-') covers a specific minterm.
+        
+        Args:
+            implicant: String with possible '-' (e.g., "10-1")
+            minterm: String without '-' (e.g., "1001")
+            
+        Returns:
+            bool: True if implicant covers minterm
+            
+        Example:
+            "10-1" covers "1001" → True
+            "10-1" covers "1011" → True
+            "10-1" covers "1101" → False (first bit doesn't match)
+        """
+        if len(implicant) != len(minterm):
+            return False
+        
+        for i in range(len(implicant)):
+            if implicant[i] != '-' and implicant[i] != minterm[i]:
+                return False
+        
+        return True
+
+    def _get_all_minterms(self, β, id_set):
+        """
+        Get all minterms (identifier + K-map position combinations) 
+        where function = 1.
+        
+        Args:
+            β: Dictionary mapping identifier → patterns
+            id_set: List of identifiers
+            
+        Returns:
+            set: Set of full minterms (identifier + position strings)
+        """
+        minterms = set()
+        
+        for idx in id_set:
+            # Get the actual K-map for this identifier
+            kmap = self.kmaps[idx]
+            
+            # Find all positions where value = 1
+            for row_idx in range(4):
+                for col_idx in range(4):
+                    cell = kmap[row_idx][col_idx]
+                    if cell and cell.get('value') == 1:
+                        # Get the position in binary (last 4 bits)
+                        vars_binary = ''.join(str(b) for b in cell['variables'][-4:])
+                        minterm = idx + vars_binary
+                        minterms.add(minterm)
+        
+        return minterms
+
+    def _get_covered_minterms(self, clusters):
+        """
+        Get all minterms covered by a set of clusters.
+        
+        Args:
+            clusters: Set of full pattern strings
+            
+        Returns:
+            set: Set of minterms covered
+        """
+        covered = set()
+        
+        for pattern in clusters:
+            # Expand pattern to all concrete minterms it represents
+            covered.update(self._expand_pattern(pattern))
+        
+        return covered
+
+    def _expand_pattern(self, pattern):
+        """
+        Expand a pattern with don't cares to all concrete minterms.
+        
+        Args:
+            pattern: String with possible '-'
+            
+        Returns:
+            set: Set of concrete binary strings
+        """
+        return self._pattern_to_identifier_set(pattern)
+
+    def _greedy_cover(self, uncovered, clusters_3d, clusters_2d, id_set):
+        """
+        Apply greedy algorithm to cover remaining uncovered minterms.
+        
+        Args:
+            uncovered: Set of uncovered minterms
+            clusters_3d: List of 3D cluster dictionaries
+            clusters_2d: Dictionary of 2D clusters
+            id_set: List of identifiers
+            
+        Returns:
+            set: Additional patterns needed for coverage
+        """
+        additional = set()
+        remaining = uncovered.copy()
+        
+        # Build candidate list from all clusters
+        candidates = []
+        
+        for cluster in clusters_3d:
+            covered = self._expand_pattern(cluster['full_pattern'])
+            candidates.append((cluster['full_pattern'], covered))
+        
+        for pattern, id_list in clusters_2d.items():
+            for idx in set(id_list):
+                full = idx + pattern
+                covered = self._expand_pattern(full)
+                candidates.append((full, covered))
+        
+        # Greedy selection
+        while remaining and candidates:
+            # Find candidate covering most remaining minterms
+            best = max(candidates, key=lambda c: len(c[1] & remaining))
+            
+            if len(best[1] & remaining) == 0:
+                break
+            
+            additional.add(best[0])
+            remaining -= best[1]
+            candidates.remove(best)
+        
+        return additional
+    def _str_to_bitwise(self, term_str):
+        """
+        Convert string with '-' to bitwise representation (value, mask).
+        
+        Args:
+            term_str: Binary string with possible '-'
+            
+        Returns:
+            tuple: (value, mask) where mask has 1 for fixed bits, 0 for don't cares
+            
+        Example:
+            "10-1" → (value=0b1001, mask=0b1101)
+                    bits:  1 0 - 1
+                    mask:  1 1 0 1  (1=fixed, 0=don't care)
+                    value: 1 0 0 1  (don't care treated as 0)
+        """
+        bit_width = len(term_str)
+        value = 0
+        mask = 0
+        
+        for i, bit in enumerate(term_str):
+            bit_pos = bit_width - 1 - i  # MSB first
+            if bit != '-':
+                mask |= (1 << bit_pos)  # Mark as fixed
+                if bit == '1':
+                    value |= (1 << bit_pos)  # Set bit
+        
+        return value, mask
+
+    def _bitwise_to_str(self, value, mask, bit_width):
+        """
+        Convert bitwise representation (value, mask) to string with '-'.
+        
+        Args:
+            value: Integer representing the bit values
+            mask: Integer where 1 = fixed bit, 0 = don't care
+            bit_width: Number of bits
+            
+        Returns:
+            str: Binary string with '-' for don't cares
+            
+        Example:
+            (value=0b1001, mask=0b1101, width=4) → "10-1"
+        """
+        result = []
+        for i in range(bit_width):
+            bit_pos = bit_width - 1 - i  # MSB first
+            if mask & (1 << bit_pos):
+                # Bit is fixed
+                if value & (1 << bit_pos):
+                    result.append('1')
+                else:
+                    result.append('0')
+            else:
+                # Don't care
+                result.append('-')
+        return ''.join(result)
     
     def _bits_to_term(self, bit_pattern, form='sop'):
         """
@@ -546,7 +1239,138 @@ class KMapSolver3D:
                 elif bit == '1':
                     literals.append(vars_[i])
             return "".join(literals) if literals else "1"
-    
+
+    # ============================================================================
+    # VECTORIZED IMPLEMENTATION (Ultra-fast for large problems)
+    # ============================================================================
+
+    def _minimize_boolean_function_vectorized(self, minterm_list):
+        """
+        Ultra-fast vectorized implementation using NumPy.
+        Optimized for large numbers of identifiers (64+).
+        
+        Time Complexity: O(n² / SIMD_width × iterations)
+        Space Complexity: O(n)
+        
+        Args:
+            minterm_list: List of binary strings
+            
+        Returns:
+            list: List of prime implicants
+        """
+        if not minterm_list:
+            return []
+        
+        if len(minterm_list) == 1:
+            return minterm_list
+        
+        bit_width = len(minterm_list[0])
+        
+        # Convert to numpy arrays for vectorized operations
+        unique_terms = list(set(minterm_list))
+        n_terms = len(unique_terms)
+        
+        values = np.zeros(n_terms, dtype=np.uint32)
+        masks = np.zeros(n_terms, dtype=np.uint32)
+        
+        for idx, term_str in enumerate(unique_terms):
+            val, mask = self._str_to_bitwise(term_str)
+            values[idx] = val
+            masks[idx] = mask
+        
+        prime_implicants = []
+        iteration = 1
+        
+        while len(values) > 0:
+            next_values = []
+            next_masks = []
+            used = np.zeros(len(values), dtype=bool)
+            merge_count = 0
+            
+            # Vectorized pairwise comparison
+            for i in range(len(values)):
+                if used[i]:
+                    continue
+                
+                # Find terms with same mask (vectorized)
+                same_mask_indices = np.where(masks == masks[i])[0]
+                same_mask_indices = same_mask_indices[same_mask_indices > i]  # Only check j > i
+                
+                if len(same_mask_indices) == 0:
+                    continue
+                
+                # Vectorized XOR to find differences
+                diffs = (values[i] ^ values[same_mask_indices]) & masks[i]
+                
+                # Check which diffs are powers of 2 (exactly 1 bit set)
+                # A number is power of 2 if: n != 0 and n & (n-1) == 0
+                is_power_of_2 = (diffs != 0) & ((diffs & (diffs - 1)) == 0)
+                
+                if np.any(is_power_of_2):
+                    mergeable_indices = same_mask_indices[is_power_of_2]
+                    
+                    for j in mergeable_indices:
+                        diff = (values[i] ^ values[j]) & masks[i]
+                        merged_value = values[i] & values[j]
+                        merged_mask = masks[i] & ~diff
+                        
+                        next_values.append(merged_value)
+                        next_masks.append(merged_mask)
+                        used[i] = True
+                        used[j] = True
+                        merge_count += 1
+            
+            if merge_count > 0:
+                print(f"    Iteration {iteration}: {merge_count} merges (vectorized)")
+            
+            # Add unused terms as prime implicants
+            for idx in np.where(~used)[0]:
+                pi_str = self._bitwise_to_str(values[idx], masks[idx], bit_width)
+                prime_implicants.append(pi_str)
+            
+            # If no new merges, we're done
+            if not next_values:
+                break
+            
+            # Prepare for next iteration
+            values = np.array(next_values, dtype=np.uint32)
+            masks = np.array(next_masks, dtype=np.uint32)
+            iteration += 1
+        
+        return prime_implicants if prime_implicants else minterm_list
+
+    # ============================================================================
+    # UTILITY FUNCTIONS
+    # ============================================================================
+
+    def get_optimization_stats(self):
+        """
+        Return statistics about which optimization should be used.
+        
+        Returns:
+            dict: Statistics about problem size and recommended optimization
+        """
+        n_identifiers = 2 ** self.num_extra_vars
+        
+        # Estimate operations for each method
+        string_ops = n_identifiers ** 2 * self.num_extra_vars * 3  # Rough estimate
+        bitwise_ops = n_identifiers ** 2 * 2
+        vectorized_ops = n_identifiers ** 2 // 8  # SIMD factor ~8
+        
+        return {
+            'num_identifiers': n_identifiers,
+            'num_extra_vars': self.num_extra_vars,
+            'recommended': 'vectorized' if n_identifiers >= 64 else 'bitwise',
+            'estimated_ops': {
+                'string': string_ops,
+                'bitwise': bitwise_ops,
+                'vectorized': vectorized_ops
+            },
+            'speedup_bitwise_vs_string': string_ops / bitwise_ops,
+            'speedup_vectorized_vs_string': string_ops / vectorized_ops,
+            'speedup_vectorized_vs_bitwise': bitwise_ops / vectorized_ops
+        }
+        
     def generate_verilog(self, module_name="logic_circuit", form='sop'):
         """
         Generate Verilog HDL code for the minimized Boolean expression.

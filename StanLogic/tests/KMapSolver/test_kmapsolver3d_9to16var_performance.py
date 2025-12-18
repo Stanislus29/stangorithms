@@ -51,8 +51,8 @@ VAR_RANGE = range(9, 17)    # 9-16 variables
 # Output paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUTS_DIR = os.path.join(SCRIPT_DIR, "outputs")
-RESULTS_CSV = os.path.join(OUTPUTS_DIR, "kmapsolver3d_9to16var_performance.csv")
-REPORT_PDF = os.path.join(OUTPUTS_DIR, "kmapsolver3d_9to16var_performance_report.pdf")
+RESULTS_CSV = os.path.join(OUTPUTS_DIR, "kmapsolver3d_9to16var_performance2.csv")
+REPORT_PDF = os.path.join(OUTPUTS_DIR, "kmapsolver3d_9to16var_performance_report2.pdf")
 LOGO_PATH = os.path.join(SCRIPT_DIR, "..", "..", "images", "St_logo_light-tp.png")
 
 # ============================================================================
