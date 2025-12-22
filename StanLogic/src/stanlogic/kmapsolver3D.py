@@ -418,6 +418,31 @@ class KMapSolver3D:
         
         return "".join(bits)
     
+    def _simplify_extra_vars(self, extra_combos):
+        """
+        Simplify the extra variable portion by finding common patterns.
+        
+        Args:
+            extra_combos: List of binary strings for extra variables
+            
+        Returns:
+            str: Simplified pattern with '-' for varying bits
+        """
+        if not extra_combos:
+            return ""
+        
+        if len(extra_combos) == 1:
+            return extra_combos[0]
+        
+        # Compare all combinations to find varying positions
+        bits = list(extra_combos[0])
+        for combo in extra_combos[1:]:
+            for i in range(len(bits)):
+                if bits[i] != combo[i]:
+                    bits[i] = '-'
+        
+        return "".join(bits)
+    
     def minimize_3d(self, form='sop'):
         """
         Minimize using 3D clustering principle.
@@ -1339,6 +1364,558 @@ class KMapSolver3D:
         
         return prime_implicants if prime_implicants else minterm_list
 
+    def minimize_4d(self, form='sop'):
+        """
+        4D Karnaugh map minimization for n > 8 variables.
+        
+        Dimensional structure:
+        - Length (2 bits): Rows in 2D K-map
+        - Breadth (2 bits): Columns in 2D K-map
+        - Depth (m bits): Identifiers in 3D structure
+        - Span (c bits): Chunks in 4D structure
+        
+        where m = 8-4 = 4 (for inner 8-var maps)
+        and c = n-8 (for outer chunk dimension)
+        
+        Args:
+            form (str): 'sop' or 'pos'
+            
+        Returns:
+            tuple: (list of minimized terms, complete expression string)
+        """
+        if self.num_vars <= 8:
+            # Fall back to 3D for n ≤ 8
+            print("Using 3D minimization (n ≤ 8)")
+            return self.minimize_3d(form)
+        
+        print(f"\n{'='*70}")
+        print(f"4D K-MAP MINIMIZATION")
+        print(f"{'='*70}")
+        print(f"Total variables: {self.num_vars}")
+        print(f"Chunk bits (span): {self.num_vars - 8}")
+        print(f"Variables per chunk: 8")
+        print(f"Structure: {2**(self.num_vars-8)} chunks × 16 K-maps × 4×4 cells")
+        print(f"{'='*70}\n")
+        
+        # Step 1: Partition into chunks (8-variable subproblems)
+        chunks = self._partition_into_chunks()
+        
+        print(f"PHASE 1: CHUNK PARTITION")
+        print(f"Created {len(chunks)} chunks\n")
+        
+        # Step 2: Solve each chunk using 3D minimization
+        chunk_results = {}  # chunk_id → 3D minimized patterns
+        
+        print(f"PHASE 2: 3D MINIMIZATION PER CHUNK")
+        print("-" * 70)
+        
+        for chunk_id, chunk_kmap in chunks.items():
+            print(f"\nChunk {chunk_id}:")
+            print(f"  Solving 8-variable subproblem...")
+            
+            # Create temporary 8-variable K-map object
+            chunk_minimizer = self._create_chunk_minimizer(chunk_kmap)
+            
+            # Apply 3D minimization
+            terms, _ = chunk_minimizer.minimize_3d(form)
+            
+            # Extract patterns (without conversion to variables yet)
+            patterns = self._extract_patterns_from_terms(terms, chunk_minimizer)
+            
+            chunk_results[chunk_id] = patterns
+            
+            print(f"  Found {len(patterns)} 3D-minimized patterns")
+            for pattern in patterns[:5]:  # Show first 5
+                print(f"    {pattern}")
+            if len(patterns) > 5:
+                print(f"    ... and {len(patterns)-5} more")
+        
+        # Step 3: Identify 4D clusters (patterns spanning multiple chunks)
+        print(f"\n{'='*70}")
+        print(f"PHASE 3: 4D CLUSTER IDENTIFICATION")
+        print(f"{'='*70}\n")
+        
+        pattern_to_chunks = self._map_patterns_to_chunks(chunk_results)
+        
+        valid_4d_clusters = {}
+        eliminated_3d = []
+        
+        for pattern, chunk_list in pattern_to_chunks.items():
+            if len(chunk_list) == 1:
+                # Pure 3D cluster (no span)
+                eliminated_3d.append((pattern, chunk_list[0]))
+                print(f"  ✗ ELIMINATED 3D: '{pattern}' in chunk {chunk_list[0]}")
+            elif not self._has_adjacent_chunks(chunk_list):
+                # Non-adjacent chunks
+                eliminated_3d.extend([(pattern, chunk) for chunk in chunk_list])
+                print(f"  ✗ ELIMINATED Non-adjacent: '{pattern}' in chunks {chunk_list}")
+            else:
+                # Valid 4D cluster
+                valid_4d_clusters[pattern] = chunk_list
+                print(f"  ✓ VALID 4D: '{pattern}' spans {len(chunk_list)} chunks")
+        
+        print(f"\n  Kept: {len(valid_4d_clusters)} 4D clusters")
+        print(f"  Eliminated: {len(eliminated_3d)} 3D-only patterns")
+        
+        if not valid_4d_clusters:
+            print("\n  WARNING: No 4D clusters found!")
+            print("  Falling back to treating all patterns as 3D...")
+            valid_4d_clusters = pattern_to_chunks
+        
+        # Step 4: Merge chunks (span-wise) for each pattern
+        print(f"\n{'='*70}")
+        print(f"PHASE 4: SPAN-WISE MERGING")
+        print(f"{'='*70}\n")
+        
+        merged_4d_clusters = []
+        
+        for pattern, chunk_list in valid_4d_clusters.items():
+            print(f"Merging chunks for pattern '{pattern}':")
+            print(f"  Chunks: {chunk_list}")
+            
+            # Apply Quine-McCluskey to chunk identifiers
+            merged_chunks = self._minimize_boolean_function_complete(chunk_list)
+            
+            print(f"  Span implicants: {merged_chunks}")
+            
+            for merged_chunk in merged_chunks:
+                cluster = {
+                    'inner_pattern': pattern,      # 8-bit pattern from 3D minimization
+                    'chunk_pattern': merged_chunk,  # Chunk identifier with don't cares
+                    'full_pattern': merged_chunk + pattern,  # Complete n-bit pattern
+                    'span': self._count_depth(merged_chunk),  # Number of chunks
+                    'cells_3d': self._get_3d_cell_coverage(pattern)  # 3D space coverage
+                }
+                merged_4d_clusters.append(cluster)
+                print(f"    4D Cluster: {merged_chunk} + {pattern} (span={cluster['span']})")
+        
+        # Step 5: Select EPIs using span dominance
+        print(f"\n{'='*70}")
+        print(f"PHASE 5: ESSENTIAL PRIME IMPLICANT SELECTION (Span-wise)")
+        print(f"{'='*70}\n")
+        
+        epis = self._select_epis_by_span_dominance(merged_4d_clusters)
+        
+        print(f"Selected {len(epis)} essential prime implicants")
+        
+        # Step 6: Verify coverage
+        print(f"\n{'='*70}")
+        print(f"PHASE 6: COVERAGE VERIFICATION")
+        print(f"{'='*70}\n")
+        
+        all_minterms = self._get_all_minterms_from_kmaps(list(self.kmaps.keys()))
+        covered = self._get_covered_minterms([c['full_pattern'] for c in epis])
+        uncovered = all_minterms - covered
+        
+        if uncovered:
+            print(f"  ⚠ WARNING: {len(uncovered)} minterms not covered!")
+            additional = self._greedy_cover_4d(uncovered, merged_4d_clusters, epis)
+            epis.extend(additional)
+            
+            covered = self._get_covered_minterms([c['full_pattern'] for c in epis])
+            still_uncovered = all_minterms - covered
+            
+            if still_uncovered:
+                print(f"  ✗ CRITICAL: {len(still_uncovered)} minterms still uncovered!")
+            else:
+                print(f"  ✓ Coverage achieved with {len(additional)} additional clusters")
+        else:
+            print(f"  ✓ All {len(all_minterms)} minterms covered")
+        
+        # Step 7: Convert to final expression
+        final_terms = []
+        for cluster in epis:
+            term_str = self._bits_to_term(cluster['full_pattern'], form)
+            final_terms.append(term_str)
+        
+        join_operator = " * " if form.lower() == 'pos' else " + "
+        final_expression = join_operator.join(final_terms)
+        
+        print(f"\n{'='*70}")
+        print(f"FINAL 4D-MINIMIZED EXPRESSION")
+        print(f"{'='*70}")
+        print(f"Terms: {len(final_terms)}")
+        print(f"F = {final_expression}\n")
+        
+        return final_terms, final_expression
+
+    # ============================================================================
+    # CHUNK PARTITIONING (4D Structure)
+    # ============================================================================
+
+    def _partition_into_chunks(self):
+        """
+        Partition the n-variable K-map into 8-variable chunks.
+        
+        For n-variable function:
+        - First c = n-8 bits define chunk
+        - Remaining 8 bits define position within chunk
+        
+        Returns:
+            dict: chunk_id → 8-variable K-map structure
+        """
+        c = self.num_vars - 8  # chunk bits
+        num_chunks = 2 ** c
+        
+        chunks = {}
+        
+        # Generate all chunk identifiers
+        for chunk_idx in range(num_chunks):
+            chunk_id = format(chunk_idx, f'0{c}b')
+            
+            # Extract K-maps belonging to this chunk
+            chunk_kmaps = {}
+            
+            # For this chunk, we need the 16 K-maps (4-bit identifiers for 8-var)
+            for inner_id_idx in range(16):
+                inner_id = format(inner_id_idx, '04b')  # 4 bits for inner identifiers
+                
+                # Full identifier in original structure
+                full_id = chunk_id + inner_id
+                
+                if full_id in self.kmaps:
+                    chunk_kmaps[inner_id] = self.kmaps[full_id]
+            
+            chunks[chunk_id] = chunk_kmaps
+        
+        return chunks
+
+    def _create_chunk_minimizer(self, chunk_kmaps):
+        """
+        Create a temporary 8-variable K-map minimizer for a chunk.
+        
+        Args:
+            chunk_kmaps: dict mapping 4-bit identifiers to 4×4 K-maps
+            
+        Returns:
+            KMap3D: 8-variable K-map object
+        """
+        # Create new K-map object for 8 variables
+        from copy import deepcopy
+        
+        chunk_minimizer = self.__class__(8)  # Assuming your class is callable with num_vars
+        chunk_minimizer.kmaps = deepcopy(chunk_kmaps)
+        chunk_minimizer.num_extra_vars = 4
+        chunk_minimizer.num_maps = 16
+        
+        return chunk_minimizer
+
+    def _extract_patterns_from_terms(self, terms, chunk_minimizer):
+        """
+        Extract bit patterns from minimized terms.
+        
+        Args:
+            terms: List of term strings (e.g., ["x1x2'x5", "x3x6'x7x8"])
+            chunk_minimizer: The 8-variable minimizer used
+            
+        Returns:
+            list: List of 8-bit patterns with don't cares
+        """
+        patterns = []
+        
+        for term in terms:
+            # Convert term back to bit pattern
+            pattern = self._term_to_pattern(term, 8)
+            patterns.append(pattern)
+        
+        return patterns
+
+    def _term_to_pattern(self, term, num_vars):
+        """
+        Convert a term string back to bit pattern.
+        
+        Args:
+            term: String like "x1x2'x5" 
+            num_vars: Number of variables
+            
+        Returns:
+            str: Bit pattern like "10-01---"
+        """
+        # Initialize with don't cares
+        pattern = ['-'] * num_vars
+        
+        # Parse term to find which variables are present
+        import re
+        
+        # Find all variables (with or without complement)
+        var_pattern = r"x(\d+)('?)"
+        matches = re.findall(var_pattern, term)
+        
+        for var_num_str, complement in matches:
+            var_num = int(var_num_str)
+            if 1 <= var_num <= num_vars:
+                idx = var_num - 1  # 0-indexed
+                pattern[idx] = '0' if complement else '1'
+        
+        return ''.join(pattern)
+
+    # ============================================================================
+    # 4D CLUSTER OPERATIONS
+    # ============================================================================
+
+    def _map_patterns_to_chunks(self, chunk_results):
+        """
+        Create mapping: pattern → list of chunks where it appears.
+        
+        Args:
+            chunk_results: dict of chunk_id → list of patterns
+            
+        Returns:
+            dict: pattern → list of chunk_ids
+        """
+        pattern_to_chunks = {}
+        
+        for chunk_id, patterns in chunk_results.items():
+            for pattern in patterns:
+                if pattern not in pattern_to_chunks:
+                    pattern_to_chunks[pattern] = []
+                pattern_to_chunks[pattern].append(chunk_id)
+        
+        return pattern_to_chunks
+
+    def _has_adjacent_chunks(self, chunk_list):
+        """
+        Check if any pair of chunks in the list is adjacent.
+        
+        Args:
+            chunk_list: List of chunk identifier strings
+            
+        Returns:
+            bool: True if at least one adjacent pair exists
+        """
+        for i in range(len(chunk_list)):
+            for j in range(i + 1, len(chunk_list)):
+                if self._hamming_distance(chunk_list[i], chunk_list[j]) == 1:
+                    return True
+        return False
+
+    def _get_3d_cell_coverage(self, pattern):
+        """
+        Get the 3D cell coverage (depth × breadth × length) for an 8-bit pattern.
+        
+        Args:
+            pattern: 8-bit pattern string
+            
+        Returns:
+            frozenset: Set of (depth, row, col) positions
+        """
+        # First 4 bits = depth (identifier in 3D structure)
+        # Last 4 bits = position in 2D K-map
+        
+        depth_pattern = pattern[:4]
+        kmap_pattern = pattern[4:]
+        
+        # Expand to concrete positions
+        depths = self._expand_pattern(depth_pattern)
+        cells_2d = self._get_cell_positions(kmap_pattern)
+        
+        # Combine into 3D coordinates
+        cells_3d = set()
+        for depth in depths:
+            for row, col in cells_2d:
+                cells_3d.add((depth, row, col))
+        
+        return frozenset(cells_3d)
+
+    def _select_epis_by_span_dominance(self, clusters):
+        """
+        Select EPIs using span dominance criterion.
+        
+        For clusters with same 3D cell coverage:
+        - Keep the one with maximum span (most chunks)
+        - Eliminate others
+        
+        Args:
+            clusters: List of 4D cluster dictionaries
+            
+        Returns:
+            list: Essential prime implicants
+        """
+        # Group by inner pattern (3D structure)
+        pattern_groups = {}
+        for cluster in clusters:
+            inner = cluster['inner_pattern']
+            if inner not in pattern_groups:
+                pattern_groups[inner] = []
+            pattern_groups[inner].append(cluster)
+        
+        epis = []
+        
+        for inner_pattern, group in pattern_groups.items():
+            print(f"\n  Analyzing pattern '{inner_pattern}':")
+            
+            # Further group by 3D cell coverage
+            cell_groups = {}
+            for cluster in group:
+                cells_key = cluster['cells_3d']
+                if cells_key not in cell_groups:
+                    cell_groups[cells_key] = []
+                cell_groups[cells_key].append(cluster)
+            
+            # For each cell group, select maximum span
+            for cells, cell_group in cell_groups.items():
+                print(f"    3D coverage: {len(cells)} cells")
+                
+                # Find maximum span
+                max_span = max(c['span'] for c in cell_group)
+                
+                # Keep only clusters with maximum span
+                for cluster in cell_group:
+                    if cluster['span'] == max_span:
+                        epis.append(cluster)
+                        print(f"      ✓ EPI: {cluster['chunk_pattern']} + {cluster['inner_pattern']} "
+                            f"(span={cluster['span']}) - MAX SPAN")
+                    else:
+                        print(f"      ✗ Dominated: {cluster['chunk_pattern']} + {cluster['inner_pattern']} "
+                            f"(span={cluster['span']}) < {max_span}")
+        
+        return epis
+
+    def _greedy_cover_4d(self, uncovered, all_clusters, current_epis):
+        """
+        Greedy coverage for uncovered minterms using 4D clusters.
+        
+        Args:
+            uncovered: Set of uncovered minterms
+            all_clusters: List of all 4D cluster dictionaries
+            current_epis: List of currently selected EPIs
+            
+        Returns:
+            list: Additional clusters needed
+        """
+        additional = []
+        remaining = uncovered.copy()
+        
+        # Get available clusters
+        current_patterns = {c['full_pattern'] for c in current_epis}
+        available = [c for c in all_clusters 
+                    if c['full_pattern'] not in current_patterns]
+        
+        while remaining and available:
+            # Find cluster covering most remaining minterms
+            best_cluster = None
+            best_coverage = 0
+            
+            for cluster in available:
+                covered = self._expand_pattern(cluster['full_pattern'])
+                overlap = len(covered & remaining)
+                if overlap > best_coverage:
+                    best_coverage = overlap
+                    best_cluster = cluster
+            
+            if best_cluster is None or best_coverage == 0:
+                break
+            
+            additional.append(best_cluster)
+            newly_covered = self._expand_pattern(best_cluster['full_pattern'])
+            remaining -= newly_covered
+            available.remove(best_cluster)
+            
+            print(f"    Added: {best_cluster['full_pattern']} "
+                f"(span={best_cluster['span']}, covers {best_coverage} more minterms)")
+        
+        return additional
+
+    # ============================================================================
+    # HEIRARCHICAL MINIMIZATION FOR  N>10 variables where dimensionality collapses
+    # ============================================================================
+    def minimize_heirarchical(self, form='sop'):    
+        """
+        Minimize the entire 3D K-map by solving each hierarchical map
+        and combining results using bitwise union operations.
+        
+        Args:
+            form (str): 'sop' or 'pos'
+            
+        Returns:
+            tuple: (list of minimized terms, complete expression string)
+        """
+        print(f"\n{'='*60}")
+        print(f"MINIMIZING {self.num_vars}-VARIABLE K-MAP")
+        print(f"{'='*60}\n")
+        
+        # Step 1: Solve each hierarchical K-map
+        all_map_results = []
+        
+        for extra_combo in sorted(self.kmaps.keys()):
+            print(f"Solving K-map for extra vars: {extra_combo}")
+            result = self._solve_single_kmap(extra_combo, form)
+            all_map_results.append(result)
+            print(f"  Found {len(result['bitmasks'])} essential prime implicants")
+            for i, bits in enumerate(result['terms_bits']):
+                print(f"    Term {i+1}: {extra_combo}|{bits}")
+        
+        print(f"\n{'='*60}")
+        print("COMBINING RESULTS ACROSS ALL K-MAPS")
+        print(f"{'='*60}\n")
+        
+        # Step 2: Combine using bitwise union across all maps
+        # Build a global dictionary: bit_pattern -> list of (extra_combo, bitmask)
+        pattern_groups = defaultdict(list)
+        
+        for result in all_map_results:
+            extra_combo = result['extra_vars']
+            for i, term_bits in enumerate(result['terms_bits']):
+                # The pattern is the 4-bit portion from the 4x4 map
+                pattern_groups[term_bits].append({
+                    'extra_combo': extra_combo,
+                    'bitmask': result['bitmasks'][i]
+                })
+        
+        # Step 3: For each unique pattern, combine extra variable combinations
+        final_terms = []
+        
+        for pattern, occurrences in pattern_groups.items():
+            # Collect all extra variable combinations for this pattern
+            extra_combos = [occ['extra_combo'] for occ in occurrences]
+            
+            # Simplify the extra variable portion if possible
+            simplified_extra = self._simplify_extra_vars(extra_combos)
+            
+            # Combine into full term
+            full_pattern = simplified_extra + pattern
+            term_str = self._bits_to_term(full_pattern, form)
+            final_terms.append(term_str)
+            
+            print(f"Pattern {pattern} appears in maps: {extra_combos}")
+            print(f"  Simplified extra vars: {simplified_extra}")
+            print(f"  Final term: {term_str}\n")
+        
+        # Step 4: Build final expression
+        join_operator = " * " if form.lower() == 'pos' else " + "
+        final_expression = join_operator.join(final_terms)
+        
+        print(f"{'='*60}")
+        print(f"FINAL MINIMIZED EXPRESSION ({form.upper()}):")
+        print(f"{'='*60}")
+        print(f"F = {final_expression}\n")
+        
+        return final_terms, final_expression
+
+    # ============================================================================
+    # AUTO-SELECTION: Choose 3D or 4D
+    # ============================================================================
+
+    def minimize(self, form='sop'):
+        """
+        Automatically choose between 3D and 4D minimization based on problem size.
+        
+        Args:
+            form (str): 'sop' or 'pos'
+            
+        Returns:
+            tuple: (list of terms, expression string)
+        """
+        if self.num_vars <= 8:
+            print(f"Auto-selecting: 3D minimization (n={self.num_vars} ≤ 8)")
+            return self.minimize_3d(form)
+        elif self.num_vars <= 10:
+            print(f"Auto-selecting: 4D minimization (n={self.num_vars} > 8)")
+            return self.minimize_4d(form)
+        elif self.num_vars > 10:
+            print(f"Auto-selecting: Hierarchical minimization (n={self.num_vars} > 10)")
+            return self.minimize_heirarchical(form)
+    
     # ============================================================================
     # UTILITY FUNCTIONS
     # ============================================================================

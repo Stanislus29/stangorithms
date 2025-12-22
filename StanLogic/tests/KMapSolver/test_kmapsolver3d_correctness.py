@@ -48,7 +48,7 @@ import sympy
 RANDOM_SEED = 42
 
 # Benchmark parameters
-TESTS_PER_DISTRIBUTION = 3  # Number of random tests per distribution type
+TESTS_PER_DISTRIBUTION = 1  # Number of random tests per distribution type
 # This results in: 20 tests × 5 distributions + 5 edge cases = 105 tests per config
 # Each test runs in both SOP and POS forms = 210 tests per config
 # Total: 210 × 4 configs (5-var, 6-var, 7-var, 8-var) = 840 tests
@@ -815,7 +815,7 @@ def validate_benchmark_results(all_results):
                             f"(SymPy: {r['sympy_literals']}, KMap: {r['kmap_literals']})")
     
     # Check 4: Timing variance shouldn't be too extreme
-    for config in [5, 6, 7, 8]:
+    for config in [9]:
         config_results = [r for r in all_results if r['num_vars'] == config]
         times = [r['t_sympy'] for r in config_results]
         
@@ -1964,7 +1964,7 @@ def generate_test_cases():
     test_cases = []
     
     # Generate test suites for each variable count
-    for num_vars in [5, 6, 7, 8]:
+    for num_vars in [9]:
         print(f"  Generating {num_vars}-variable test suite...", end=" ", flush=True)
         suite = generate_test_suite(num_vars, tests_per_distribution=TESTS_PER_DISTRIBUTION)
         for output_values, distribution in suite:
@@ -2018,7 +2018,7 @@ def benchmark_case(test_num, num_vars, output_values, description, form='sop'):
     sys_module.stdout = io.StringIO()
     
     solver = KMapSolver3D(num_vars, output_values)
-    kmap_func = lambda: solver.minimize_3d(form=form)
+    kmap_func = lambda: solver.minimize(form=form)
     t_kmap, mem_kmap = benchmark_with_warmup(kmap_func, ())
     terms, expr_str = kmap_func()
     

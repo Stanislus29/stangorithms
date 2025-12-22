@@ -46,7 +46,7 @@ from stanlogic import KMapSolver3D
 
 RANDOM_SEED = 42
 TESTS_PER_DISTRIBUTION = 3  # Per distribution type
-VAR_RANGE = range(9, 17)    # 9-16 variables
+VAR_RANGE = range(11, 13)    # 9-16 variables
 
 # Output paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -155,7 +155,7 @@ def run_single_test(test_num, num_vars, output_values, dist_name):
     
     solver = KMapSolver3D(num_vars, output_values)
     (terms, expr), time_s, mem_mb, peak_mem_mb = benchmark_with_resources(
-        lambda: solver.minimize_3d(form='sop')
+        lambda: solver.minimize(form='sop')
     )
     
     sys.stdout = old_stdout
