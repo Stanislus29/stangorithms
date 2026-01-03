@@ -1,0 +1,58 @@
+Balanced 8-Variable K-Map Terms Analysis
+======================================================================
+
+Configuration:
+  Random Seed: 42
+  Number of Test Cases: 1000
+  K-Map Type: Balanced 8-variable (p=0.5 for 1s)
+  K-Map Size: 256 cells (2^8)
+
+Statistical Summary:
+----------------------------------------------------------------------
+Mean number of terms:     10.76
+Median number of terms:   11.0
+Std deviation of terms:   4.23
+Min number of terms:      2
+Max number of terms:      59
+Mode (most frequent):     11 terms (occurred 112 times)
+
+Mean number of ones:      127.93
+Median number of ones:    128.0
+Expected ones (balanced): 128 (out of 256)
+======================================================================
+
+Distribution of Term Counts:
+----------------------------------------------------------------------
+    2 terms:  6 cases
+    3 terms: 18 cases
+    4 terms: 28 cases
+    5 terms: 44 cases
+    6 terms: 39 cases
+    7 terms: 72 cases
+    8 terms: 84 cases
+    9 terms: 103 cases
+   10 terms: 93 cases
+   11 terms: 112 cases
+   12 terms: 99 cases
+   13 terms: 80 cases
+   14 terms: 68 cases
+   15 terms: 44 cases
+   16 terms: 33 cases
+   17 terms: 21 cases
+   18 terms: 16 cases
+   19 terms: 15 cases
+   20 terms: 12 cases
+   21 terms:  5 cases
+   22 terms:  4 cases
+   24 terms:  2 cases
+   27 terms:  1 cases
+   59 terms:  1 cases
+
+======================================================================
+
+Analysis Notes:
+----------------------------------------------------------------------
+1. 8-variable K-maps have 2^8 = 256 cells
+2. Balanced distribution means ~50% of cells are 1s (~128 ones)
+3. The mode represents the most common term count observed
+4. Higher variable counts typically produce more complex expressions

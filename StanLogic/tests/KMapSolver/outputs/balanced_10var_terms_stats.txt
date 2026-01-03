@@ -1,0 +1,65 @@
+Balanced 10-Variable K-Map Terms Analysis
+======================================================================
+
+Configuration:
+  Random Seed: 42
+  Number of Test Cases: 100
+  K-Map Type: Balanced 10-variable (p=0.5 for 1s)
+  K-Map Size: 1024 cells (2^10)
+
+Statistical Summary:
+----------------------------------------------------------------------
+Mean number of terms:     26.87
+Median number of terms:   28.5
+Std deviation of terms:   13.19
+Min number of terms:      1
+Max number of terms:      82
+Mode (most frequent):     1 terms (occurred 14 times)
+
+Mean number of ones:      511.36
+Median number of ones:    512.5
+Expected ones (balanced): 512 (out of 1024)
+======================================================================
+
+Distribution of Term Counts:
+----------------------------------------------------------------------
+    1 terms: 14 cases
+   16 terms:  1 cases
+   18 terms:  1 cases
+   19 terms:  1 cases
+   20 terms:  1 cases
+   21 terms:  1 cases
+   22 terms:  2 cases
+   23 terms:  4 cases
+   24 terms:  3 cases
+   25 terms:  6 cases
+   26 terms:  3 cases
+   27 terms:  8 cases
+   28 terms:  5 cases
+   29 terms:  8 cases
+   30 terms:  5 cases
+   31 terms:  2 cases
+   32 terms:  1 cases
+   33 terms:  3 cases
+   34 terms:  8 cases
+   35 terms:  5 cases
+   36 terms:  3 cases
+   37 terms:  3 cases
+   38 terms:  1 cases
+   39 terms:  1 cases
+   40 terms:  5 cases
+   43 terms:  1 cases
+   44 terms:  1 cases
+   49 terms:  1 cases
+   51 terms:  1 cases
+   82 terms:  1 cases
+
+======================================================================
+
+Analysis Notes:
+----------------------------------------------------------------------
+1. 10-variable K-maps have 2^10 = 1024 cells
+2. Balanced distribution means ~50% of cells are 1s (~512 ones)
+3. The mode represents the most common term count observed
+4. Higher variable counts typically produce more complex expressions
+5. 10-variable maps represent a significant computational challenge

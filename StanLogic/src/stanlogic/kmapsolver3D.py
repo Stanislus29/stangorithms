@@ -1,6 +1,7 @@
 from stanlogic import KMapSolver
 from collections import defaultdict
 import numpy as np
+import re
 
 class KMapSolver3D:
     def __init__(self, num_vars, output_values=None):
@@ -396,6 +397,42 @@ class KMapSolver3D:
             'extra_vars': extra_combo
         }
     
+    def count_literals(expr_str, form="sop"):
+        """
+        Count terms and literals in a Boolean expression string.
+        
+        Args:
+            expr_str: Boolean expression string
+            form: 'sop' or 'pos'
+            
+        Returns:
+            Tuple of (num_terms, num_literals)
+        """
+        if not expr_str or expr_str.strip() == "":
+            return 0, 0
+
+        form = form.lower()
+        s = expr_str.replace(" ", "")
+
+        if form == "sop":
+            terms = [t for t in s.split('+') if t]
+            num_terms = len(terms)
+            num_literals = sum(len(re.findall(r"[A-Za-z_]\w*'?", t)) for t in terms)
+            return num_terms, num_literals
+
+        if form == "pos":
+            clauses = re.findall(r"\(([^()]*)\)", s)
+            if not clauses:
+                clauses = [s]
+            num_terms = len(clauses)
+            num_literals = 0
+            for clause in clauses:
+                lits = [lit for lit in clause.split('+') if lit]
+                num_literals += sum(1 for lit in lits if re.fullmatch(r"[A-Za-z_]\w*'?", lit))
+            return num_terms, num_literals
+
+        raise ValueError("form must be 'sop' or 'pos'")
+
     def _simplify_bits_only(self, bits_list):
         """
         Simplify a group of bits to a pattern with '-' for varying bits.
@@ -564,7 +601,7 @@ class KMapSolver3D:
         epis = self._select_epis_by_depth_dominance(merged_3d_clusters)
         
         print(f"\nSelected {len(epis)} essential prime implicants")
-        
+
         # Step 5: Verify coverage
         print("\n" + "="*60)
         print("PHASE 4: COVERAGE VERIFICATION")
@@ -1497,8 +1534,8 @@ class KMapSolver3D:
         epis = self._select_epis_by_span_dominance(merged_4d_clusters)
         
         print(f"Selected {len(epis)} essential prime implicants")
-        
-        # Step 6: Verify coverage
+
+         # Step 6: Verify coverage
         print(f"\n{'='*70}")
         print(f"PHASE 6: COVERAGE VERIFICATION")
         print(f"{'='*70}\n")
@@ -1892,13 +1929,252 @@ class KMapSolver3D:
         
         return final_terms, final_expression
 
+    def minimize_hierarchical_10var(self, form='sop'):
+        """
+        Hierarchical minimization using 10-variable base (4D limit).
+        
+        For n > 10 variables:
+        - Partition into 10-variable chunks
+        - Solve each chunk using 4D minimization
+        - Collect all patterns (set handles deduplication automatically)
+        
+        This is NOT geometric clustering - just hierarchical decomposition.
+        Redundancy elimination happens naturally via set union.
+        
+        Args:
+            form (str): 'sop' or 'pos'
+            
+        Returns:
+            tuple: (list of terms, expression string)
+        """
+        if self.num_vars <= 10:
+            print(f"Using 4D minimization directly (n={self.num_vars} ≤ 10)")
+            return self.minimize_4d(form)
+        
+        print(f"\n{'='*70}")
+        print(f"HIERARCHICAL 10-VARIABLE BASE MINIMIZATION")
+        print(f"{'='*70}")
+        print(f"Total variables: {self.num_vars}")
+        print(f"Outer dimension bits: {self.num_vars - 10}")
+        print(f"Number of 10-var chunks: {2**(self.num_vars-10)}")
+        print(f"Method: Hierarchical (NOT geometric clustering)")
+        print(f"{'='*70}\n")
+        
+        # Step 1: Partition into 10-variable chunks
+        chunks = self._partition_into_10var_chunks()
+        
+        print(f"PHASE 1: 10-VARIABLE CHUNK PARTITION")
+        print(f"Created {len(chunks)} chunks\n")
+        
+        # Step 2: Solve each chunk using 4D minimization
+        all_patterns = set()  # Set automatically handles duplicates
+        
+        print(f"PHASE 2: 4D MINIMIZATION PER CHUNK")
+        print("-" * 70)
+        
+        for chunk_id in sorted(chunks.keys()):
+            print(f"\nChunk {chunk_id}:")
+            print(f"  Solving 10-variable subproblem using 4D method...")
+            
+            # Create temporary 10-variable K-map solver
+            chunk_solver = self._create_10var_chunk_solver(chunk_id, chunks[chunk_id])
+            
+            # Apply 4D minimization
+            terms, _ = chunk_solver.minimize_4d(form)
+            
+            # Extract bit patterns from terms
+            patterns = self._extract_bit_patterns_from_terms(terms, 10)
+            
+            print(f"  Found {len(patterns)} 4D-minimized patterns")
+            
+            # Add chunk prefix and insert into set
+            for pattern in patterns:
+                full_pattern = chunk_id + pattern
+                all_patterns.add(full_pattern)  # Set handles deduplication
+                print(f"    {full_pattern}")
+        
+        # Step 3: Report results (redundancies already eliminated by set)
+        print(f"\n{'='*70}")
+        print(f"PHASE 3: PATTERN COLLECTION (Bitwise Union)")
+        print(f"{'='*70}")
+        print(f"Total unique patterns: {len(all_patterns)}")
+        print(f"(Redundancies automatically eliminated by set)\n")
+        
+        # Step 4: Convert to final expression
+        final_terms = []
+        for full_pattern in sorted(all_patterns):
+            term_str = self._bits_to_term(full_pattern, form)
+            final_terms.append(term_str)
+        
+        join_operator = " * " if form.lower() == 'pos' else " + "
+        final_expression = join_operator.join(final_terms)
+        
+        print(f"\n{'='*70}")
+        print(f"FINAL HIERARCHICAL EXPRESSION")
+        print(f"{'='*70}")
+        print(f"Terms: {len(final_terms)}")
+        print(f"F = {final_expression}\n")
+        
+        return final_terms, final_expression
+
+    def _partition_into_10var_chunks(self):
+        """
+        Partition the n-variable K-map into 10-variable chunks.
+        
+        For n-variable function:
+        - First (n-10) bits define chunk identifier
+        - Remaining 10 bits define position within chunk
+        
+        Returns:
+            dict: chunk_id → dict of K-maps for that chunk
+        """
+        outer_bits = self.num_vars - 10  # bits for outer dimension
+        num_chunks = 2 ** outer_bits
+        
+        chunks = {}
+        
+        # Generate all chunk identifiers
+        for chunk_idx in range(num_chunks):
+            chunk_id = format(chunk_idx, f'0{outer_bits}b')
+            
+            # For this chunk, collect all K-maps with this prefix
+            chunk_kmaps = {}
+            
+            for full_id in self.kmaps.keys():
+                if full_id.startswith(chunk_id):
+                    # Extract the inner portion (last part after chunk_id)
+                    inner_id = full_id[outer_bits:]
+                    chunk_kmaps[inner_id] = self.kmaps[full_id]
+            
+            chunks[chunk_id] = chunk_kmaps
+        
+        return chunks
+
+    def _create_10var_chunk_solver(self, chunk_id, chunk_kmaps):
+        """
+        Create a temporary 10-variable K-map solver for a chunk.
+        
+        Args:
+            chunk_id (str): Binary string identifying this chunk
+            chunk_kmaps (dict): Dictionary of K-maps for this chunk
+            
+        Returns:
+            KMapSolver3D: 10-variable K-map solver instance
+        """
+        # Create new solver for 10 variables
+        chunk_solver = KMapSolver3D.__new__(KMapSolver3D)
+        chunk_solver.num_vars = 10
+        chunk_solver.num_extra_vars = 6  # 10 - 4 = 6
+        chunk_solver.num_maps = 64  # 2^6
+        chunk_solver.gray_code_4 = ["00", "01", "11", "10"]
+        
+        # Copy the K-maps
+        chunk_solver.kmaps = {}
+        for inner_id, kmap in chunk_kmaps.items():
+            chunk_solver.kmaps[inner_id] = kmap
+        
+        # Generate truth table for this chunk
+        chunk_solver.truth_table = chunk_solver.generate_truth_table()
+        
+        # Extract output values from K-maps
+        chunk_solver.output_values = [0] * (2**10)
+        for inner_id, kmap in chunk_kmaps.items():
+            for row_idx in range(4):
+                for col_idx in range(4):
+                    cell = kmap[row_idx][col_idx]
+                    if cell:
+                        minterm_in_chunk = self._get_minterm_index_in_chunk(
+                            inner_id, row_idx, col_idx, 10
+                        )
+                        chunk_solver.output_values[minterm_in_chunk] = cell['value']
+        
+        return chunk_solver
+
+    def _get_minterm_index_in_chunk(self, inner_id, row_idx, col_idx, chunk_size):
+        """
+        Get the minterm index within a chunk given identifier and cell position.
+        
+        Args:
+            inner_id (str): Binary string for inner identifier
+            row_idx (int): Row index in 4×4 K-map
+            col_idx (int): Column index in 4×4 K-map
+            chunk_size (int): Size of chunk in bits (10)
+            
+        Returns:
+            int: Minterm index within chunk (0 to 2^chunk_size - 1)
+        """
+        # Get Gray code for row and column
+        gray_code = ["00", "01", "11", "10"]
+        col_gray = gray_code[col_idx]
+        row_gray = gray_code[row_idx]
+        
+        # Construct full binary string for position in chunk
+        # Format: [inner_id][col_gray][row_gray]
+        full_bits = inner_id + col_gray + row_gray
+        
+        # Convert to integer
+        return int(full_bits, 2)
+
+    def _extract_bit_patterns_from_terms(self, terms, num_bits):
+        """
+        Extract bit patterns from minimized terms.
+        
+        Args:
+            terms (list): List of term strings (e.g., ["x1x2'x5", "x3x6'x7x8"])
+            num_bits (int): Number of bits in pattern (10 for 10-var chunks)
+            
+        Returns:
+            list: List of bit patterns with don't cares (e.g., ["10-01---", "---10110"])
+        """
+        patterns = []
+        
+        for term in terms:
+            # Convert term back to bit pattern
+            pattern = self._term_to_bit_pattern(term, num_bits)
+            patterns.append(pattern)
+        
+        return patterns
+
+    def _term_to_bit_pattern(self, term, num_bits):
+        """
+        Convert a Boolean term back to bit pattern with don't cares.
+        
+        Args:
+            term (str): Term like "x1x2'x5"
+            num_bits (int): Number of bits
+            
+        Returns:
+            str: Bit pattern like "10-01---"
+        """
+        import re
+        
+        # Initialize with don't cares
+        pattern = ['-'] * num_bits
+        
+        # Extract all variables with their complements
+        # Pattern: x followed by digits, optionally followed by '
+        var_pattern = r"x(\d+)('?)"
+        matches = re.findall(var_pattern, term)
+        
+        for var_num_str, complement in matches:
+            var_num = int(var_num_str)
+            if 1 <= var_num <= num_bits:
+                idx = var_num - 1  # 0-indexed
+                pattern[idx] = '0' if complement else '1'
+        
+        return ''.join(pattern)
+    
     # ============================================================================
     # AUTO-SELECTION: Choose 3D or 4D
     # ============================================================================
-
     def minimize(self, form='sop'):
         """
-        Automatically choose between 3D and 4D minimization based on problem size.
+        Automatically choose the best minimization strategy.
+        
+        Strategy selection:
+        - n ≤ 8: 3D minimization (geometric clustering)
+        - 8 < n ≤ 10: 4D minimization (geometric clustering, optimal limit)
+        - n > 10: Hierarchical 10-var base (NOT clustering, pure hierarchical)
         
         Args:
             form (str): 'sop' or 'pos'
@@ -1909,11 +2185,14 @@ class KMapSolver3D:
         if self.num_vars <= 8:
             print(f"Auto-selecting: 3D minimization (n={self.num_vars} ≤ 8)")
             return self.minimize_3d(form)
+        
         elif self.num_vars <= 10:
-            print(f"Auto-selecting: 4D minimization (n={self.num_vars} > 8)")
+            print(f"Auto-selecting: 4D minimization (n={self.num_vars} ≤ 10) [OPTIMAL]")
             return self.minimize_4d(form)
-        elif self.num_vars > 10:
-            print(f"Auto-selecting: Hierarchical minimization (n={self.num_vars} > 10)")
+        
+        else:
+            print(f"Auto-selecting: Hierarchical 10-var base (n={self.num_vars} > 10)")
+            print(f"Note: Using hierarchical decomposition (not geometric clustering)")
             return self.minimize_heirarchical(form)
     
     # ============================================================================

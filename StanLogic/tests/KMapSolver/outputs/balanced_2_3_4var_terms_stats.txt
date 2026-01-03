@@ -1,0 +1,73 @@
+Balanced 2, 3 & 4-Variable K-Map Terms Analysis
+======================================================================
+
+Configuration:
+  Random Seed: 42
+  2-Variable Test Cases: 50
+  3-Variable Test Cases: 100
+  4-Variable Test Cases: 200
+  K-Map Type: Balanced (p=0.5 for 1s)
+
+2-VARIABLE STATISTICAL SUMMARY:
+----------------------------------------------------------------------
+Mean number of terms:     1.14
+Median number of terms:   1.0
+Std deviation of terms:   0.67
+Min number of terms:      0
+Max number of terms:      2
+Mode (most frequent):     1 terms (occurred 27 times)
+
+Mean number of ones:      1.74
+Median number of ones:    2.0
+Expected ones (balanced): 2
+======================================================================
+
+3-VARIABLE STATISTICAL SUMMARY:
+----------------------------------------------------------------------
+Mean number of terms:     2.45
+Median number of terms:   2.0
+Std deviation of terms:   0.77
+Min number of terms:      0
+Max number of terms:      4
+Mode (most frequent):     2 terms (occurred 51 times)
+
+Mean number of ones:      4.27
+Median number of ones:    4.0
+Expected ones (balanced): 4
+======================================================================
+
+4-VARIABLE STATISTICAL SUMMARY:
+----------------------------------------------------------------------
+Mean number of terms:     4.17
+Median number of terms:   4.0
+Std deviation of terms:   0.90
+Min number of terms:      2
+Max number of terms:      6
+Mode (most frequent):     4 terms (occurred 87 times)
+
+Mean number of ones:      8.07
+Median number of ones:    8.0
+Expected ones (balanced): 8
+======================================================================
+
+2-VARIABLE Term Count Distribution:
+----------------------------------------------------------------------
+  0 terms: 8 cases
+  1 terms: 27 cases
+  2 terms: 15 cases
+
+3-VARIABLE Term Count Distribution:
+----------------------------------------------------------------------
+  0 terms: 1 cases
+  1 terms: 5 cases
+  2 terms: 51 cases
+  3 terms: 34 cases
+  4 terms: 9 cases
+
+4-VARIABLE Term Count Distribution:
+----------------------------------------------------------------------
+  2 terms: 7 cases
+  3 terms: 35 cases
+  4 terms: 87 cases
+  5 terms: 60 cases
+  6 terms: 11 cases

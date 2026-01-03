@@ -77,9 +77,9 @@ ALPHA = 0.05  # 95% confidence level
 # Output directories - relative to script location
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUTS_DIR = os.path.join(SCRIPT_DIR, "outputs")
-RESULTS_CSV = os.path.join(OUTPUTS_DIR, "kmapsolver3d_results_2.csv")
-REPORT_PDF = os.path.join(OUTPUTS_DIR, "kmapsolver3d_scientific_report_2.pdf")
-STATS_CSV = os.path.join(OUTPUTS_DIR, "kmapsolver3d_statistical_analysis_2.csv")
+RESULTS_CSV = os.path.join(OUTPUTS_DIR, "kmapsolver3d_results_3.csv")
+REPORT_PDF = os.path.join(OUTPUTS_DIR, "kmapsolver3d_scientific_report_3.pdf")
+STATS_CSV = os.path.join(OUTPUTS_DIR, "kmapsolver3d_statistical_analysis_3.csv")
 
 # Logo for report cover
 LOGO_PATH = os.path.join(SCRIPT_DIR, "..", "..", "images", "St_logo_light-tp.png")
