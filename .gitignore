@@ -46,10 +46,17 @@ tests/__pycache__/
 #files 
 StanLogic/reports/
 
-# 24-bit test results (excluding PDFs and zipped files)
-StanLogic/tests/KMapSolver/24_bits_test/outputs/kmapsolver4d_24bit_core*.csv
-StanLogic/tests/KMapSolver/24_bits_test/outputs/kmapsolver4d_24bit_results.csv
-StanLogic/tests/KMapSolver/24_bits_test/outputs/kmapsolver4d_24bit_merged.csv
-StanLogic/tests/KMapSolver/24_bits_test/outputs/kmapsolver4d_24bit_*.txt
-StanLogic/tests/KMapSolver/24_bits_test/outputs/worker_core*.py
-StanLogic/tests/KMapSolver/24_bits_test/verilog/boolean_function_24bit.v
+# 24-bit test results (large files)
+StanLogic/tests/KMapSolver/24_bits_test/Outputs/
+StanLogic/tests/KMapSolver/24_bits_test/verilog/
+!StanLogic/tests/KMapSolver/24_bits_test/Outputs/*.zip
+!StanLogic/tests/KMapSolver/24_bits_test/Outputs/*.pdf
+!StanLogic/tests/KMapSolver/24_bits_test/verilog/*.zip
+
+# Large CSV and text files from outputs
+StanLogic/tests/KMapSolver/outputs/**/*.csv
+!StanLogic/tests/KMapSolver/outputs/**/statistical_analysis*.csv
+!StanLogic/tests/KMapSolver/outputs/**/benchmark_results2D.csv
+!StanLogic/tests/KMapSolver/outputs/**/benchmark_results3D.csv
+!StanLogic/tests/KMapSolver/outputs/**/benchmark_results4D.csv
+!StanLogic/tests/KMapSolver/outputs/**/*_decay.csv
