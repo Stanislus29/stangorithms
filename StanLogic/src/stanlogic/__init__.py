@@ -1,15 +1,15 @@
 # kmap_algorithm/__init__.py
 
-from .kmapsolver import KMapSolver
-from .kmapsolver3D import KMapSolver3D
-from .kmapsolver4D import KMapSolver4D
+from .BoolMin2D import BoolMin2D
+from .BoolMinGeo import BoolMinGeo
+from .BoolMinHcal import BoolMinHcal
 from .ones_complement import OnesComplement
 
 __all__ = [
-    "KMapSolver",
-    "KMapSolver3D",
-    "KMapSolver4D",
+    "BoolMin2D",
+    "BoolMinGeo",
+    "BoolMinHcal",
     "OnesComplement",
 ]
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"

@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(BASE_DIR, 'src'))
 
 try:
     from stanlogic import KMapSolver
-    from stanlogic.kmapsolver3D import KMapSolver3D
+    from stanlogic.BoolMinGeo import KMapSolver3D
 except ImportError as e:
     print(f"Error: Could not import stanlogic modules: {e}")
     print(f"BASE_DIR: {BASE_DIR}")
