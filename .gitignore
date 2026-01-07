@@ -44,14 +44,12 @@ src/__pycache__/
 tests/__pycache__/
 
 #files 
-kmap_report.html
-kmap_8var_report.html
-kmap_16var_report.html
+StanLogic/reports/
 
 # 24-bit test results (excluding PDFs and zipped files)
-StanLogic/tests/KMapSolver/outputs/kmapsolver4d_24bit_core*.csv
-StanLogic/tests/KMapSolver/outputs/kmapsolver4d_24bit_results.csv
-StanLogic/tests/KMapSolver/outputs/kmapsolver4d_24bit_merged.csv
-StanLogic/tests/KMapSolver/outputs/kmapsolver4d_24bit_*.txt
-StanLogic/tests/KMapSolver/outputs/worker_core*.py
-StanLogic/tests/KMapSolver/outputs/verilog/boolean_function_24bit.v
+StanLogic/tests/KMapSolver/24_bits_test/outputs/kmapsolver4d_24bit_core*.csv
+StanLogic/tests/KMapSolver/24_bits_test/outputs/kmapsolver4d_24bit_results.csv
+StanLogic/tests/KMapSolver/24_bits_test/outputs/kmapsolver4d_24bit_merged.csv
+StanLogic/tests/KMapSolver/24_bits_test/outputs/kmapsolver4d_24bit_*.txt
+StanLogic/tests/KMapSolver/24_bits_test/outputs/worker_core*.py
+StanLogic/tests/KMapSolver/24_bits_test/verilog/boolean_function_24bit.v
