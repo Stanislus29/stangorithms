@@ -54,9 +54,9 @@ StanLogic/tests/KMapSolver/24_bits_test/verilog/
 !StanLogic/tests/KMapSolver/24_bits_test/verilog/*.zip
 
 # Large CSV and text files from outputs
-StanLogic/tests/KMapSolver/outputs/**/*.csv
-!StanLogic/tests/KMapSolver/outputs/**/statistical_analysis*.csv
-!StanLogic/tests/KMapSolver/outputs/**/benchmark_results2D.csv
-!StanLogic/tests/KMapSolver/outputs/**/benchmark_results3D.csv
-!StanLogic/tests/KMapSolver/outputs/**/benchmark_results4D.csv
-!StanLogic/tests/KMapSolver/outputs/**/*_decay.csv
+# StanLogic/tests/KMapSolver/outputs/**/*.csv
+# !StanLogic/tests/KMapSolver/outputs/**/statistical_analysis*.csv
+# !StanLogic/tests/KMapSolver/outputs/**/benchmark_results2D.csv
+# !StanLogic/tests/KMapSolver/outputs/**/benchmark_results3D.csv
+# !StanLogic/tests/KMapSolver/outputs/**/benchmark_results4D.csv
+# !StanLogic/tests/KMapSolver/outputs/**/*_decay.csv
