@@ -54,7 +54,7 @@ from stanlogic import BoolMinGeo
 # ============================================================================
 
 RANDOM_SEED = 42
-TESTS_PER_DISTRIBUTION = 3  # Per distribution type
+TESTS_PER_DISTRIBUTION = 10  # Per distribution type
 VAR_RANGE = range(9,11)    # 9-10 variables (testing 4D minimization)
 
 # Output paths

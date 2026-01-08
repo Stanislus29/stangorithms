@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "StanLogic: A Python Package for Boolean Simplification and Logic Computation"
+authors:
+  - family-names: "Emeka-Onwuneme"
+    given-names: "Somtochukwu Stanislus"
+    affiliation: "Stan's Technologies"
+    email: "stanstechnologies@gmail.com"
+repository-code: "https://github.com/Stanislus29/stangorithms/tree/main/StanLogic"
+url: "https://github.com/Stanislus29/stangorithms/tree/main/StanLogic"
+abstract: "StanLogic is a Python package dedicated to Boolean expression simplification and logical reasoning. It provides computational tools that bridge mathematical formalism and algorithmic implementation for digital logic, electronics, and computer science education."
+keywords:
+  - Boolean algebra
+  - Karnaugh maps
+  - Logic minimization
+  - Digital logic
+  - Computer science education
+  - Computational logic
+license: AGPL-3.0
+date-released: 2025-01-01
+version: "2.1.0"

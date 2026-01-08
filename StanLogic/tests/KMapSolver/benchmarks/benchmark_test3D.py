@@ -48,7 +48,7 @@ import sympy
 RANDOM_SEED = 42
 
 # Benchmark parameters
-TESTS_PER_DISTRIBUTION = 1  # Number of random tests per distribution type
+TESTS_PER_DISTRIBUTION = 20  # Number of random tests per distribution type
 # This results in: 20 tests × 5 distributions + 5 edge cases = 105 tests per config
 # Each test runs in both SOP and POS forms = 210 tests per config
 # Total: 210 × 4 configs (5-var, 6-var, 7-var, 8-var) = 840 tests

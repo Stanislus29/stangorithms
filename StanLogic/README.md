@@ -25,19 +25,16 @@ This project demonstrates how algorithmic engineering can make mathematical and 
 
 ## Modules within the Package
 
-1. KMapSolver – A module for deriving minimal SOP (Sum of Products) and POS (Product of Sums) expressions for 2, 3, and 4-variable Karnaugh Maps.
+1. ```BoolMin2D``` – An algorithmic implementation for solving 2D K-maps (2 to 4) variables. 
 
-    - Supports don’t-care conditions.
+2. ```BoolMinGeo``` - A geometric clustering algorithm for simplifying Boolean systems greater than 4 variables. Also contains a purely hireachical method for systems greater than 10 variables where geometric clustering fails. 
 
-    - Uses efficient bitmask operations for implicant filtering and coverage analysis.
-
-    - Outputs minimal Boolean expressions with human-readable and symbolic formats.
-
-Future modules will include additional logic simplifiers, expression parsers, and symbolic verification tools.
+3. ```BoolMinHcal``` - An algorithm for simplifying Boolean systems greater than 16 variables, where geometric methods fail.
 
 ### Documentation and Test Files
 
-- Documentation can be found here: [kmapsolver.md](docs/kmapsolver.md)
+- A research paper formulating the proofs and explaining the mathematical concepts behind the algorithms is currently in development, to be published on ArXiv soon.
+- Documentation can be found here for the 2D minimization method: [kmapsolver.md](docs/kmapsolver.md)
 - Test files can be found here: [kmapsolver tests](tests/)
 
 The documentation provides extensive guides on the thought processes behind the costruction of the algorithm, key optimizations, and future research directions. 
@@ -50,7 +47,8 @@ The test files show how the methods within the algorithm may be used, as well as
 StanLogic
 │
 ├── docs
-│   └── kmapsolver.md /* Documentation for kmap solver */
+│   ├── kmapsolver.md /* Documentation for 2D Boolean minimization */
+│   └── ones_complement.md /* Documentation for ones complement */
 │
 ├── images
 │   ├── St_logo_dark.png
@@ -59,22 +57,30 @@ StanLogic
 │
 ├── prototypes /* Base prototypes to understand development thought process */
 │   ├── kmap_solver_prototype.py 
-│   └── kmapsolver.py
+│   ├── kmapsolver.py
+│   └── ones_complement_prototype.py
 │
 ├── src
-│   └── stanlogic 
-│       ├── init.py
-│       └── kmapsolver.py /* Source code for kmap solver */
+│   └── stanlogic /* Source code for all modules */
+│       ├── __init__.py
+│       ├── BoolMin2D.py /* 2-4 variable minimization */
+│       ├── BoolMinGeo.py /* 5-10 variable 3D/4D minimization */
+│       ├── BoolMinHcal.py /* 16+ variable hierarchical minimization */
+│       └── ones_complement.py /* Ones complement operations */
+│
 ├── tests
-│   └── KMapSolver /* Test files for kmap solver */
-│       ├── outputs /* Outputs for test results save here */
-│           ├── benchmark_results.csv 
-│           └── benchmark_results.pdf
-│       ├── benchmark_test.py
-│       ├── k_map_demo.py
-│       ├── tbk_test2var.py
-│       ├── tbk_test3var.py
-│       └── tbk_test4var.py
+│   └── KMapSolver
+│       ├── 24_bits_test /* 24-variable multicore benchmarks */
+│       ├── analysis /* Boolean equivalence & analysis tools */
+│       ├── benchmarks /* Performance benchmarks (2D, 3D, 4D, hierarchical) */
+│       ├── decay_analysis /* Decay studies beyond thresholds */
+│       ├── demos /* Interactive demos and examples */
+│       ├── outputs /* Test results organized by benchmark type */
+│       │   ├── benchmark_results2D
+│       │   ├── benchmark_results3D
+│       │   └── benchmark_results4D
+│       └── unit_tests /* Unit tests (2-4 variables) */
+│
 └── README.md
 ```
 
