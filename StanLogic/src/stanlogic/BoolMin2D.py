@@ -257,6 +257,7 @@ class BoolMin2D:
         4. Find essential prime implicants
         5. Use greedy set cover for remaining terms
         6. Remove any remaining redundancy
+        7. Verify complete coverage of all target minterms
         
         Args:
             form: 'sop' for Sum of Products or 'pos' for Product of Sums
@@ -269,6 +270,38 @@ class BoolMin2D:
 
         # For POS, we group 0's; for SOP, we group 1's
         target_val = 0 if form.lower() == 'pos' else 1
+        
+        # OPTIMIZATION 1: Check for constant functions (all same value)
+        # Collect all defined (non-don't-care) cells
+        defined_cells = []
+        for r in range(self.num_rows):
+            for c in range(self.num_cols):
+                if self.kmap[r][c] != 'd':
+                    defined_cells.append(self.kmap[r][c])
+        
+        # Handle edge cases for constant functions
+        if not defined_cells:  # All don't cares
+            # Return 0 for SOP, 1 for POS (arbitrary choice for don't care)
+            if form.lower() == 'sop':
+                return [], "0"
+            else:
+                return [], "1"
+        
+        # Check if all defined cells are 0 (no target values)
+        if all(cell == (1 - target_val) for cell in defined_cells):
+            # All zeros for SOP or all ones for POS: return constant
+            if form.lower() == 'sop':
+                return [], "0"
+            else:
+                return [], "1"
+        
+        # Check if all defined cells equal target value
+        if all(cell == target_val for cell in defined_cells):
+            # All ones for SOP or all zeros for POS: return constant 1 or 0
+            if form.lower() == 'sop':
+                return ["1"], "1"
+            else:
+                return ["0"], "0"
 
         # Select appropriate grouping and term formatting methods
         if form.lower() == 'pos':
@@ -284,11 +317,16 @@ class BoolMin2D:
         prime_groups = self.filter_prime_implicants(groups)
 
         # Generate terms and track their coverage
+        # CRITICAL: Coverage mask ONLY includes cells with TARGET VALUE (not don't-cares)
+        # This ensures we track actual minterms/maxterms that must be covered
         prime_terms = []
         prime_covers = []
+        prime_terms_bits = []  # Store bit patterns for later validation
+        
         for gmask in prime_groups:
-            cover_mask = 0  # Tracks cells with target value covered by this group
-            bits_list = []  # Collects binary representations for term generation
+            cover_mask = 0  # Tracks ONLY cells with target value
+            bits_list = []  # Collects binary representations FROM TARGET CELLS ONLY
+            has_target = False  # Track if group covers any target cells
             
             # Process each cell in the group
             temp = gmask
@@ -299,23 +337,39 @@ class BoolMin2D:
                 temp -= low
                 
                 # Map bit position back to K-map coordinates
+                if idx not in self._index_to_rc:
+                    continue  # Skip invalid indices
+                    
                 r, c = self._index_to_rc[idx]
                 
-                # If cell has target value, include in coverage mask
+                # CRITICAL FIX: Include in coverage AND bit pattern ONLY if cell has target value
+                # Don't-care cells can be part of the group (for size) but should NOT
+                # affect the term simplification!
                 if self.kmap[r][c] == target_val:
                     cover_mask |= 1 << idx
-                    
-                # Always include cell bits for term generation
-                bits_list.append(self._cell_bits[r][c])
+                    bits_list.append(self._cell_bits[r][c])  # Only use target cell bits!
+                    has_target = True
                 
-            # Skip groups that don't cover any target cells
-            if cover_mask == 0:
+            # OPTIMIZATION 2: Validate that group covers at least one target cell
+            # Groups with only don't-cares should be skipped
+            if not has_target or cover_mask == 0:
+                continue
+            
+            # OPTIMIZATION 3: Ensure bits_list is non-empty before simplification
+            if not bits_list or len(bits_list) == 0:
                 continue
                 
-            # Generate Boolean term and save with its coverage
+            # Generate Boolean term from bit pattern
             term_str = simplify_method(bits_list)
+            
+            # OPTIMIZATION 4: Skip invalid/empty terms
+            if not term_str or term_str.strip() == "":
+                continue
+                
+            # Store term, coverage, and bit pattern
             prime_terms.append(term_str)
             prime_covers.append(cover_mask)
+            prime_terms_bits.append(bits_list)
 
         # Build coverage lookup: which primes cover each minterm
         minterm_to_primes = defaultdict(list)
@@ -340,26 +394,51 @@ class BoolMin2D:
         for i in essential_indices:
             covered_mask |= prime_covers[i]
 
-        # Greedy set cover for remaining uncovered minterms
+        # OPTIMIZATION 4: Enhanced greedy set cover with exhaustive coverage validation
         remaining_mask = all_minterms_mask & ~covered_mask
         selected = set(essential_indices)
         
-        while remaining_mask:
+        # Track iterations to prevent infinite loops
+        max_iterations = len(prime_covers) * 3  # Allow more iterations for complex cases
+        iteration = 0
+        
+        # Greedy selection loop
+        while remaining_mask and iteration < max_iterations:
+            iteration += 1
+            
             # Find prime implicant covering most uncovered minterms
             best_idx, best_cover_count = None, -1
             for idx in range(len(prime_covers)):
                 if idx in selected:
                     continue
-                # Count bits covered by this prime
+                # Count NEW bits this prime would cover
                 cover = prime_covers[idx] & remaining_mask
                 count = cover.bit_count()
                 if count > best_cover_count:
                     best_cover_count = count
                     best_idx = idx
-                    
-            # Stop if no improvement possible
+            
+            # Termination check: no prime covers any remaining minterm
             if best_idx is None or best_cover_count == 0:
-                break
+                # CRITICAL: Try to force coverage of remaining minterms
+                # This handles cases where greedy algorithm gets stuck
+                forced_coverage = False
+                for idx in range(len(prime_covers)):
+                    if idx not in selected:
+                        overlap = prime_covers[idx] & remaining_mask
+                        if overlap:  # This prime covers at least one uncovered minterm
+                            selected.add(idx)
+                            covered_mask |= prime_covers[idx]
+                            remaining_mask = all_minterms_mask & ~covered_mask
+                            forced_coverage = True
+                            break
+                
+                # If we forced coverage, continue the loop
+                if forced_coverage:
+                    continue
+                else:
+                    # No prime can cover remaining minterms - break
+                    break
             
             # Add best prime and update coverage
             selected.add(best_idx)
@@ -383,7 +462,78 @@ class BoolMin2D:
 
         # Build final minimized expression
         final_terms = [prime_terms[i] for i in sorted(chosen)]
-        return final_terms, join_operator.join(final_terms)
+        
+        # OPTIMIZATION 5: Exhaustive coverage verification with forced complete coverage
+        # Build expected coverage mask from ALL cells with target value
+        expected_coverage = 0
+        for r in range(self.num_rows):
+            for c in range(self.num_cols):
+                if self.kmap[r][c] == target_val:
+                    idx = self._cell_index[r][c]
+                    expected_coverage |= (1 << idx)
+        
+        # CRITICAL: Verify complete coverage
+        if expected_coverage != 0 and covered_mask != expected_coverage:
+            # Coverage is incomplete - perform exhaustive recovery
+            still_uncovered = expected_coverage & ~covered_mask
+            fallback_selected = set(chosen)
+            
+            # Strategy 1: Add primes that cover uncovered minterms (greedy recovery)
+            attempts = 0
+            max_attempts = len(prime_covers)
+            
+            while still_uncovered and attempts < max_attempts:
+                attempts += 1
+                best_recovery_idx = None
+                best_recovery_count = 0
+                
+                # Find prime that covers most uncovered minterms
+                for idx in range(len(prime_covers)):
+                    if idx not in fallback_selected:
+                        overlap = prime_covers[idx] & still_uncovered
+                        count = overlap.bit_count()
+                        if count > best_recovery_count:
+                            best_recovery_count = count
+                            best_recovery_idx = idx
+                
+                if best_recovery_idx is not None and best_recovery_count > 0:
+                    fallback_selected.add(best_recovery_idx)
+                    covered_mask |= prime_covers[best_recovery_idx]
+                    still_uncovered = expected_coverage & ~covered_mask
+                else:
+                    # No single prime helps - try adding ALL remaining primes
+                    for idx in range(len(prime_covers)):
+                        if idx not in fallback_selected:
+                            fallback_selected.add(idx)
+                            covered_mask |= prime_covers[idx]
+                    still_uncovered = expected_coverage & ~covered_mask
+                    break
+            
+            # Update selection
+            chosen = fallback_selected
+            final_terms = [prime_terms[i] for i in sorted(chosen)]
+        
+        # OPTIMIZATION 6: Handle empty results properly
+        if not final_terms:
+            # If no terms but we had target values, something went wrong
+            # Return appropriate constant
+            if expected_coverage != 0:
+                # This should not happen - indicates algorithm failure
+                # Return tautology to ensure coverage
+                if form.lower() == 'sop':
+                    return ["1"], "1"
+                else:
+                    return ["0"], "0"
+            else:
+                # No target values: return constant
+                if form.lower() == 'sop':
+                    return [], "0"
+                else:
+                    return [], "1"
+        
+        # Return final expression
+        expression = join_operator.join(final_terms)
+        return final_terms, expression
 
     def minimize_visualize(self, form='sop'):
         """

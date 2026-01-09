@@ -1,0 +1,39 @@
+﻿================================================================================
+SCIENTIFIC K-MAP SOLVER BENCHMARK
+================================================================================
+≡ƒÄ▓ Random seed set to: 42
+≡ƒôü Output directory: C:\Users\DELL\Documents\Research Projects\Mathematical_models\StanLogic\tests\KMapSolver\benchmarks\..\outputs\benchmark_results2D_pyeda2
+≡ƒô¥ Experimental setup documented.
+
+≡ƒö¼ Test configurations: 3
+   Variables: 2, 3, 4
+   Forms: SOP, POS
+   Tests per config: ~100
+
+================================================================================
+[1/3] Benchmarking: 2-variable K-map (SOP form)
+================================================================================
+  ≡ƒôï Generating test suite... Γ£ô (105 test cases)
+  ΓÜÖ∩╕Å  Running benchmarks...
+    Test 1: Running PyEDA SOP... OK (0.000022s) | BoolMin2D... OK (0.000036s) | Equiv: PASS
+    Test 2: Running PyEDA SOP... OK (0.000020s) | BoolMin2D... OK (0.000036s) | Equiv: PASS
+    Test 3: Running PyEDA SOP... OK (0.000021s) | BoolMin2D... OK (0.000035s) | Equiv: PASS
+    Test 4: Running PyEDA SOP... OK (0.000022s) | BoolMin2D... OK (0.000040s) | Equiv: PASS
+    Test 5: Running PyEDA SOP... OK (0.000021s) | BoolMin2D... OK (0.000035s) | Equiv: PASS
+    Test 6: Running PyEDA SOP... OK (0.000020s) | BoolMin2D... OK (0.000038s) | Equiv: PASS
+    Test 7: Running PyEDA SOP... OK (0.000047s) | BoolMin2D... OK (0.000042s) | Equiv: PASS
+    Test 8: Running PyEDA SOP... OK (0.000000s) | BoolMin2D... OK (0.000006s) | Equiv: PASS [CONSTANT]
+    Test 9: Running PyEDA SOP... OK (0.000019s) | BoolMin2D... OK (0.000006s) | Equiv: PASS [CONSTANT]
+    Test 10: Running PyEDA SOP... OK (0.000000s) | BoolMin2D... OK (0.000006s) | Equiv: PASS [CONSTANT]
+    Test 11: Running PyEDA SOP... OK (0.000019s) | BoolMin2D... OK (0.000033s) | Equiv: PASS
+    Test 12: Running PyEDA SOP... OK (0.000021s) | BoolMin2D... OK (0.000036s) | Equiv: PASS
+    Test 13: Running PyEDA SOP... OK (0.000000s) | BoolMin2D... OK (0.000006s) | Equiv: PASS [CONSTANT]
+    Test 14: Running PyEDA SOP... OK (0.000000s) | BoolMin2D... OK (0.000006s) | Equiv: PASS [CONSTANT]
+    Test 15: Running PyEDA SOP... OK (0.000021s) | BoolMin2D... OK (0.000035s) | Equiv: PASS
+    Test 16: Running PyEDA SOP... OK (0.000019s) | BoolMin2D... OK (0.000005s) | Equiv: PASS [CONSTANT]
+    Test 17: Running PyEDA SOP... OK (0.000019s) | BoolMin2D... OK (0.000033s) | Equiv: PASS
+    Test 18: Running PyEDA SOP... OK (0.000000s) | BoolMin2D... OK (0.000006s) | Equiv: PASS [CONSTANT]
+    Test 19: Running PyEDA SOP... OK (0.000000s) | BoolMin2D... OK (0.000006s) | Equiv: PASS [CONSTANT]
+    Test 20: Running PyEDA SOP... OK (0.000000s) | BoolMin2D... OK (0.000006s) | Equiv: PASS [CONSTANT]
+    Test 21: Running PyEDA SOP... OK (0.000027s) | BoolMin2D... OK (0.000043s) | Equiv: PASS
+    Test 22: Running PyEDA SOP... OK (0.000032s) | BoolMin2D... OK (0.000006s) | 

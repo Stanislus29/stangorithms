@@ -1,0 +1,44 @@
+# BoolMinGeo Scientific Benchmark Results
+"# For constant expressions, PyEDA Literals and KMap Literals are 0"
+
+Test Number,Description,Variables,Form,Result Category,Equivalent,PyEDA Time (s),KMap Time (s),PyEDA Memory (MB),KMap Memory (MB),PyEDA Literals,KMap Literals,PyEDA Terms,KMap Terms
+1,9-var: sparse (SOP),9,sop,expression,True,0.00000100,0.12944720,0.00,0.40,462,39,56,9
+2,9-var: dense (SOP),9,sop,expression,True,0.00000030,0.16337830,0.00,0.37,547,68,86,19
+3,9-var: balanced (SOP),9,sop,expression,True,0.00000050,0.14720720,0.00,0.37,656,72,92,21
+4,9-var: minimal_dc (SOP),9,sop,expression,True,0.00000090,0.13877230,0.00,0.42,601,63,82,14
+5,9-var: heavy_dc (SOP),9,sop,expression,True,0.00000050,0.13051150,0.00,0.37,643,3,81,1
+6,9-var: edge_all_zeros (SOP),9,sop,constant,True,0.00000040,0.11268000,0.00,0.38,0,0,0,0
+7,9-var: edge_all_ones (SOP),9,sop,constant,False,0.00000040,0.19626020,0.00,0.37,0,0,0,1
+8,9-var: edge_all_dc (SOP),9,sop,constant,True,0.00000040,0.12123100,0.00,0.38,0,0,0,0
+9,9-var: edge_checkerboard (SOP),9,sop,expression,True,0.00000030,0.13858780,0.00,0.37,1,1,1,1
+10,9-var: edge_single_one (SOP),9,sop,expression,True,0.00000040,0.11297740,0.00,0.37,9,9,1,1
+11,9-var: sparse (POS),9,pos,expression,True,0.00000030,0.17433110,0.00,0.43,416,150,70,28
+12,9-var: dense (POS),9,pos,expression,True,0.00000040,0.13334540,0.00,0.37,599,82,74,11
+13,9-var: balanced (POS),9,pos,expression,True,0.00000070,0.13744730,0.00,0.42,648,95,88,14
+14,9-var: minimal_dc (POS),9,pos,expression,True,0.00000040,0.14987650,0.00,0.41,610,143,89,21
+15,9-var: heavy_dc (POS),9,pos,expression,True,0.00000060,0.15186380,0.00,0.37,627,60,85,10
+16,9-var: edge_all_zeros (POS),9,pos,constant,False,0.00000070,0.18748760,0.00,0.37,0,0,0,1
+17,9-var: edge_all_ones (POS),9,pos,constant,True,0.00000050,0.11058600,0.00,0.38,0,0,0,0
+18,9-var: edge_all_dc (POS),9,pos,constant,True,0.00000040,0.11719760,0.00,0.38,0,0,0,0
+19,9-var: edge_checkerboard (POS),9,pos,expression,False,0.00000050,0.13557250,0.00,0.37,1,1,1,1
+20,9-var: edge_single_one (POS),9,pos,expression,True,0.00000040,0.19704500,0.00,0.37,9,9,9,5
+21,10-var: sparse (SOP),10,sop,expression,True,0.00000070,0.25296350,0.00,0.55,1106,107,123,23
+22,10-var: dense (SOP),10,sop,expression,True,0.00000040,0.30360330,0.00,0.55,1071,2,152,1
+23,10-var: balanced (SOP),10,sop,expression,True,0.00000050,0.26421940,0.00,0.42,1310,118,164,28
+24,10-var: minimal_dc (SOP),10,sop,expression,True,0.00000040,0.25712730,0.00,0.45,1386,54,168,14
+25,10-var: heavy_dc (SOP),10,sop,expression,True,0.00000070,0.26567120,0.00,0.38,1278,74,146,16
+26,10-var: edge_all_zeros (SOP),10,sop,constant,True,0.00000040,0.21059970,0.00,0.38,0,0,0,0
+27,10-var: edge_all_ones (SOP),10,sop,constant,False,0.00000040,0.38076020,0.00,0.43,0,0,0,1
+28,10-var: edge_all_dc (SOP),10,sop,constant,True,0.00000050,0.23447950,0.00,0.38,0,0,0,0
+29,10-var: edge_checkerboard (SOP),10,sop,expression,True,0.00000040,0.25906030,0.00,0.43,1,1,1,1
+30,10-var: edge_single_one (SOP),10,sop,expression,True,0.00000040,0.22934020,0.00,0.38,10,10,1,1
+31,10-var: sparse (POS),10,pos,expression,True,0.00000050,0.32000450,0.00,0.42,995,5,143,1
+32,10-var: dense (POS),10,pos,expression,True,0.00000030,0.23677540,0.00,0.45,1204,152,134,18
+33,10-var: balanced (POS),10,pos,expression,True,0.00000030,0.25678260,0.00,0.43,1304,213,157,27
+34,10-var: minimal_dc (POS),10,pos,expression,True,0.00000050,0.28744370,0.00,0.63,1335,261,170,34
+35,10-var: heavy_dc (POS),10,pos,expression,True,0.00000050,0.30251580,0.00,0.43,1302,201,159,29
+36,10-var: edge_all_zeros (POS),10,pos,constant,False,0.00000050,0.37110370,0.00,0.43,0,0,0,1
+37,10-var: edge_all_ones (POS),10,pos,constant,True,0.00000040,0.21830190,0.00,0.38,0,0,0,0
+38,10-var: edge_all_dc (POS),10,pos,constant,True,0.00000040,0.23131530,0.00,0.38,0,0,0,0
+39,10-var: edge_checkerboard (POS),10,pos,expression,False,0.00000030,0.26510540,0.00,0.43,1,1,1,1
+40,10-var: edge_single_one (POS),10,pos,expression,True,0.00000040,0.38969700,0.00,0.43,10,2,10,2

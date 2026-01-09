@@ -1,0 +1,5 @@
+Configuration,Metric,Mean PyEDA,Mean BoolMinGeo,Mean Diff,Std Diff,t-statistic,p-value,Cohen's d,Effect Size,CI Lower,CI Upper,Significant
+"(5, 'sop')",Time,0.000213,0.000872,0.000659,0.000214,31.5459,0.000000,3.9220,large,0.000617,0.000700,Yes
+"(5, 'sop')",Literals,1.00,23.66,22.66,9.07,25.5970,0.000000,3.5327,large,20.90,24.41,Yes
+"(6, 'sop')",Time,0.000477,0.001623,0.001147,0.000351,33.4595,0.000000,3.4381,large,0.001079,0.001215,Yes
+"(6, 'sop')",Literals,1.00,57.26,56.26,18.54,31.0965,0.000000,4.2917,large,52.67,59.84,Yes

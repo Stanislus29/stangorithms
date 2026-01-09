@@ -596,54 +596,6 @@ Begin:
 End Algorithm
 
 ═══════════════════════════════════════════════════════════════════
-COMPLEXITY ANALYSIS
-═══════════════════════════════════════════════════════════════════
-
-Time Complexity:
-    Group enumeration:           O(R × C × |S|) = O(n² × 2^n)
-    Prime filtering:             O(|Γ|²) ≈ O(2^2n)
-    Coverage computation:        O(|Π| × 2^n)
-    Essential PI finding:        O(|Π| × 2^n)
-    Greedy set cover:            O(|Π|² × 2^n)
-    Redundancy removal:          O(|Π|² × 2^n)
-    
-Overall: O(|Π|² × 2^n) where |Π| ≤ |Γ| ≤ O(2^n) for n ≤ 4
-
-Practical Performance:
-    n=2: < 1ms  (4 cells, ~4 groups)
-    n=3: < 5ms  (8 cells, ~20 groups)
-    n=4: < 50ms (16 cells, ~100 groups)
-
-Space Complexity: O(2^n)
-
-Optimality:
-    Group enumeration: Exhaustive (finds all valid groups)
-    Prime filtering: Exact (finds all prime implicants)
-    EPI selection: Exact (all essential primes found)
-    Set cover: Greedy O(log n) approximation
-    Overall: Near-optimal for small n (often exact)
-
-═══════════════════════════════════════════════════════════════════
-SPECIAL CASES & EDGE CONDITIONS
-═══════════════════════════════════════════════════════════════════
-
-Case 1: All 0's or All 1's
-    SOP: F = 0 or F = 1
-    POS: F = 1 or F = 0
-
-Case 2: Single Minterm
-    SOP: F = x₁'x₂'...xₙ' (all literals)
-    Optimal: Cannot be simplified
-
-Case 3: All Don't Cares
-    SOP: F = 1 (simplest)
-    POS: F = 0 (simplest)
-
-Case 4: Multiple Equivalent Solutions
-    Algorithm returns one minimal solution
-    Other equivalent solutions may exist
-
-═══════════════════════════════════════════════════════════════════
 END OF ALGORITHM
 ═══════════════════════════════════════════════════════════════════
 ```

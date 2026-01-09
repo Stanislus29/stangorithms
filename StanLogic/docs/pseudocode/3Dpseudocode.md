@@ -689,31 +689,6 @@ Begin:
 End Algorithm
 
 ═══════════════════════════════════════════════════════════════════
-COMPLEXITY ANALYSIS
-═══════════════════════════════════════════════════════════════════
-
-Time Complexity:
-    Truth table generation:        O(2^n)
-    K-map building:                O(2^n)
-    Single K-map solving:          O(1) per map
-    All K-maps solving:            O(2^(n-4))
-    3D cluster identification:     O(|patterns| × |identifiers|)
-    Quine-McCluskey per pattern:   O(2^(2d)) worst case
-    Depth-wise merging:            O(|Γ| × 2^(2d))
-    EPI selection:                 O(|Λ|²)
-    Coverage verification:         O(2^n)
-    
-Overall: O(2^n + |Γ| × 2^(2d)) where d = n - 4
-
-Space Complexity: O(2^n)
-
-Optimality:
-    2D minimization:     Exact (Bitmask optimized K-map solving)
-    3D merging:          Exact (Quine-McCluskey on identifiers)
-    Depth dominance:     Maximal grouping
-    Coverage:            Greedy completion (if needed)
-
-═══════════════════════════════════════════════════════════════════
 END OF ALGORITHM
 ═══════════════════════════════════════════════════════════════════
 ```

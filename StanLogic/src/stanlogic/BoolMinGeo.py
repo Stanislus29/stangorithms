@@ -316,6 +316,7 @@ class BoolMinGeo:
         for gmask in prime_groups:
             cover_mask = 0
             bits_list = []
+            has_target = False  # Track if group contains target value cells
             
             temp = gmask
             while temp:
@@ -325,18 +326,32 @@ class BoolMinGeo:
                 
                 r, c = solver._index_to_rc[idx]
                 
+                # CRITICAL FIX: Only collect bits from cells with target value
+                # Don't-care cells should NOT affect term simplification
                 if solver.kmap[r][c] == target_val:
                     cover_mask |= 1 << idx
-                
-                bits_list.append(solver._cell_bits[r][c])
+                    bits_list.append(solver._cell_bits[r][c])
+                    has_target = True
             
-            if cover_mask == 0:
+            # OPTIMIZATION: Validate coverage before continuing
+            if cover_mask == 0 or not has_target:
+                continue
+            
+            # OPTIMIZATION: Ensure bits_list is non-empty
+            if not bits_list:
                 continue
             
             prime_covers.append(cover_mask)
             
             # Simplify to get bit pattern (with '-' for don't cares)
             simplified_bits = self._simplify_bits_only(bits_list)
+            
+            # OPTIMIZATION: Skip invalid patterns
+            if not simplified_bits:
+                # Remove the cover we just added since pattern is invalid
+                prime_covers.pop()
+                continue
+                
             prime_terms_bits.append(simplified_bits)
         
         # Find essential prime implicants
@@ -365,7 +380,13 @@ class BoolMinGeo:
         remaining_mask = all_minterms_mask & ~covered_mask
         selected = set(essential_indices)
         
-        while remaining_mask:
+        # OPTIMIZATION: Track iterations to prevent infinite loops
+        max_iterations = len(prime_covers) * 2 if prime_covers else 10
+        iteration = 0
+        
+        while remaining_mask and iteration < max_iterations:
+            iteration += 1
+            
             best_idx, best_cover_count = None, -1
             for idx in range(len(prime_covers)):
                 if idx in selected:
@@ -377,6 +398,12 @@ class BoolMinGeo:
                     best_idx = idx
             
             if best_idx is None or best_cover_count == 0:
+                # OPTIMIZATION: Force coverage if still uncovered
+                for idx in range(len(prime_covers)):
+                    if idx not in selected and (prime_covers[idx] & remaining_mask):
+                        selected.add(idx)
+                        covered_mask |= prime_covers[idx]
+                        break
                 break
             
             selected.add(best_idx)
@@ -491,29 +518,50 @@ class BoolMinGeo:
     
     def minimize_3d(self, form='sop'):
         """
-        Minimize using 3D clustering principle.
+        Minimize Boolean function using 3D Karnaugh map clustering.
+        
+        This is the main entry point for 5-8 variable minimization.
+        Includes both 3D clusters (spanning multiple K-maps) AND 2D clusters
+        (within individual K-maps).
+        
+        Args:
+            form (str): 'sop' or 'pos'
+            
+        Returns:
+            tuple: (list of minimized terms, complete expression string)
         """
         print(f"\n{'='*60}")
         print(f"MINIMIZING {self.num_vars}-VARIABLE K-MAP (3D CLUSTERING)")
         print(f"{'='*60}\n")
         
-        # Step 1: Minimize each K-map partition
-        β = {}
-        for extra_combo in sorted(self.kmaps.keys()):
-            result = self._solve_single_kmap(extra_combo, form)
-            β[extra_combo] = result['terms_bits']
+        # Get list of all identifiers (extra variable combinations)
+        id_set = sorted(self.kmaps.keys())
         
-        # Step 2: Apply 3D clustering algorithm
-        id_set = list(self.kmaps.keys())
-        β_merged = self._minimize_with_3d_clustering(β, id_set)
+        # Build pattern dictionary: identifier → list of patterns in that K-map
+        β = {}  # Beta: maps identifier → list of K-map patterns (4-bit strings)
         
-        # Step 3: Convert to terms
+        for idx in id_set:
+            # Use _solve_single_kmap to get correct bit patterns
+            # This method properly extracts patterns from K-map cell structures
+            result = self._solve_single_kmap(idx, form)
+            β[idx] = result['terms_bits']  # These are the correct 4-bit patterns
+        
+        # Apply 3D clustering algorithm (returns 3D patterns)
+        minimal_3d_patterns = self._minimize_with_3d_clustering(β, id_set)
+        
+        # Collect 2D-only patterns (patterns that appear in single K-maps only)
+        patterns_2d_only = self._collect_2d_only_patterns(β, minimal_3d_patterns)
+        
+        # Combine both 2D and 3D patterns
+        all_patterns = minimal_3d_patterns | patterns_2d_only
+        
+        # Convert patterns to final terms
         final_terms = []
-        for full_pattern in sorted(β_merged):
-            term_str = self._bits_to_term(full_pattern, form)
+        for pattern in sorted(all_patterns):
+            term_str = self._bits_to_term(pattern, form)
             final_terms.append(term_str)
         
-        # Step 4: Build expression
+        # Build final expression
         join_operator = " * " if form.lower() == 'pos' else " + "
         final_expression = join_operator.join(final_terms)
         
@@ -526,8 +574,8 @@ class BoolMinGeo:
 
     def _minimize_with_3d_clustering(self, β, id_set):
         """
-        Pure 3D clustering: Only consider patterns appearing in 2+ adjacent identifiers.
-        Eliminate 2D clusters entirely.
+        3D clustering: Identify patterns appearing in 2+ adjacent identifiers.
+        Note: 2D-only patterns are handled separately and NOT eliminated.
         
         Args:
             β: Dictionary mapping identifier → list of patterns
@@ -537,7 +585,7 @@ class BoolMinGeo:
             set: Minimal set of 3D clusters (EPIs)
         """
         print("\n" + "="*60)
-        print("PHASE 1: 3D CLUSTER IDENTIFICATION (Eliminating 2D Clusters)")
+        print("PHASE 1: 3D CLUSTER IDENTIFICATION")
         print("="*60)
         
         # Step 1: Group patterns by K-map portion
@@ -550,24 +598,24 @@ class BoolMinGeo:
         
         # Step 2: Filter to keep ONLY 3D clusters (2+ adjacent identifiers)
         valid_3d_clusters = {}
-        eliminated_2d = []
+        skipped_2d = []
         
         for pattern, id_list in pattern_to_identifiers.items():
             if len(id_list) == 1:
-                # Pure 2D cluster: ELIMINATE
-                eliminated_2d.append((pattern, id_list[0]))
-                print(f"  ✗ ELIMINATED 2D: '{pattern}' in identifier {id_list[0]}")
+                # Pure 2D cluster: SKIP (will be handled separately)
+                skipped_2d.append((pattern, id_list[0]))
+                print(f"  ⊙ SKIPPED 2D: '{pattern}' in identifier {id_list[0]} (will add as 2D)")
             elif not self._has_adjacent_identifiers(id_list):
-                # Non-adjacent: ELIMINATE (treat as disconnected 2D)
-                eliminated_2d.extend([(pattern, idx) for idx in id_list])
-                print(f"  ✗ ELIMINATED Non-adjacent: '{pattern}' in {id_list}")
+                # Non-adjacent: SKIP (treat as disconnected 2D)
+                skipped_2d.extend([(pattern, idx) for idx in id_list])
+                print(f"  ⊙ SKIPPED Non-adjacent: '{pattern}' in {id_list} (will add as 2D)")
             else:
                 # Valid 3D cluster: KEEP
                 valid_3d_clusters[pattern] = id_list
                 print(f"  ✓ VALID 3D: '{pattern}' in {len(id_list)} adjacent identifiers")
         
         print(f"\n  Kept: {len(valid_3d_clusters)} 3D clusters")
-        print(f"  Eliminated: {len(eliminated_2d)} 2D clusters")
+        print(f"  Skipped for 2D handling: {len(skipped_2d)} patterns")
         
         if not valid_3d_clusters:
             print("\n  WARNING: No valid 3D clusters found!")
@@ -611,38 +659,38 @@ class BoolMinGeo:
         
         print(f"\nSelected {len(epis)} essential prime implicants")
 
-        # # Step 5: Verify coverage
-        # print("\n" + "="*60)
-        # print("PHASE 4: COVERAGE VERIFICATION")
-        # print("="*60)
+        # Step 5: Verify coverage
+        print("\n" + "="*60)
+        print("PHASE 4: COVERAGE VERIFICATION")
+        print("="*60)
         
-        # all_minterms = self._get_all_minterms_from_kmaps(id_set)
-        # covered = self._get_covered_minterms([c['full_pattern'] for c in epis])
-        # uncovered = all_minterms - covered
+        all_minterms = self._get_all_minterms_from_kmaps(id_set)
+        covered = self._get_covered_minterms([c['full_pattern'] for c in epis])
+        uncovered = all_minterms - covered
         
-        # if uncovered:
-        #     print(f"  ⚠ WARNING: {len(uncovered)} minterms not covered by 3D clusters!")
-        #     print(f"  Uncovered minterms: {list(uncovered)[:10]}...")  # Show first 10
+        if uncovered:
+            print(f"  ⚠ WARNING: {len(uncovered)} minterms not covered by 3D clusters!")
+            print(f"  Uncovered minterms: {list(uncovered)[:10]}...")  # Show first 10
             
-        #     # These should be covered by extending 3D clusters or indicate error
-        #     print(f"\n  Attempting to cover with remaining 3D clusters...")
-        #     additional = self._greedy_cover_from_clusters(
-        #         uncovered, merged_3d_clusters, epis
-        #     )
-        #     epis.extend(additional)
+            # These should be covered by extending 3D clusters or indicate error
+            print(f"\n  Attempting to cover with remaining 3D clusters...")
+            additional = self._greedy_cover_from_clusters(
+                uncovered, merged_3d_clusters, epis
+            )
+            epis.extend(additional)
             
-        #     # Re-verify
-        #     covered = self._get_covered_minterms([c['full_pattern'] for c in epis])
-        #     still_uncovered = all_minterms - covered
+            # Re-verify
+            covered = self._get_covered_minterms([c['full_pattern'] for c in epis])
+            still_uncovered = all_minterms - covered
             
-        #     if still_uncovered:
-        #         print(f"  ✗ CRITICAL: {len(still_uncovered)} minterms still uncovered!")
-        #         print(f"  This indicates incomplete 3D clustering.")
-        #         print(f"  The function may have isolated regions requiring 2D clusters.")
-        #     else:
-        #         print(f"  ✓ Coverage achieved with {len(additional)} additional clusters")
-        # else:
-        #     print(f"  ✓ All {len(all_minterms)} minterms covered by 3D clusters")
+            if still_uncovered:
+                print(f"  ✗ CRITICAL: {len(still_uncovered)} minterms still uncovered!")
+                print(f"  This indicates incomplete 3D clustering.")
+                print(f"  The function may have isolated regions requiring 2D clusters.")
+            else:
+                print(f"  ✓ Coverage achieved with {len(additional)} additional clusters")
+        else:
+            print(f"  ✓ All {len(all_minterms)} minterms covered by 3D clusters")
         
         return {c['full_pattern'] for c in epis}
 
@@ -817,6 +865,46 @@ class BoolMinGeo:
                         minterms.add(full_bits)
         
         return minterms
+
+    def _collect_2d_only_patterns(self, β, minimal_3d_patterns):
+        """
+        Collect 2D-only patterns that are not part of 3D clusters.
+        
+        These are essential prime implicants from individual K-maps that
+        don't span multiple K-maps.
+        
+        Args:
+            β: Dictionary mapping identifier → list of patterns
+            minimal_3d_patterns: Set of full patterns from 3D clustering
+            
+        Returns:
+            set: Full patterns for 2D-only clusters
+        """
+        print("\n" + "="*60)
+        print("COLLECTING 2D-ONLY PATTERNS")
+        print("="*60)
+        
+        patterns_2d = set()
+        
+        # Extract the K-map portion from 3D patterns
+        kmap_patterns_in_3d = set()
+        for full_pattern in minimal_3d_patterns:
+            # Full pattern format: [identifier][kmap_pattern]
+            # identifier length = num_extra_vars
+            kmap_pattern = full_pattern[self.num_extra_vars:]
+            kmap_patterns_in_3d.add(kmap_pattern)
+        
+        # For each K-map, add patterns that aren't part of 3D clusters
+        for idx in sorted(β.keys()):
+            for pattern in β[idx]:
+                if pattern not in kmap_patterns_in_3d:
+                    # This pattern is 2D-only
+                    full_pattern = idx + pattern
+                    patterns_2d.add(full_pattern)
+                    print(f"  ✓ 2D pattern: {idx} + {pattern}")
+        
+        print(f"\nCollected {len(patterns_2d)} 2D-only patterns")
+        return patterns_2d
 
     def _minimize_boolean_function_complete(self, minterm_list):
         """

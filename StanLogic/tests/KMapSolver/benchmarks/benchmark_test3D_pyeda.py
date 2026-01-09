@@ -1,14 +1,14 @@
 """
-Scientific Benchmark: BoolMinGeo vs SymPy Boolean Minimization
+Scientific Benchmark: BoolMinGeo vs PyEDA Boolean Minimization
 =================================================================
 
-A rigorous experimental comparison of BoolMinGeo with SymPy for 5-8 variable
+A rigorous experimental comparison of BoolMinGeo with PyEDA for 5-8 variable
 Boolean function minimization with proper statistical analysis, reproducibility
 controls, and comprehensive test coverage.
 
 Author: Somtochukwu Stanislus Emeka-Onwuneme
 Date: November 2025
-Version: 2.0 (Scientifically Enhanced)
+Version: 2.0 (PyEDA Adaptation)
 """
 
 import csv
@@ -31,7 +31,8 @@ import numpy as np
 import scipy
 from scipy import stats
 from scipy.optimize import curve_fit
-from sympy import symbols, SOPform, simplify, Equivalent, POSform
+from pyeda.inter import *
+from sympy import And as SymAnd, Or as SymOr, Not as SymNot, symbols, sympify, true, false, simplify, Equivalent
 from tabulate import tabulate
 
 # Add parent directory to path to import stanlogic
@@ -76,10 +77,10 @@ ALPHA = 0.05  # 95% confidence level
 
 # Output directories - relative to script location
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-OUTPUTS_DIR = os.path.join(SCRIPT_DIR, "..", "outputs", "benchmark_results3D")
-RESULTS_CSV = os.path.join(OUTPUTS_DIR, "benchmark_results3D.csv")
-REPORT_PDF = os.path.join(OUTPUTS_DIR, "benchmark_results3D.pdf")
-STATS_CSV = os.path.join(OUTPUTS_DIR, "benchmark_results3D_statistical_analysis.csv")
+OUTPUTS_DIR = os.path.join(SCRIPT_DIR, "..", "outputs", "benchmark_results3D_pyeda")
+RESULTS_CSV = os.path.join(OUTPUTS_DIR, "benchmark_results3D_pyeda.csv")
+REPORT_PDF = os.path.join(OUTPUTS_DIR, "benchmark_results3D_pyeda.pdf")
+STATS_CSV = os.path.join(OUTPUTS_DIR, "benchmark_results3D_pyeda_statistical_analysis.csv")
 
 # Logo for report cover
 LOGO_PATH = os.path.join(SCRIPT_DIR, "..", "..", "..", "images", "St_logo_light-tp.png")
@@ -109,12 +110,14 @@ def document_experimental_setup():
     Record all relevant environmental factors for reproducibility.
     Returns a dictionary with system and experimental configuration.
     """
+    import pyeda
+    
     setup_info = {
         "experiment_date": datetime.datetime.now().isoformat(),
         "python_version": sys.version,
         "platform": platform.platform(),
         "processor": platform.processor(),
-        "sympy_version": sympy.__version__,
+        "pyeda_version": pyeda.__version__,
         "numpy_version": np.__version__,
         "scipy_version": scipy.__version__,
         "random_seed": RANDOM_SEED,
@@ -131,15 +134,15 @@ def document_experimental_setup():
 
 def parse_kmap_expression(expr_str, var_names, form="sop"):
     """
-    Parse a Boolean expression string into a SymPy expression.
+    Parse a Boolean expression string into a PyEDA expression.
     
     Args:
         expr_str: The Boolean expression string
-        var_names: List of SymPy symbols
+        var_names: List of PyEDA symbols
         form: 'sop' or 'pos'
         
     Returns:
-        SymPy Boolean expression
+        PyEDA Boolean expression
     """
     from sympy import And, Or, Not, false, true
 
@@ -195,8 +198,55 @@ def parse_kmap_expression(expr_str, var_names, form="sop"):
     raise ValueError(f"Unsupported form '{form}'.")
 
 
+def parse_pyeda_expression(pyeda_expr, var_mapping=None):
+    """
+    Convert a PyEDA Boolean expression (e.g., Or(And(b, c), And(~a, c)))
+    into a PyEDA Boolean expression that can be compared against K-map output.
+    
+    Args:
+        pyeda_expr: PyEDA expression to parse
+        var_mapping: Dictionary mapping PyEDA var names (a,b,c,d,e,f,g,h) to PyEDA symbols (x1-x8)
+                     e.g., {'a': x1_symbol, 'b': x2_symbol, ..., 'h': x8_symbol}
+    """
+    if pyeda_expr is None:
+        return None
+
+    if isinstance(pyeda_expr, bool):
+        return true if pyeda_expr else false
+
+    expr_str = str(pyeda_expr).strip()
+    if expr_str in {"1", "True"}:
+        return true
+    if expr_str in {"0", "False"}:
+        return false
+
+    # Build variable mapping
+    local_map = {"And": SymAnd, "Or": SymOr, "Not": SymNot}
+    
+    if var_mapping:
+        # Use provided mapping (PyEDA vars -> PyEDA vars)
+        local_map.update(var_mapping)
+    else:
+        # Fallback: create new PyEDA variables
+        var_names = set()
+        try:
+            for v in pyeda_expr.inputs:
+                var_names.add(str(v))
+        except Exception:
+            var_names.update(re.findall(r"[A-Za-z_]\w*", expr_str))
+        
+        sym_vars = symbols(" ".join(sorted(var_names)), boolean=True) if var_names else ()
+        if var_names:
+            if isinstance(sym_vars, tuple):
+                local_map.update({str(s): s for s in sym_vars})
+            else:
+                local_map[str(sym_vars)] = sym_vars
+
+    return sympify(expr_str, locals=local_map, evaluate=True)
+
+
 def check_equivalence(expr1, expr2):
-    """Check if two SymPy expressions are logically equivalent."""
+    """Check if two PyEDA expressions are logically equivalent."""
     try:
         return bool(simplify(Equivalent(expr1, expr2)))
     except Exception:
@@ -270,12 +320,12 @@ def is_truly_constant_function(output_values):
     return False, None
 
 
-def count_sympy_expression_literals(expr, form="sop"):
+def count_pyeda_expression_literals(expr, form="sop"):
     """
-    Count terms and literals from a SymPy expression.
+    Count terms and literals from a PyEDA expression (converted to string).
     
     Args:
-        expr: SymPy expression
+        expr: PyEDA expression (or string representation of it)
         form: 'sop' or 'pos'
         
     Returns:
@@ -287,7 +337,7 @@ def count_sympy_expression_literals(expr, form="sop"):
     s = str(expr).strip()
     form = form.lower()
 
-    if s in ("True", "False"):
+    if s in ("True", "False", "1", "0"):
         return 0, 0
 
     if re.fullmatch(r"~?[A-Za-z_]\w*", s):
@@ -426,39 +476,39 @@ def get_minterms_from_output_values(output_values):
 # STATISTICAL ANALYSIS
 # ============================================================================
 
-def perform_statistical_tests(sympy_times, kmap_times, sympy_literals, kmap_literals, sympy_mems=None, kmap_mems=None):
+def perform_statistical_tests(pyeda_times, kmap_times, pyeda_literals, kmap_literals, pyeda_mems=None, kmap_mems=None):
     """
     Perform rigorous statistical hypothesis testing including space complexity.
     
     Args:
-        sympy_times: List of SymPy execution times
+        pyeda_times: List of PyEDA execution times
         kmap_times: List of BoolMinGeo execution times
-        sympy_literals: List of SymPy literal counts
+        pyeda_literals: List of PyEDA literal counts
         kmap_literals: List of BoolMinGeo literal counts
-        sympy_mems: List of SymPy memory usage (MB) - optional
+        pyeda_mems: List of PyEDA memory usage (MB) - optional
         kmap_mems: List of BoolMinGeo memory usage (MB) - optional
         
     Returns:
         Dictionary with comprehensive statistical test results (time, literals, memory)
     """
     # Convert to numpy arrays
-    sympy_times = np.array(sympy_times)
+    pyeda_times = np.array(pyeda_times)
     kmap_times = np.array(kmap_times)
-    sympy_literals = np.array(sympy_literals)
+    pyeda_literals = np.array(pyeda_literals)
     kmap_literals = np.array(kmap_literals)
     
     # Calculate differences
-    time_diff = kmap_times - sympy_times
-    lit_diff = kmap_literals - sympy_literals
+    time_diff = kmap_times - pyeda_times
+    lit_diff = kmap_literals - pyeda_literals
     
     # Paired t-test (parametric)
-    t_stat_time, p_value_time = stats.ttest_rel(kmap_times, sympy_times)
+    t_stat_time, p_value_time = stats.ttest_rel(kmap_times, pyeda_times)
     
     # Only perform literal tests if we have sufficient non-constant data
-    if len(sympy_literals) > 1:
+    if len(pyeda_literals) > 1:
         try:
-            t_stat_lit, p_value_lit = stats.ttest_rel(kmap_literals, sympy_literals)
-            w_stat_lit, w_p_lit = stats.wilcoxon(kmap_literals, sympy_literals, zero_method='zsplit')
+            t_stat_lit, p_value_lit = stats.ttest_rel(kmap_literals, pyeda_literals)
+            w_stat_lit, w_p_lit = stats.wilcoxon(kmap_literals, pyeda_literals, zero_method='zsplit')
             cohens_d_lit = np.mean(lit_diff) / np.std(lit_diff, ddof=1) if np.std(lit_diff, ddof=1) > 0 else 0
             ci_lit = stats.t.interval(0.95, len(lit_diff)-1,
                                       loc=np.mean(lit_diff),
@@ -473,7 +523,7 @@ def perform_statistical_tests(sympy_times, kmap_times, sympy_literals, kmap_lite
         ci_lit = (0, 0)
     
     # Wilcoxon signed-rank test (non-parametric alternative)
-    w_stat_time, w_p_time = stats.wilcoxon(kmap_times, sympy_times, zero_method='zsplit')
+    w_stat_time, w_p_time = stats.wilcoxon(kmap_times, pyeda_times, zero_method='zsplit')
     
     # Effect size (Cohen's d)
     cohens_d_time = np.mean(time_diff) / np.std(time_diff, ddof=1) if np.std(time_diff) > 0 else 0
@@ -485,21 +535,21 @@ def perform_statistical_tests(sympy_times, kmap_times, sympy_literals, kmap_lite
     
     # Memory analysis (if provided)
     memory_stats = {}
-    if sympy_mems is not None and kmap_mems is not None and len(sympy_mems) > 0:
-        sympy_mems = np.array(sympy_mems)
+    if pyeda_mems is not None and kmap_mems is not None and len(pyeda_mems) > 0:
+        pyeda_mems = np.array(pyeda_mems)
         kmap_mems = np.array(kmap_mems)
-        mem_diff = kmap_mems - sympy_mems
+        mem_diff = kmap_mems - pyeda_mems
         
         try:
-            t_stat_mem, p_value_mem = stats.ttest_rel(kmap_mems, sympy_mems)
-            w_stat_mem, w_p_mem = stats.wilcoxon(kmap_mems, sympy_mems, zero_method='zsplit')
+            t_stat_mem, p_value_mem = stats.ttest_rel(kmap_mems, pyeda_mems)
+            w_stat_mem, w_p_mem = stats.wilcoxon(kmap_mems, pyeda_mems, zero_method='zsplit')
             cohens_d_mem = np.mean(mem_diff) / np.std(mem_diff, ddof=1) if np.std(mem_diff, ddof=1) > 0 else 0
             ci_mem = stats.t.interval(0.95, len(mem_diff)-1,
                                       loc=np.mean(mem_diff),
                                       scale=stats.sem(mem_diff))
             
             memory_stats = {
-                "mean_sympy": np.mean(sympy_mems),
+                "mean_pyeda": np.mean(pyeda_mems),
                 "mean_kmap": np.mean(kmap_mems),
                 "mean_diff": np.mean(mem_diff),
                 "std_diff": np.std(mem_diff, ddof=1),
@@ -515,7 +565,7 @@ def perform_statistical_tests(sympy_times, kmap_times, sympy_literals, kmap_lite
         except Exception:
             # Memory stats failed
             memory_stats = {
-                "mean_sympy": np.mean(sympy_mems),
+                "mean_pyeda": np.mean(pyeda_mems),
                 "mean_kmap": np.mean(kmap_mems),
                 "mean_diff": 0,
                 "std_diff": 0,
@@ -531,7 +581,7 @@ def perform_statistical_tests(sympy_times, kmap_times, sympy_literals, kmap_lite
     
     result = {
         "time": {
-            "mean_sympy": np.mean(sympy_times),
+            "mean_pyeda": np.mean(pyeda_times),
             "mean_kmap": np.mean(kmap_times),
             "mean_diff": np.mean(time_diff),
             "std_diff": np.std(time_diff, ddof=1),
@@ -545,7 +595,7 @@ def perform_statistical_tests(sympy_times, kmap_times, sympy_literals, kmap_lite
             "significant": p_value_time < ALPHA
         },
         "literals": {
-            "mean_sympy": np.mean(sympy_literals) if len(sympy_literals) > 0 else 0,
+            "mean_pyeda": np.mean(pyeda_literals) if len(pyeda_literals) > 0 else 0,
             "mean_kmap": np.mean(kmap_literals) if len(kmap_literals) > 0 else 0,
             "mean_diff": np.mean(lit_diff) if len(lit_diff) > 0 else 0,
             "std_diff": np.std(lit_diff, ddof=1) if len(lit_diff) > 0 else 0,
@@ -593,9 +643,9 @@ def analyze_scalability(all_stats):
     
     # Extract data points
     var_counts = []
-    sympy_times = []
+    pyeda_times = []
     kmap_times = []
-    sympy_mems = []
+    pyeda_mems = []
     kmap_mems = []
     speedups = []
     mem_efficiency = []
@@ -609,38 +659,38 @@ def analyze_scalability(all_stats):
         stats = all_stats[config_name]
         
         var_counts.append(var_count)
-        sympy_times.append(stats['time']['mean_sympy'])
+        pyeda_times.append(stats['time']['mean_pyeda'])
         kmap_times.append(stats['time']['mean_kmap'])
-        speedups.append(stats['time']['mean_sympy'] / stats['time']['mean_kmap'])
+        speedups.append(stats['time']['mean_pyeda'] / stats['time']['mean_kmap'])
         
         if 'memory' in stats:
-            sympy_mems.append(stats['memory']['mean_sympy'])
+            pyeda_mems.append(stats['memory']['mean_pyeda'])
             kmap_mems.append(stats['memory']['mean_kmap'])
-            mem_efficiency.append(stats['memory']['mean_sympy'] / stats['memory']['mean_kmap'])
+            mem_efficiency.append(stats['memory']['mean_pyeda'] / stats['memory']['mean_kmap'])
     
     # Fit exponential growth models: T = a * b^n
     def exp_model(n, a, b):
         return a * (b ** n)
     
-    # Fit SymPy timing
-    sympy_params, _ = curve_fit(exp_model, var_counts, sympy_times, p0=[0.001, 2])
+    # Fit PyEDA timing
+    pyeda_params, _ = curve_fit(exp_model, var_counts, pyeda_times, p0=[0.001, 2])
     
     # Fit BoolMinGeo timing
     kmap_params, _ = curve_fit(exp_model, var_counts, kmap_times, p0=[0.001, 1.5])
     
     # Fit memory models (if available)
-    space_models_available = len(sympy_mems) > 0 and len(kmap_mems) > 0
+    space_models_available = len(pyeda_mems) > 0 and len(kmap_mems) > 0
     if space_models_available:
-        sympy_mem_params, _ = curve_fit(exp_model, var_counts, sympy_mems, p0=[0.1, 2])
+        pyeda_mem_params, _ = curve_fit(exp_model, var_counts, pyeda_mems, p0=[0.1, 2])
         kmap_mem_params, _ = curve_fit(exp_model, var_counts, kmap_mems, p0=[0.1, 1.5])
     
     # Generate predictions
     extended_vars = np.arange(5, 17)  # Extrapolate to 16 variables
-    sympy_pred = exp_model(extended_vars, *sympy_params)
+    pyeda_pred = exp_model(extended_vars, *pyeda_params)
     kmap_pred = exp_model(extended_vars, *kmap_params)
     
     if space_models_available:
-        sympy_mem_pred = exp_model(extended_vars, *sympy_mem_params)
+        pyeda_mem_pred = exp_model(extended_vars, *pyeda_mem_params)
         kmap_mem_pred = exp_model(extended_vars, *kmap_mem_params)
     
     # Create scalability plot
@@ -655,9 +705,9 @@ def analyze_scalability(all_stats):
         ax1, ax2 = plt.subplots(1, 2, figsize=(12, 5))
     
     # Plot 1: Execution time vs variables (log scale)
-    ax1.semilogy(var_counts, sympy_times, 'bo-', label='SymPy (measured)', markersize=8)
+    ax1.semilogy(var_counts, pyeda_times, 'bo-', label='PyEDA (measured)', markersize=8)
     ax1.semilogy(var_counts, kmap_times, 'ro-', label='BoolMinGeo (measured)', markersize=8)
-    ax1.semilogy(extended_vars, sympy_pred, 'b--', alpha=0.5, label='SymPy (projected)')
+    ax1.semilogy(extended_vars, pyeda_pred, 'b--', alpha=0.5, label='PyEDA (projected)')
     ax1.semilogy(extended_vars, kmap_pred, 'r--', alpha=0.5, label='BoolMinGeo (projected)')
     ax1.set_xlabel('Number of Variables')
     ax1.set_ylabel('Execution Time (s) - Log Scale')
@@ -668,7 +718,7 @@ def analyze_scalability(all_stats):
     # Plot 2: Speedup factor vs variables
     ax2.plot(var_counts, speedups, 'go-', label='Measured Speedup', markersize=8, linewidth=2)
     ax2.set_xlabel('Number of Variables')
-    ax2.set_ylabel('Speedup Factor (SymPy Time / BoolMinGeo Time)')
+    ax2.set_ylabel('Speedup Factor (PyEDA Time / BoolMinGeo Time)')
     ax2.set_title('Time Efficiency: BoolMinGeo Speedup')
     ax2.legend()
     ax2.grid(True, alpha=0.3)
@@ -677,17 +727,17 @@ def analyze_scalability(all_stats):
     # Add memory plots if available
     if space_models_available:
         # Plot 3: Memory usage vs variables (log scale)
-        ax3.semilogy(var_counts, sympy_mems, 'bs-', label='SymPy (measured)', markersize=8)
+        ax3.semilogy(var_counts, pyeda_mems, 'bs-', label='PyEDA (measured)', markersize=8)
         ax3.semilogy(var_counts, kmap_mems, 'rs-', label='BoolMinGeo (measured)', markersize=8)
-        ax3.semilogy(extended_vars, sympy_mem_pred, 'b--', alpha=0.5, label='SymPy (projected)')
+        ax3.semilogy(extended_vars, pyeda_mem_pred, 'b--', alpha=0.5, label='PyEDA (projected)')
         ax3.semilogy(extended_vars, kmap_mem_pred, 'r--', alpha=0.5, label='BoolMinGeo (projected)')
         
         # Add projections for 9-16 variables
         for proj_var in [9, 12, 16]:
             if proj_var <= max(extended_vars):
-                proj_sympy = exp_model(proj_var, *sympy_mem_params)
+                proj_PyEDA = exp_model(proj_var, *pyeda_mem_params)
                 proj_kmap = exp_model(proj_var, *kmap_mem_params)
-                ax3.plot(proj_var, proj_sympy, 'b^', markersize=6, alpha=0.6)
+                ax3.plot(proj_var, proj_PyEDA, 'b^', markersize=6, alpha=0.6)
                 ax3.plot(proj_var, proj_kmap, 'r^', markersize=6, alpha=0.6)
         
         ax3.set_xlabel('Number of Variables')
@@ -699,7 +749,7 @@ def analyze_scalability(all_stats):
         # Plot 4: Memory efficiency vs variables
         ax4.plot(var_counts, mem_efficiency, 'mo-', label='Memory Efficiency', markersize=8, linewidth=2)
         ax4.set_xlabel('Number of Variables')
-        ax4.set_ylabel('Memory Efficiency (SymPy MB / BoolMinGeo MB)')
+        ax4.set_ylabel('Memory Efficiency (PyEDA MB / BoolMinGeo MB)')
         ax4.set_title('Space Efficiency: Relative Memory Usage')
         ax4.legend()
         ax4.grid(True, alpha=0.3)
@@ -711,74 +761,74 @@ def analyze_scalability(all_stats):
     print("\n" + "="*80)
     print("SCALABILITY ANALYSIS")
     print("="*80)
-    print(f"\nSymPy Complexity Model: T ≈ {sympy_params[0]:.2e} × {sympy_params[1]:.3f}^n")
+    print(f"\nPyEDA Complexity Model: T ≈ {pyeda_params[0]:.2e} × {pyeda_params[1]:.3f}^n")
     print(f"BoolMinGeo Complexity Model: T ≈ {kmap_params[0]:.2e} × {kmap_params[1]:.3f}^n")
-    print(f"\nGrowth rate ratio: {sympy_params[1] / kmap_params[1]:.2f}×")
-    print(f"(SymPy grows {sympy_params[1]/kmap_params[1]:.2f}× faster per variable)")
+    print(f"\nGrowth rate ratio: {pyeda_params[1] / kmap_params[1]:.2f}×")
+    print(f"(PyEDA grows {pyeda_params[1]/kmap_params[1]:.2f}× faster per variable)")
     
     # Model validation
     print("\nModel Validation (comparing predictions vs measurements):")
     for i, var_count in enumerate(var_counts):
-        predicted_sympy = exp_model(var_count, *sympy_params)
+        predicted_PyEDA = exp_model(var_count, *pyeda_params)
         predicted_kmap = exp_model(var_count, *kmap_params)
-        error_sympy = abs(predicted_sympy - sympy_times[i]) / sympy_times[i] * 100
+        error_PyEDA = abs(predicted_PyEDA - pyeda_times[i]) / pyeda_times[i] * 100
         error_kmap = abs(predicted_kmap - kmap_times[i]) / kmap_times[i] * 100
-        print(f"  {var_count}-var: SymPy error {error_sympy:.1f}%, KMap error {error_kmap:.1f}%")
+        print(f"  {var_count}-var: PyEDA error {error_PyEDA:.1f}%, KMap error {error_kmap:.1f}%")
     
     print("\nObserved Speedups:")
     for var_count, speedup in zip(var_counts, speedups):
         print(f"  {var_count} variables: {speedup:.1f}× faster")
     
     print("\nProjected 9-variable performance:")
-    print(f"  SymPy:         {exp_model(9, *sympy_params):.3f} s")
+    print(f"  PyEDA:         {exp_model(9, *pyeda_params):.3f} s")
     print(f"  BoolMinGeo:    {exp_model(9, *kmap_params):.3f} s")
-    print(f"  Speedup:       {exp_model(9, *sympy_params) / exp_model(9, *kmap_params):.1f}×")
+    print(f"  Speedup:       {exp_model(9, *pyeda_params) / exp_model(9, *kmap_params):.1f}×")
     
     print("\nProjected 10-variable performance:")
-    print(f"  SymPy:         {exp_model(10, *sympy_params):.3f} s")
+    print(f"  PyEDA:         {exp_model(10, *pyeda_params):.3f} s")
     print(f"  BoolMinGeo:    {exp_model(10, *kmap_params):.3f} s")
-    print(f"  Speedup:       {exp_model(10, *sympy_params) / exp_model(10, *kmap_params):.1f}×")
+    print(f"  Speedup:       {exp_model(10, *pyeda_params) / exp_model(10, *kmap_params):.1f}×")
     
     # Space complexity analysis
     if space_models_available:
         print("\n" + "-"*80)
         print("SPACE COMPLEXITY ANALYSIS")
         print("-"*80)
-        print(f"\nSymPy Space Model: M ≈ {sympy_mem_params[0]:.2e} × {sympy_mem_params[1]:.3f}^n MB")
+        print(f"\nPyEDA Space Model: M ≈ {pyeda_mem_params[0]:.2e} × {pyeda_mem_params[1]:.3f}^n MB")
         print(f"BoolMinGeo Space Model: M ≈ {kmap_mem_params[0]:.2e} × {kmap_mem_params[1]:.3f}^n MB")
-        print(f"\nMemory growth rate ratio: {sympy_mem_params[1] / kmap_mem_params[1]:.2f}×")
-        print(f"(SymPy memory grows {sympy_mem_params[1]/kmap_mem_params[1]:.2f}× faster per variable)")
+        print(f"\nMemory growth rate ratio: {pyeda_mem_params[1] / kmap_mem_params[1]:.2f}×")
+        print(f"(PyEDA memory grows {pyeda_mem_params[1]/kmap_mem_params[1]:.2f}× faster per variable)")
         
         print("\nObserved Memory Efficiency:")
         for var_count, efficiency in zip(var_counts, mem_efficiency):
-            print(f"  {var_count} variables: {efficiency:.2f}× (BoolMinGeo uses {1/efficiency:.1%} of SymPy's memory)")
+            print(f"  {var_count} variables: {efficiency:.2f}× (BoolMinGeo uses {1/efficiency:.1%} of PyEDA's memory)")
         
         print("\nProjected Memory Usage (9-16 variables):")
         for proj_var in [9, 10, 12, 16]:
-            sympy_mem = exp_model(proj_var, *sympy_mem_params)
+            pyeda_mem = exp_model(proj_var, *pyeda_mem_params)
             kmap_mem = exp_model(proj_var, *kmap_mem_params)
-            efficiency = sympy_mem / kmap_mem
-            print(f"  {proj_var}-var: SymPy={sympy_mem:.1f}MB, KMap={kmap_mem:.1f}MB, Efficiency={efficiency:.2f}×")
+            efficiency = pyeda_mem / kmap_mem
+            print(f"  {proj_var}-var: PyEDA={pyeda_mem:.1f}MB, KMap={kmap_mem:.1f}MB, Efficiency={efficiency:.2f}×")
     
     print("="*80)
     
     result = {
-        "sympy_model": sympy_params,
+        "pyeda_model": pyeda_params,
         "kmap_model": kmap_params,
         "speedups": speedups,
         "var_counts": var_counts,
         "figure": fig,
         "extended_vars": extended_vars,
-        "sympy_pred": sympy_pred,
+        "pyeda_pred": pyeda_pred,
         "kmap_pred": kmap_pred
     }
     
     if space_models_available:
         result.update({
-            "sympy_mem_model": sympy_mem_params,
+            "pyeda_mem_model": pyeda_mem_params,
             "kmap_mem_model": kmap_mem_params,
             "mem_efficiency": mem_efficiency,
-            "sympy_mem_pred": sympy_mem_pred,
+            "pyeda_mem_pred": pyeda_mem_pred,
             "kmap_mem_pred": kmap_mem_pred
         })
     
@@ -801,7 +851,7 @@ def validate_benchmark_results(all_results):
         issues.append(f"⚠️  Low equivalence rate: {equiv_rate*100:.1f}% (expected >95%)")
     
     # Check 2: No negative times
-    negative_times = [r for r in all_results if r['t_sympy'] < 0 or r['t_kmap'] < 0]
+    negative_times = [r for r in all_results if r['t_pyeda'] < 0 or r['t_kmap'] < 0]
     if negative_times:
         issues.append(f"❌ Found {len(negative_times)} results with negative times!")
     
@@ -809,26 +859,26 @@ def validate_benchmark_results(all_results):
     constant_mismatch = []
     for r in all_results:
         if r.get('is_constant', False):
-            if r['sympy_literals'] != 0 or r['kmap_literals'] != 0:
+            if r['pyeda_literals'] != 0 or r['kmap_literals'] != 0:
                 constant_mismatch.append(r)
                 issues.append(f"❌ Test {r['index']}: Constant function but non-zero literals " 
-                            f"(SymPy: {r['sympy_literals']}, KMap: {r['kmap_literals']})")
+                            f"(PyEDA: {r['pyeda_literals']}, KMap: {r['kmap_literals']})")
     
     # Check 4: Timing variance shouldn't be too extreme
     for config in [5,6,7,8]:
         config_results = [r for r in all_results if r['num_vars'] == config]
-        times = [r['t_sympy'] for r in config_results]
+        times = [r['t_pyeda'] for r in config_results]
         
         if times:
             coef_var = np.std(times) / np.mean(times) if np.mean(times) > 0 else 0
             if coef_var > 2.0:  # Coefficient of variation > 200%
-                warnings.append(f"⚠️  High timing variance for {config}-var SymPy (CV={coef_var:.2f})")
+                warnings.append(f"⚠️  High timing variance for {config}-var PyEDA (CV={coef_var:.2f})")
     
     # Check 5: Literal counts should be reasonable
     for r in all_results:
         if not r.get('is_constant', False):
             max_possible_literals = 2 ** r['num_vars'] * r['num_vars']  # Very loose upper bound
-            if r['sympy_literals'] > max_possible_literals or r['kmap_literals'] > max_possible_literals:
+            if r['pyeda_literals'] > max_possible_literals or r['kmap_literals'] > max_possible_literals:
                 issues.append(f"❌ Test {r['index']}: Unreasonably high literal count")
     
     # Print validation report
@@ -892,7 +942,7 @@ def generate_scientific_inference(stats_results, num_constant=0, total_tests=0):
     lines.append("\n1. EXECUTION TIME ANALYSIS")
     lines.append("-" * 75)
     time_stats = stats_results["time"]
-    lines.append(f"Mean SymPy Time:        {time_stats['mean_sympy']:.6f} s")
+    lines.append(f"Mean PyEDA Time:        {time_stats['mean_pyeda']:.6f} s")
     lines.append(f"Mean BoolMinGeo Time:   {time_stats['mean_kmap']:.6f} s")
     lines.append(f"Mean Difference:        {time_stats['mean_diff']:+.6f} s")
     lines.append(f"Std. Dev. (Δ):          {time_stats['std_diff']:.6f} s")
@@ -905,9 +955,9 @@ def generate_scientific_inference(stats_results, num_constant=0, total_tests=0):
     if time_stats['significant']:
         lines.append(f"\n✓ SIGNIFICANT: Time difference is statistically significant (p < {ALPHA})")
         if time_stats['mean_diff'] < 0:
-            lines.append("  → BoolMinGeo is significantly faster than SymPy")
+            lines.append("  → BoolMinGeo is significantly faster than PyEDA")
         else:
-            lines.append("  → SymPy is significantly faster than BoolMinGeo")
+            lines.append("  → PyEDA is significantly faster than BoolMinGeo")
     else:
         lines.append(f"\n✗ NOT SIGNIFICANT: No statistically significant time difference (p ≥ {ALPHA})")
         lines.append("  → Both algorithms exhibit comparable performance")
@@ -926,7 +976,7 @@ def generate_scientific_inference(stats_results, num_constant=0, total_tests=0):
         if num_constant > 0:
             lines.append(f"({num_constant} constant function(s) excluded from this analysis)")
         lines.append("")
-        lines.append(f"Mean SymPy Literals:    {lit_stats['mean_sympy']:.2f}")
+        lines.append(f"Mean PyEDA Literals:    {lit_stats['mean_pyeda']:.2f}")
         lines.append(f"Mean KMap Literals:     {lit_stats['mean_kmap']:.2f}")
         lines.append(f"Mean Difference:        {lit_stats['mean_diff']:+.2f}")
         lines.append(f"Std. Dev. (Δ):          {lit_stats['std_diff']:.2f}")
@@ -941,7 +991,7 @@ def generate_scientific_inference(stats_results, num_constant=0, total_tests=0):
             if lit_stats['mean_diff'] < 0:
                 lines.append("  → BoolMinGeo produces more minimal expressions")
             else:
-                lines.append("  → SymPy produces more minimal expressions")
+                lines.append("  → PyEDA produces more minimal expressions")
         else:
             lines.append(f"\n✗ NOT SIGNIFICANT: No significant difference in simplification (p ≥ {ALPHA})")
             lines.append("  → Both algorithms achieve comparable minimization")
@@ -951,7 +1001,7 @@ def generate_scientific_inference(stats_results, num_constant=0, total_tests=0):
         lines.append("\n3. MEMORY USAGE ANALYSIS (SPACE COMPLEXITY)")
         lines.append("-" * 75)
         mem_stats = stats_results["memory"]
-        lines.append(f"Mean SymPy Memory:      {mem_stats['mean_sympy']:.2f} MB")
+        lines.append(f"Mean PyEDA Memory:      {mem_stats['mean_pyeda']:.2f} MB")
         lines.append(f"Mean KMap Memory:       {mem_stats['mean_kmap']:.2f} MB")
         lines.append(f"Mean Difference:        {mem_stats['mean_diff']:+.2f} MB")
         lines.append(f"Std. Dev. (Δ):          {mem_stats['std_diff']:.2f} MB")
@@ -962,20 +1012,20 @@ def generate_scientific_inference(stats_results, num_constant=0, total_tests=0):
         lines.append(f"Effect Size (d):        {mem_stats['cohens_d']:.4f} ({interpret_effect_size(mem_stats['cohens_d'])})")
         
         # Memory efficiency
-        if mem_stats['mean_sympy'] > 0 and mem_stats['mean_kmap'] > 0:
-            efficiency = mem_stats['mean_sympy'] / mem_stats['mean_kmap']
+        if mem_stats['mean_pyeda'] > 0 and mem_stats['mean_kmap'] > 0:
+            efficiency = mem_stats['mean_pyeda'] / mem_stats['mean_kmap']
             lines.append(f"\nMemory Efficiency:      {efficiency:.2f}× ")
             if efficiency > 1:
-                lines.append(f"  → BoolMinGeo uses {100/efficiency:.1f}% of SymPy's memory")
+                lines.append(f"  → BoolMinGeo uses {100/efficiency:.1f}% of PyEDA's memory")
             else:
-                lines.append(f"  → SymPy uses {100*efficiency:.1f}% of BoolMinGeo's memory")
+                lines.append(f"  → PyEDA uses {100*efficiency:.1f}% of BoolMinGeo's memory")
         
         if mem_stats['significant']:
             lines.append(f"\n✓ SIGNIFICANT: Memory difference is statistically significant (p < {ALPHA})")
             if mem_stats['mean_diff'] < 0:
                 lines.append("  → BoolMinGeo uses significantly less memory")
             else:
-                lines.append("  → SymPy uses significantly less memory")
+                lines.append("  → PyEDA uses significantly less memory")
         else:
             lines.append(f"\n✗ NOT SIGNIFICANT: No significant memory difference (p ≥ {ALPHA})")
             lines.append("  → Both algorithms have comparable memory usage")
@@ -1000,13 +1050,13 @@ def export_results_to_csv(all_results, filename=RESULTS_CSV):
         
         # Add explanatory comment at the top of the CSV
         writer.writerow(["# BoolMinGeo Scientific Benchmark Results"])
-        writer.writerow(["# For constant expressions, SymPy Literals and KMap Literals are 0"])
+        writer.writerow(["# For constant expressions, PyEDA Literals and KMap Literals are 0"])
         writer.writerow([])
         
         writer.writerow(["Test Number", "Description", "Variables", "Form", "Result Category", 
-                        "Equivalent", "SymPy Time (s)", "KMap Time (s)", 
-                        "SymPy Memory (MB)", "KMap Memory (MB)",
-                        "SymPy Literals", "KMap Literals", "SymPy Terms", "KMap Terms"])
+                        "Equivalent", "PyEDA Time (s)", "KMap Time (s)", 
+                        "PyEDA Memory (MB)", "KMap Memory (MB)",
+                        "PyEDA Literals", "KMap Literals", "PyEDA Terms", "KMap Terms"])
         
         for result in all_results:
             writer.writerow([
@@ -1016,13 +1066,13 @@ def export_results_to_csv(all_results, filename=RESULTS_CSV):
                 result.get("form", "sop"),
                 result.get("result_category", "expression"),
                 result.get("equiv", ""),
-                f"{result.get('t_sympy', 0):.8f}",
+                f"{result.get('t_pyeda', 0):.8f}",
                 f"{result.get('t_kmap', 0):.8f}",
-                f"{result.get('mem_sympy', 0):.2f}",
+                f"{result.get('mem_pyeda', 0):.2f}",
                 f"{result.get('mem_kmap', 0):.2f}",
-                result.get("sympy_literals", ""),
+                result.get("pyeda_literals", ""),
                 result.get("kmap_literals", ""),
-                result.get("sympy_terms", ""),
+                result.get("pyeda_terms", ""),
                 result.get("kmap_terms", "")
             ])
     
@@ -1036,7 +1086,7 @@ def export_statistical_analysis(all_stats, filename=STATS_CSV):
         writer = csv.writer(f)
         
         # Header
-        writer.writerow(["Configuration", "Metric", "Mean SymPy", "Mean KMap", 
+        writer.writerow(["Configuration", "Metric", "Mean PyEDA", "Mean KMap", 
                         "Mean Diff", "Std Diff", "t-statistic", "p-value",
                         "Cohen's d", "Effect Size", "CI Lower", "CI Upper", "Significant"])
         
@@ -1053,7 +1103,7 @@ def export_statistical_analysis(all_stats, filename=STATS_CSV):
             t = stats["time"]
             writer.writerow([
                 config_name, "Time (s)",
-                f"{t['mean_sympy']:.8f}",
+                f"{t['mean_pyeda']:.8f}",
                 f"{t['mean_kmap']:.8f}",
                 f"{t['mean_diff']:.8f}",
                 f"{t['std_diff']:.8f}",
@@ -1070,7 +1120,7 @@ def export_statistical_analysis(all_stats, filename=STATS_CSV):
             l = stats["literals"]
             writer.writerow([
                 config_name, "Literals",
-                f"{l['mean_sympy']:.2f}",
+                f"{l['mean_pyeda']:.2f}",
                 f"{l['mean_kmap']:.2f}",
                 f"{l['mean_diff']:.2f}",
                 f"{l['std_diff']:.2f}",
@@ -1088,7 +1138,7 @@ def export_statistical_analysis(all_stats, filename=STATS_CSV):
                 m = stats["memory"]
                 writer.writerow([
                     config_name, "Memory (MB)",
-                    f"{m['mean_sympy']:.2f}",
+                    f"{m['mean_pyeda']:.2f}",
                     f"{m['mean_kmap']:.2f}",
                     f"{m['mean_diff']:.2f}",
                     f"{m['std_diff']:.2f}",
@@ -1131,7 +1181,7 @@ def save_comprehensive_report(all_results, all_stats, setup_info, scalability_an
         # Title
         ax.text(0.5, 0.55, "Scientific Benchmark Report", 
                 fontsize=28, fontweight='bold', ha='center')
-        ax.text(0.5, 0.49, "BoolMinGeo vs SymPy (5-8 Variables)",
+        ax.text(0.5, 0.49, "BoolMinGeo vs PyEDA (5-8 Variables)",
                 fontsize=16, ha='center')
         
         # Separator
@@ -1179,7 +1229,7 @@ Processor:         {setup_info['processor']}
 
 LIBRARY VERSIONS
 {'─' * 70}
-SymPy:             {setup_info['sympy_version']}
+PyEDA:             {setup_info['pyeda_version']}
 NumPy:             {setup_info['numpy_version']}
 SciPy:             {setup_info['scipy_version']}
 
@@ -1255,11 +1305,11 @@ To reproduce this experiment:
             print(f"   • Creating plots for {config_name} ({config_num}/{len(ordered_keys)})...", end=" ", flush=True)
             
             # Extract data
-            sympy_times = [r["t_sympy"] for r in results]
+            pyeda_times = [r["t_pyeda"] for r in results]
             kmap_times = [r["t_kmap"] for r in results]
-            sympy_mems = [r["mem_sympy"] for r in results]
+            pyeda_mems = [r["mem_pyeda"] for r in results]
             kmap_mems = [r["mem_kmap"] for r in results]
-            sympy_literals = [r["sympy_literals"] for r in results]
+            pyeda_literals = [r["pyeda_literals"] for r in results]
             kmap_literals = [r["kmap_literals"] for r in results]
             tests = list(range(1, len(results) + 1))
             
@@ -1270,10 +1320,10 @@ To reproduce this experiment:
             fig.suptitle(config_name, fontsize=16, fontweight='bold')
             
             # Plot 1: Time comparison (line plot)
-            ax1.plot(tests, sympy_times, marker='o', markersize=3, label='SymPy', alpha=0.7)
+            ax1.plot(tests, pyeda_times, marker='o', markersize=3, label='PyEDA', alpha=0.7)
             ax1.plot(tests, kmap_times, marker='s', markersize=3, label='BoolMinGeo', alpha=0.7)
-            ax1.axhline(stats['time']['mean_sympy'], color='blue', linestyle='--', 
-                       alpha=0.5, label=f'SymPy Mean = {stats["time"]["mean_sympy"]:.6f}s')
+            ax1.axhline(stats['time']['mean_pyeda'], color='blue', linestyle='--',
+                       alpha=0.5, label=f'PyEDA Mean = {stats["time"]["mean_pyeda"]:.6f}s')
             ax1.axhline(stats['time']['mean_kmap'], color='orange', linestyle='--',
                        alpha=0.5, label=f'KMap Mean = {stats["time"]["mean_kmap"]:.6f}s')
             ax1.set_xlabel('Test Case')
@@ -1283,12 +1333,12 @@ To reproduce this experiment:
             ax1.grid(True, alpha=0.3)
             
             # Plot 2: Time difference histogram
-            time_diffs = np.array(kmap_times) - np.array(sympy_times)
+            time_diffs = np.array(kmap_times) - np.array(pyeda_times)
             ax2.hist(time_diffs, bins=20, edgecolor='black', alpha=0.7)
             ax2.axvline(0, color='red', linestyle='--', linewidth=2, label='No Difference')
             ax2.axvline(stats['time']['mean_diff'], color='green', linestyle='--', 
                        linewidth=2, label=f'Mean Δ = {stats["time"]["mean_diff"]:.6f}s')
-            ax2.set_xlabel('Time Difference (KMap - SymPy) [s]')
+            ax2.set_xlabel('Time Difference (KMap - PyEDA) [s]')
             ax2.set_ylabel('Frequency')
             ax2.set_title('Distribution of Time Differences')
             ax2.legend(fontsize=8)
@@ -1297,13 +1347,13 @@ To reproduce this experiment:
             # Plot 3: Literal comparison (bar plot)
             sample_indices = list(range(0, len(tests), max(1, len(tests)//20)))  # Show ~20 bars
             ax3.bar([tests[i] - 0.2 for i in sample_indices], 
-                   [sympy_literals[i] for i in sample_indices], 
-                   width=0.4, label='SymPy', alpha=0.7)
+                   [pyeda_literals[i] for i in sample_indices], 
+                   width=0.4, label='PyEDA', alpha=0.7)
             ax3.bar([tests[i] + 0.2 for i in sample_indices], 
                    [kmap_literals[i] for i in sample_indices],
                    width=0.4, label='BoolMinGeo', alpha=0.7)
-            ax3.axhline(stats['literals']['mean_sympy'], color='blue', linestyle='--',
-                       alpha=0.5, label=f'SymPy Mean = {stats["literals"]["mean_sympy"]:.2f}')
+            ax3.axhline(stats['literals']['mean_pyeda'], color='blue', linestyle='--',
+                       alpha=0.5, label=f'PyEDA Mean = {stats["literals"]["mean_pyeda"]:.2f}')
             ax3.axhline(stats['literals']['mean_kmap'], color='orange', linestyle='--',
                        alpha=0.5, label=f'KMap Mean = {stats["literals"]["mean_kmap"]:.2f}')
             ax3.set_xlabel('Test Case (sampled)')
@@ -1313,12 +1363,12 @@ To reproduce this experiment:
             ax3.grid(True, alpha=0.3, axis='y')
             
             # Plot 4: Literal difference histogram
-            lit_diffs = np.array(kmap_literals) - np.array(sympy_literals)
+            lit_diffs = np.array(kmap_literals) - np.array(pyeda_literals)
             ax4.hist(lit_diffs, bins=15, edgecolor='black', alpha=0.7)
             ax4.axvline(0, color='red', linestyle='--', linewidth=2, label='No Difference')
             ax4.axvline(stats['literals']['mean_diff'], color='green', linestyle='--',
                        linewidth=2, label=f'Mean Δ = {stats["literals"]["mean_diff"]:.2f}')
-            ax4.set_xlabel('Literal Difference (KMap - SymPy)')
+            ax4.set_xlabel('Literal Difference (KMap - PyEDA)')
             ax4.set_ylabel('Frequency')
             ax4.set_title('Distribution of Literal Differences')
             ax4.legend(fontsize=8)
@@ -1326,10 +1376,10 @@ To reproduce this experiment:
             
             # Plot 5: Memory comparison (line plot)
             if 'memory' in stats:
-                ax5.plot(tests, sympy_mems, marker='o', markersize=3, label='SymPy', alpha=0.7, color='purple')
+                ax5.plot(tests, pyeda_mems, marker='o', markersize=3, label='PyEDA', alpha=0.7, color='purple')
                 ax5.plot(tests, kmap_mems, marker='s', markersize=3, label='BoolMinGeo', alpha=0.7, color='green')
-                ax5.axhline(stats['memory']['mean_sympy'], color='purple', linestyle='--', 
-                           alpha=0.5, label=f'SymPy Mean = {stats["memory"]["mean_sympy"]:.2f} MB')
+                ax5.axhline(stats['memory']['mean_pyeda'], color='purple', linestyle='--',
+                           alpha=0.5, label=f'PyEDA Mean = {stats["memory"]["mean_pyeda"]:.2f} MB')
                 ax5.axhline(stats['memory']['mean_kmap'], color='green', linestyle='--',
                            alpha=0.5, label=f'KMap Mean = {stats["memory"]["mean_kmap"]:.2f} MB')
                 ax5.set_xlabel('Test Case')
@@ -1344,12 +1394,12 @@ To reproduce this experiment:
             
             # Plot 6: Memory difference histogram
             if 'memory' in stats:
-                mem_diffs = np.array(kmap_mems) - np.array(sympy_mems)
+                mem_diffs = np.array(kmap_mems) - np.array(pyeda_mems)
                 ax6.hist(mem_diffs, bins=15, edgecolor='black', alpha=0.7, color='teal')
                 ax6.axvline(0, color='red', linestyle='--', linewidth=2, label='No Difference')
                 ax6.axvline(stats['memory']['mean_diff'], color='darkgreen', linestyle='--',
                            linewidth=2, label=f'Mean Δ = {stats["memory"]["mean_diff"]:.2f} MB')
-                ax6.set_xlabel('Memory Difference (KMap - SymPy) [MB]')
+                ax6.set_xlabel('Memory Difference (KMap - PyEDA) [MB]')
                 ax6.set_ylabel('Frequency')
                 ax6.set_title('Distribution of Memory Differences')
                 ax6.legend(fontsize=8)
@@ -1416,9 +1466,9 @@ To reproduce this experiment:
         config_labels = [f"{nv}-var\n{f.upper()}" for nv, f in configs]
         
         # Extract aggregate statistics
-        time_means_sympy = [all_stats[k]['time']['mean_sympy'] for k in configs]
+        time_means_PyEDA = [all_stats[k]['time']['mean_pyeda'] for k in configs]
         time_means_kmap = [all_stats[k]['time']['mean_kmap'] for k in configs]
-        lit_means_sympy = [all_stats[k]['literals']['mean_sympy'] for k in configs]
+        lit_means_PyEDA = [all_stats[k]['literals']['mean_pyeda'] for k in configs]
         lit_means_kmap = [all_stats[k]['literals']['mean_kmap'] for k in configs]
         time_significant = [all_stats[k]['time']['significant'] for k in configs]
         lit_significant = [all_stats[k]['literals']['significant'] for k in configs]
@@ -1426,7 +1476,7 @@ To reproduce this experiment:
         # Memory stats (if available)
         has_memory = all('memory' in all_stats[k] for k in configs)
         if has_memory:
-            mem_means_sympy = [all_stats[k]['memory']['mean_sympy'] for k in configs]
+            mem_means_PyEDA = [all_stats[k]['memory']['mean_pyeda'] for k in configs]
             mem_means_kmap = [all_stats[k]['memory']['mean_kmap'] for k in configs]
             mem_significant = [all_stats[k]['memory']['significant'] for k in configs]
         
@@ -1434,13 +1484,13 @@ To reproduce this experiment:
         ax1 = plt.subplot(2, 3, 1) if has_memory else plt.subplot(2, 2, 1)
         x = np.arange(len(configs))
         width = 0.35
-        bars1 = ax1.bar(x - width/2, time_means_sympy, width, label='SymPy', alpha=0.8)
+        bars1 = ax1.bar(x - width/2, time_means_PyEDA, width, label='PyEDA', alpha=0.8)
         bars2 = ax1.bar(x + width/2, time_means_kmap, width, label='BoolMinGeo', alpha=0.8)
         
         # Mark significant differences
         for i, sig in enumerate(time_significant):
             if sig:
-                ax1.text(i, max(time_means_sympy[i], time_means_kmap[i]) * 1.05, 
+                ax1.text(i, max(time_means_PyEDA[i], time_means_kmap[i]) * 1.05, 
                         '*', ha='center', fontsize=16, color='red')
         
         ax1.set_xlabel('Configuration')
@@ -1453,13 +1503,13 @@ To reproduce this experiment:
         
         # Plot 2: Average literal count
         ax2 = plt.subplot(2, 3, 2) if has_memory else plt.subplot(2, 2, 2)
-        bars1 = ax2.bar(x - width/2, lit_means_sympy, width, label='SymPy', alpha=0.8)
+        bars1 = ax2.bar(x - width/2, lit_means_PyEDA, width, label='PyEDA', alpha=0.8)
         bars2 = ax2.bar(x + width/2, lit_means_kmap, width, label='BoolMinGeo', alpha=0.8)
         
         # Mark significant differences
         for i, sig in enumerate(lit_significant):
             if sig:
-                ax2.text(i, max(lit_means_sympy[i], lit_means_kmap[i]) * 1.05,
+                ax2.text(i, max(lit_means_PyEDA[i], lit_means_kmap[i]) * 1.05,
                         '*', ha='center', fontsize=16, color='red')
         
         ax2.set_xlabel('Configuration')
@@ -1473,12 +1523,12 @@ To reproduce this experiment:
         # Plot 3: Memory usage (if available)
         if has_memory:
             ax3 = plt.subplot(2, 3, 3)
-            bars1 = ax3.bar(x - width/2, mem_means_sympy, width, label='SymPy', alpha=0.8, color='purple')
+            bars1 = ax3.bar(x - width/2, mem_means_PyEDA, width, label='PyEDA', alpha=0.8, color='purple')
             bars2 = ax3.bar(x + width/2, mem_means_kmap, width, label='BoolMinGeo', alpha=0.8, color='green')
             
             for i, sig in enumerate(mem_significant):
                 if sig:
-                    ax3.text(i, max(mem_means_sympy[i], mem_means_kmap[i]) * 1.05,
+                    ax3.text(i, max(mem_means_PyEDA[i], mem_means_kmap[i]) * 1.05,
                             '*', ha='center', fontsize=16, color='red')
             
             ax3.set_xlabel('Configuration')
@@ -1566,7 +1616,7 @@ To reproduce this experiment:
                    fontsize=18, fontweight='bold', ha='center', transform=ax.transAxes)
             
             # Extract scalability metrics
-            sympy_params = scalability_analysis['sympy_model']
+            pyeda_params = scalability_analysis['pyeda_model']
             kmap_params = scalability_analysis['kmap_model']
             speedups = scalability_analysis['speedups']
             var_counts = scalability_analysis['var_counts']
@@ -1580,18 +1630,18 @@ To reproduce this experiment:
             scalability_text = f"""
 COMPLEXITY MODELS
 {'=' * 70}
-SymPy Exponential Model:
-  T ≈ {sympy_params[0]:.2e} × {sympy_params[1]:.3f}^n
+PyEDA Exponential Model:
+  T ≈ {pyeda_params[0]:.2e} × {pyeda_params[1]:.3f}^n
 
 BoolMinGeo Exponential Model:
   T ≈ {kmap_params[0]:.2e} × {kmap_params[1]:.3f}^n
 
 Growth Rate Analysis:
-  SymPy base growth factor:        {sympy_params[1]:.3f}
+  PyEDA base growth factor:        {pyeda_params[1]:.3f}
   BoolMinGeo base growth factor: {kmap_params[1]:.3f}
-  Ratio (SymPy/KMap):              {sympy_params[1]/kmap_params[1]:.2f}×
+  Ratio (PyEDA/KMap):              {pyeda_params[1]/kmap_params[1]:.2f}×
   
-  → SymPy's execution time grows {sympy_params[1]/kmap_params[1]:.2f}× faster per 
+  → SymPy's execution time grows {pyeda_params[1]/kmap_params[1]:.2f}× faster per 
     additional variable compared to BoolMinGeo
 
 MODEL VALIDATION
@@ -1603,15 +1653,15 @@ Prediction accuracy (measured vs model):"""
             max_error = 0
             for i, var_count in enumerate(var_counts):
                 config_key = f"{var_count}-var"
-                measured_sympy = all_stats[config_key]['time']['mean_sympy']
+                measured_PyEDA = all_stats[config_key]['time']['mean_pyeda']
                 measured_kmap = all_stats[config_key]['time']['mean_kmap']
-                predicted_sympy = exp_model(var_count, *sympy_params)
+                predicted_PyEDA = exp_model(var_count, *pyeda_params)
                 predicted_kmap = exp_model(var_count, *kmap_params)
-                error_sympy = abs(predicted_sympy - measured_sympy) / measured_sympy * 100
+                error_PyEDA = abs(predicted_PyEDA - measured_PyEDA) / measured_PyEDA * 100
                 error_kmap = abs(predicted_kmap - measured_kmap) / measured_kmap * 100
-                max_error = max(max_error, error_sympy, error_kmap)
+                max_error = max(max_error, error_PyEDA, error_kmap)
                 scalability_text += f"""
-  {var_count}-var: SymPy {error_sympy:.1f}% error, KMap {error_kmap:.1f}% error"""
+  {var_count}-var: PyEDA {error_PyEDA:.1f}% error, KMap {error_kmap:.1f}% error"""
             
             scalability_text += f"""
 
@@ -1631,14 +1681,14 @@ Trend: Speedup increases exponentially with problem size
 EXTRAPOLATED PERFORMANCE
 {'=' * 70}
 Projected 9-variable minimization:
-  SymPy expected time:         {exp_model(9, *sympy_params):.3f} s
+  PyEDA expected time:         {exp_model(9, *pyeda_params):.3f} s
   BoolMinGeo expected time:  {exp_model(9, *kmap_params):.3f} s
-  Projected speedup:           {exp_model(9, *sympy_params) / exp_model(9, *kmap_params):.1f}×
+  Projected speedup:           {exp_model(9, *pyeda_params) / exp_model(9, *kmap_params):.1f}×
 
 Projected 10-variable minimization:
-  SymPy expected time:         {exp_model(10, *sympy_params):.3f} s
+  PyEDA expected time:         {exp_model(10, *pyeda_params):.3f} s
   BoolMinGeo expected time:  {exp_model(10, *kmap_params):.3f} s
-  Projected speedup:           {exp_model(10, *sympy_params) / exp_model(10, *kmap_params):.1f}×
+  Projected speedup:           {exp_model(10, *pyeda_params) / exp_model(10, *kmap_params):.1f}×
 
 PRACTICAL IMPLICATIONS
 {'=' * 70}
@@ -1658,7 +1708,7 @@ For 8 variables:
   • Highly recommended: BoolMinGeo for any real-time use
 
 For 9+ variables:
-  • SymPy becomes impractical (>5s projected for 10-var)
+  • PyEDA becomes impractical (>5s projected for 10-var)
   • BoolMinGeo remains efficient (<50ms projected for 10-var)
   • Essential: Use BoolMinGeo for large-variable problems
 
@@ -1705,20 +1755,20 @@ VALIDITY CONSIDERATIONS
                fontsize=18, fontweight='bold', ha='center', transform=ax.transAxes)
         
         # Aggregate all statistics
-        all_sympy_times = [r['t_sympy'] for r in all_results]
+        all_pyeda_times = [r['t_pyeda'] for r in all_results]
         all_kmap_times = [r['t_kmap'] for r in all_results]
-        all_sympy_mems = [r['mem_sympy'] for r in all_results]
+        all_pyeda_mems = [r['mem_pyeda'] for r in all_results]
         all_kmap_mems = [r['mem_kmap'] for r in all_results]
-        all_sympy_lits = [r['sympy_literals'] for r in all_results]
+        all_sympy_lits = [r['pyeda_literals'] for r in all_results]
         all_kmap_lits = [r['kmap_literals'] for r in all_results]
         
         # Count total constants
         total_constant_count = sum(1 for r in all_results if r.get('is_constant', False))
         
         overall_stats = perform_statistical_tests(
-            all_sympy_times, all_kmap_times,
+            all_pyeda_times, all_kmap_times,
             all_sympy_lits, all_kmap_lits,
-            all_sympy_mems, all_kmap_mems
+            all_pyeda_mems, all_kmap_mems
         )
         
         conclusions = f"""
@@ -1731,7 +1781,7 @@ Constant Functions:      {total_constant_count} / {len(all_results)} ({100*total
 
 AGGREGATE PERFORMANCE
 {'=' * 70}
-Mean SymPy Time:         {overall_stats['time']['mean_sympy']:.6f} s
+Mean PyEDA Time:         {overall_stats['time']['mean_pyeda']:.6f} s
 Mean BoolMinGeo Time:  {overall_stats['time']['mean_kmap']:.6f} s
 Mean Time Difference:    {overall_stats['time']['mean_diff']:+.6f} s
 95% CI:                  [{overall_stats['time']['ci_lower']:.6f}, {overall_stats['time']['ci_upper']:.6f}]
@@ -1740,7 +1790,7 @@ Effect Size:             {overall_stats['time']['cohens_d']:.4f} ({interpret_eff
 
 AGGREGATE SIMPLIFICATION
 {'=' * 70}
-Mean SymPy Literals:     {overall_stats['literals']['mean_sympy']:.2f}
+Mean PyEDA Literals:     {overall_stats['literals']['mean_pyeda']:.2f}
 Mean KMap Literals:      {overall_stats['literals']['mean_kmap']:.2f}
 Mean Literal Difference: {overall_stats['literals']['mean_diff']:+.2f}
 95% CI:                  [{overall_stats['literals']['ci_lower']:.2f}, {overall_stats['literals']['ci_upper']:.2f}]
@@ -1749,7 +1799,7 @@ Effect Size:             {overall_stats['literals']['cohens_d']:.4f} ({interpret
 
 AGGREGATE MEMORY USAGE
 {'=' * 70}
-Mean SymPy Memory:       {overall_stats.get('memory', {}).get('mean_sympy', 0):.4f} MB
+Mean PyEDA Memory:       {overall_stats.get('memory', {}).get('mean_pyeda', 0):.4f} MB
 Mean KMap Memory:        {overall_stats.get('memory', {}).get('mean_kmap', 0):.4f} MB
 Mean Memory Difference:  {overall_stats.get('memory', {}).get('mean_diff', 0):+.4f} MB
 95% CI:                  [{overall_stats.get('memory', {}).get('ci_lower', 0):.4f}, {overall_stats.get('memory', {}).get('ci_upper', 0):.4f}]
@@ -1765,7 +1815,7 @@ KEY FINDINGS
             if overall_stats['time']['mean_diff'] < 0:
                 conclusions += "\n1. BoolMinGeo demonstrates statistically significant performance\n   advantage over SymPy's minimization approach."
             else:
-                conclusions += "\n1. SymPy demonstrates statistically significant performance\n   advantage over BoolMinGeo."
+                conclusions += "\n1. PyEDA demonstrates statistically significant performance\n   advantage over BoolMinGeo."
         else:
             conclusions += "\n1. No statistically significant performance difference detected\n   between BoolMinGeo and SymPy."
         
@@ -1773,17 +1823,17 @@ KEY FINDINGS
             if overall_stats['literals']['mean_diff'] < 0:
                 conclusions += "\n\n2. BoolMinGeo produces statistically more minimal Boolean\n   expressions (fewer literals) compared to SymPy."
             else:
-                conclusions += "\n\n2. SymPy produces statistically more minimal Boolean\n   expressions (fewer literals) compared to BoolMinGeo."
+                conclusions += "\n\n2. PyEDA produces statistically more minimal Boolean\n   expressions (fewer literals) compared to BoolMinGeo."
         else:
             conclusions += "\n\n2. Both algorithms achieve statistically equivalent simplification\n   quality in terms of literal count."
         
         # Add memory finding
         if 'memory' in overall_stats and overall_stats['memory']['significant']:
             if overall_stats['memory']['mean_diff'] < 0:
-                mem_efficiency = (overall_stats['memory']['mean_kmap'] / overall_stats['memory']['mean_sympy'] * 100) if overall_stats['memory']['mean_sympy'] > 0 else 100
-                conclusions += f"\n\n3. BoolMinGeo demonstrates superior memory efficiency,\n   using {mem_efficiency:.1f}% of SymPy's memory consumption."
+                mem_efficiency = (overall_stats['memory']['mean_kmap'] / overall_stats['memory']['mean_pyeda'] * 100) if overall_stats['memory']['mean_pyeda'] > 0 else 100
+                conclusions += f"\n\n3. BoolMinGeo demonstrates superior memory efficiency,\n   using {mem_efficiency:.1f}% of PyEDA's memory consumption."
             else:
-                conclusions += "\n\n3. SymPy demonstrates superior memory efficiency\n   compared to BoolMinGeo."
+                conclusions += "\n\n3. PyEDA demonstrates superior memory efficiency\n   compared to BoolMinGeo."
         else:
             conclusions += "\n\n3. No statistically significant memory usage difference\n   detected between the two algorithms."
         
@@ -1814,7 +1864,7 @@ THREATS TO VALIDITY
 {'=' * 70}
 • Random test case generation may not reflect real-world distributions
 • Timing includes Python overhead (not pure algorithm performance)
-• SymPy uses different minimization strategies (not pure K-map based)
+• PyEDA uses different minimization strategies (not pure K-map based)
 
 REPRODUCIBILITY
 {'=' * 70}
@@ -1982,7 +2032,7 @@ def generate_test_cases():
 
 def benchmark_case(test_num, num_vars, output_values, description, form='sop'):
     """
-    Run a single benchmark case comparing SymPy and BoolMinGeo.
+    Run a single benchmark case comparing PyEDA and BoolMinGeo.
     
     Args:
         test_num: Test case number
@@ -1994,75 +2044,157 @@ def benchmark_case(test_num, num_vars, output_values, description, form='sop'):
     Returns:
         Dictionary with benchmark results
     """
-    # Create variable symbols
+    # Create variable symbols for PyEDA equivalence checking
     var_symbols = symbols(f'x1:{num_vars+1}')
     
     # Get minterms and don't cares
     minterms, dont_cares = get_minterms_from_output_values(output_values)
     
-    # SymPy minimization with improved timing and memory tracking
-    print(f"    Test {test_num}: Running SymPy {form.upper()}...", end=" ", flush=True)
-    if form == 'pos':
-        sympy_func = lambda: POSform(var_symbols, minterms, dont_cares)
-    else:
-        sympy_func = lambda: SOPform(var_symbols, minterms, dont_cares)
-    t_sympy, mem_sympy = benchmark_with_warmup(sympy_func, ())
-    expr_sympy = sympy_func()
-    print(f"✓ ({t_sympy:.6f}s, {mem_sympy:.1f}MB)", end=" | ", flush=True)
+    # Create PyEDA variables (a, b, c, d, e, f, g, h for up to 8 variables)
+    pyeda_var_names = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+    pyeda_vars = [exprvar(pyeda_var_names[i]) for i in range(num_vars)]
     
-    # BoolMinGeo minimization with improved timing
+    # PyEDA minimization with error handling
+    print(f"    Test {test_num}: Running PyEDA {form.upper()}...", end=" ", flush=True)
+    pyeda_error = None
+    try:
+        # Helper function to create minterm from index
+        def create_minterm(vars_list, index):
+            """Create a minterm for given variable list and index."""
+            terms = []
+            for i, var in enumerate(reversed(vars_list)):
+                if (index >> i) & 1:
+                    terms.append(var)
+                else:
+                    terms.append(~var)
+            return And(*terms) if len(terms) > 1 else terms[0]
+        
+        if form == 'pos':
+            # POS: Build DNF from maxterms (0 positions), minimize, complement, convert to CNF
+            maxterms = [i for i, val in enumerate(output_values) if val == 0]
+            dc_indices = [i for i, val in enumerate(output_values) if val == 'd']
+            
+            if not maxterms and not dc_indices:
+                # All 1s - constant True
+                expr_pyeda_raw = expr(1)
+            else:
+                # Build DNF from maxterm positions (the 0s in the K-map)
+                if maxterms:
+                    f_off = Or(*[create_minterm(pyeda_vars, mt) for mt in maxterms])
+                else:
+                    f_off = expr(0)  # No zeros
+                
+                if dc_indices:
+                    f_dc = Or(*[create_minterm(pyeda_vars, dc) for dc in dc_indices])
+                else:
+                    f_dc = expr(0)  # No don't cares
+                
+                # Minimize the OFF set as DNF
+                minimized_off = espresso_exprs(f_off, f_dc)[0]
+                # Complement to get ON set and convert to CNF for POS form
+                expr_pyeda_raw = (~minimized_off).to_cnf()
+        else:
+            # SOP: Standard minimization
+            if not minterms and not dont_cares:
+                expr_pyeda_raw = expr(0)  # Constant False
+            else:
+                # Build ON-set and DC-set as DNF
+                if minterms:
+                    f_on = Or(*[create_minterm(pyeda_vars, mt) for mt in minterms])
+                else:
+                    f_on = expr(0)  # No 1s
+                
+                if dont_cares:
+                    f_dc = Or(*[create_minterm(pyeda_vars, dc) for dc in dont_cares])
+                else:
+                    f_dc = expr(0)  # No don't cares
+                
+                # Minimize as DNF (SOP form)
+                expr_pyeda_raw = espresso_exprs(f_on, f_dc)[0]
+        
+        # Benchmark the PyEDA function
+        pyeda_func = lambda: expr_pyeda_raw  # Already computed above
+        t_pyeda, mem_pyeda = benchmark_with_warmup(pyeda_func, ())
+        
+        # Create variable mapping: PyEDA vars (a,b,c,d,e,f,g,h) -> PyEDA vars (x1-x8)
+        pyeda_to_sympy_map = {
+            pyeda_var_names[i]: var_symbols[i] for i in range(num_vars)
+        }
+        
+        expr_pyeda = parse_pyeda_expression(expr_pyeda_raw, var_mapping=pyeda_to_sympy_map)
+        print(f"✓ ({t_pyeda:.6f}s, {mem_pyeda:.1f}MB)", end=" | ", flush=True)
+    except Exception as e:
+        pyeda_error = str(e)
+        t_pyeda = 0.0
+        mem_pyeda = 0.0
+        expr_pyeda = None
+        expr_pyeda_raw = None
+        print(f"⚠️  Error: {pyeda_error[:50]}", end=" | ", flush=True)
+    
+    # BoolMinGeo minimization with error handling
     print(f"BoolMinGeo...", end=" ", flush=True)
+    kmap_error = None
+    try:
+        # Suppress verbose output from minimize_3d
+        import io
+        import sys as sys_module
+        old_stdout = sys_module.stdout
+        sys_module.stdout = io.StringIO()
+        
+        solver = BoolMinGeo(num_vars, output_values)
+        kmap_func = lambda: solver.minimize_3d(form=form)
+        t_kmap, mem_kmap = benchmark_with_warmup(kmap_func, ())
+        terms, expr_str = kmap_func()
+        
+        # Restore stdout
+        sys_module.stdout = old_stdout
+        
+        expr_kmap_sympy = parse_kmap_expression(expr_str, var_symbols, form=form)
+        kmap_terms, kmap_literals = count_literals(expr_str, form=form)
+        print(f"✓ ({t_kmap:.6f}s, {mem_kmap:.1f}MB)", end=" | ", flush=True)
+    except Exception as e:
+        kmap_error = str(e)
+        t_kmap = 0.0
+        mem_kmap = 0.0
+        expr_kmap_sympy = None
+        expr_str = ""
+        kmap_terms, kmap_literals = 0, 0
+        print(f"⚠️  Error: {kmap_error[:50]}", end=" | ", flush=True)
     
-    # Suppress verbose output from minimize_3d
-    import io
-    import sys as sys_module
-    old_stdout = sys_module.stdout
-    sys_module.stdout = io.StringIO()
-    
-    solver = BoolMinGeo(num_vars, output_values)
-    kmap_func = lambda: solver.minimize_3d(form=form)
-    t_kmap, mem_kmap = benchmark_with_warmup(kmap_func, ())
-    terms, expr_str = kmap_func()
-    
-    # Restore stdout
-    sys_module.stdout = old_stdout
-    
-    print(f"✓ ({t_kmap:.6f}s, {mem_kmap:.1f}MB)", end=" | ", flush=True)
-    
-    # Validate equivalence
-    expr_kmap_sympy = parse_kmap_expression(expr_str, var_symbols, form=form)
-    
-    # Compute metrics
-    sympy_terms, sympy_literals = count_sympy_expression_literals(str(expr_sympy), form=form)
-    kmap_terms, kmap_literals = count_literals(expr_str, form=form)
-    
-    # IMPROVED: Detect constants from source truth table (ground truth)
-    is_constant_input, constant_type = is_truly_constant_function(output_values)
-    
-    # VALIDATE: Both algorithms should agree on constant functions
-    is_constant_output = (sympy_literals == 0 and kmap_literals == 0)
-    
-    # FIX: For constant functions (both produce 0 literals), equivalence is automatically True
-    if is_constant_output:
-        equiv = True  # Both produced constants (0 literals) - they are equivalent
+    # Validate equivalence only if BOTH algorithms succeeded
+    if pyeda_error is None and kmap_error is None:
+        # Compute PyEDA metrics
+        pyeda_terms, pyeda_literals = count_pyeda_expression_literals(str(expr_pyeda), form=form)
+        
+        # Detect constant functions (both have 0 literals)
+        is_constant = (pyeda_literals == 0 and kmap_literals == 0)
+        result_category = "constant" if is_constant else "expression"
+        
+        # Check equivalence
+        equiv = check_equivalence(expr_pyeda, expr_kmap_sympy)
+        
+        equiv_symbol = "✓" if equiv else "✗"
+        if is_constant:
+            print(f"Equiv: {equiv_symbol} [CONSTANT]")
+        else:
+            print(f"Equiv: {equiv_symbol}")
     else:
-        equiv = check_equivalence(expr_sympy, expr_kmap_sympy)
-    
-    if is_constant_input and not is_constant_output:
-        print(f"\n⚠️  WARNING: Input is constant ({constant_type}) but algorithms produced non-zero literals!")
-        print(f"   SymPy: {sympy_literals}, BoolMinGeo: {kmap_literals}")
-    elif not is_constant_input and is_constant_output:
-        print(f"\n⚠️  WARNING: Input is non-constant but both algorithms produced 0 literals!")
-    
-    # Use input-based detection as ground truth
-    is_constant = is_constant_input
-    result_category = constant_type if is_constant else "expression"
-    
-    equiv_symbol = "✓" if equiv else "✗"
-    if is_constant:
-        print(f"Equiv: {equiv_symbol} [CONSTANT: {constant_type}]")
-    else:
-        print(f"Equiv: {equiv_symbol}")
+        # One or both algorithms failed - mark as N/A
+        equiv = None  # Not applicable when one algorithm failed
+        pyeda_terms, pyeda_literals = 0, 0
+        if pyeda_error is None:
+            pyeda_terms, pyeda_literals = count_pyeda_expression_literals(str(expr_pyeda), form=form)
+        is_constant = False
+        
+        if pyeda_error and kmap_error:
+            result_category = "both_failed"
+            print(f"Equiv: N/A [BOTH FAILED]")
+        elif pyeda_error:
+            result_category = "pyeda_failed"
+            print(f"Equiv: N/A [PYEDA FAILED]")
+        else:
+            result_category = "kmap_failed"
+            print(f"Equiv: N/A [KMAP FAILED]")
     
     return {
         "index": test_num,
@@ -2072,14 +2204,16 @@ def benchmark_case(test_num, num_vars, output_values, description, form='sop'):
         "equiv": equiv,
         "result_category": result_category,
         "is_constant": is_constant,
-        "t_sympy": t_sympy,
-        "t_kmap": t_kmap,
-        "mem_sympy": mem_sympy,
-        "mem_kmap": mem_kmap,
-        "sympy_literals": sympy_literals,
-        "kmap_literals": kmap_literals,
-        "sympy_terms": sympy_terms,
-        "kmap_terms": kmap_terms,
+        "t_pyeda": t_pyeda if 'pyeda_error' in locals() and pyeda_error is None else 0.0,
+        "t_kmap": t_kmap if 'kmap_error' in locals() and kmap_error is None else 0.0,
+        "mem_pyeda": mem_pyeda if 'pyeda_error' in locals() and pyeda_error is None else 0.0,
+        "mem_kmap": mem_kmap if 'kmap_error' in locals() and kmap_error is None else 0.0,
+        "pyeda_literals": pyeda_literals if 'pyeda_error' in locals() and pyeda_error is None else 0,
+        "kmap_literals": kmap_literals if 'kmap_error' in locals() and kmap_error is None else 0,
+        "pyeda_terms": pyeda_terms if 'pyeda_error' in locals() and pyeda_error is None else 0,
+        "kmap_terms": kmap_terms if 'kmap_error' in locals() and kmap_error is None else 0,
+        "pyeda_error": pyeda_error if 'pyeda_error' in locals() else None,
+        "kmap_error": kmap_error if 'kmap_error' in locals() else None,
     }
 
 
@@ -2159,22 +2293,22 @@ def main():
                 non_constant_results = [r for r in form_results if not r.get("is_constant", False)]
                 
                 # Use all results for timing and memory, only non-constants for literals
-                sympy_times = [r["t_sympy"] for r in form_results]
+                pyeda_times = [r["t_pyeda"] for r in form_results]
                 kmap_times = [r["t_kmap"] for r in form_results]
-                sympy_mems = [r["mem_sympy"] for r in form_results]
+                pyeda_mems = [r["mem_pyeda"] for r in form_results]
                 kmap_mems = [r["mem_kmap"] for r in form_results]
                 
                 if non_constant_results and len(non_constant_results) > 1:
-                    sympy_literals = [r["sympy_literals"] for r in non_constant_results]
+                    pyeda_literals = [r["pyeda_literals"] for r in non_constant_results]
                     kmap_literals = [r["kmap_literals"] for r in non_constant_results]
                 else:
                     # All constants or insufficient non-constant samples - skip literal stats
-                    sympy_literals = []
+                    pyeda_literals = []
                     kmap_literals = []
                 
-                form_stats = perform_statistical_tests(sympy_times, kmap_times, 
-                                                 sympy_literals, kmap_literals,
-                                                 sympy_mems, kmap_mems)
+                form_stats = perform_statistical_tests(pyeda_times, kmap_times, 
+                                                 pyeda_literals, kmap_literals,
+                                                 pyeda_mems, kmap_mems)
                 all_stats[(var_num, form)] = form_stats
                 print("✓")
                 
@@ -2182,17 +2316,17 @@ def main():
                 print(f"\n  📈 {var_num}-Variable {form.upper()} Configuration Summary:")
                 print(f"     Tests completed:     {len(form_results)}")
                 print(f"     Constant functions:  {num_constant}")
-                print(f"     Mean SymPy time:     {form_stats['time']['mean_sympy']:.6f} s")
+                print(f"     Mean PyEDA time:     {form_stats['time']['mean_pyeda']:.6f} s")
                 print(f"     Mean KMap time:      {form_stats['time']['mean_kmap']:.6f} s")
                 print(f"     Time significant:    {'YES ✓' if form_stats['time']['significant'] else 'NO ✗'} "
                       f"(p={form_stats['time']['p_value']:.4f})")
                 if 'memory' in form_stats:
-                    print(f"     Mean SymPy memory:   {form_stats['memory']['mean_sympy']:.2f} MB")
+                    print(f"     Mean PyEDA memory:   {form_stats['memory']['mean_pyeda']:.2f} MB")
                     print(f"     Mean KMap memory:    {form_stats['memory']['mean_kmap']:.2f} MB")
                     print(f"     Memory significant:  {'YES ✓' if form_stats['memory']['significant'] else 'NO ✗'} "
                           f"(p={form_stats['memory']['p_value']:.4f})")
                 if non_constant_results:
-                    print(f"     Mean SymPy literals: {form_stats['literals']['mean_sympy']:.2f}")
+                    print(f"     Mean PyEDA literals: {form_stats['literals']['mean_pyeda']:.2f}")
                     print(f"     Mean KMap literals:  {form_stats['literals']['mean_kmap']:.2f}")
                     print(f"     Literal significant: {'YES ✓' if form_stats['literals']['significant'] else 'NO ✗'} "
                           f"(p={form_stats['literals']['p_value']:.4f})")
@@ -2201,21 +2335,21 @@ def main():
         config_results = [r for r in all_results if r['num_vars'] == var_num]
         if config_results:
             agg_non_constant = [r for r in config_results if not r.get("is_constant", False)]
-            agg_sympy_times = [r["t_sympy"] for r in config_results]
+            agg_pyeda_times = [r["t_pyeda"] for r in config_results]
             agg_kmap_times = [r["t_kmap"] for r in config_results]
-            agg_sympy_mems = [r["mem_sympy"] for r in config_results]
+            agg_pyeda_mems = [r["mem_pyeda"] for r in config_results]
             agg_kmap_mems = [r["mem_kmap"] for r in config_results]
             
             if agg_non_constant and len(agg_non_constant) > 1:
-                agg_sympy_literals = [r["sympy_literals"] for r in agg_non_constant]
+                agg_pyeda_literals = [r["pyeda_literals"] for r in agg_non_constant]
                 agg_kmap_literals = [r["kmap_literals"] for r in agg_non_constant]
             else:
-                agg_sympy_literals = []
+                agg_pyeda_literals = []
                 agg_kmap_literals = []
             
-            agg_stats = perform_statistical_tests(agg_sympy_times, agg_kmap_times,
-                                                 agg_sympy_literals, agg_kmap_literals,
-                                                 agg_sympy_mems, agg_kmap_mems)
+            agg_stats = perform_statistical_tests(agg_pyeda_times, agg_kmap_times,
+                                                 agg_pyeda_literals, agg_kmap_literals,
+                                                 agg_pyeda_mems, agg_kmap_mems)
             all_stats[f"{var_num}-var"] = agg_stats
     
     # VALIDATION: Check data quality before analysis
@@ -2275,3 +2409,4 @@ def main():
 if __name__ == "__main__":
     success = main()
     sys.exit(0 if success else 1)
+

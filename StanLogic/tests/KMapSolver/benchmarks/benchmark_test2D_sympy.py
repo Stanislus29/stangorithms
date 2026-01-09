@@ -49,10 +49,10 @@ ALPHA = 0.05  # 95% confidence level
 
 # Output directories - relative to script location
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-OUTPUTS_DIR = os.path.join(SCRIPT_DIR, "..", "outputs", "benchmark_results2D")
-RESULTS_CSV = os.path.join(OUTPUTS_DIR, "benchmark_results2D.csv")
-REPORT_PDF = os.path.join(OUTPUTS_DIR, "benchmark_scientific_report2D.pdf")
-STATS_CSV = os.path.join(OUTPUTS_DIR, "statistical_analysis2D.csv")
+OUTPUTS_DIR = os.path.join(SCRIPT_DIR, "..", "outputs", "benchmark_results2D_sympy")
+RESULTS_CSV = os.path.join(OUTPUTS_DIR, "benchmark_results2D_sympy.csv")
+REPORT_PDF = os.path.join(OUTPUTS_DIR, "benchmark_scientific_report2D_sympy.pdf")
+STATS_CSV = os.path.join(OUTPUTS_DIR, "benchmark_results2D_sympy_statistical_analysis.csv")
 
 # Logo for report cover
 LOGO_PATH = os.path.join(SCRIPT_DIR,"..", "..", "..", "images", "St_logo_light-tp.png")

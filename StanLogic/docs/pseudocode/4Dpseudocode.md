@@ -452,28 +452,7 @@ Output: T - set of terms
     
     return T, E
 
-═══════════════════════════════════════════════════════════════════
-COMPLEXITY ANALYSIS
-═══════════════════════════════════════════════════════════════════
-
-Time Complexity:
-    Chunk partitioning:           O(2^n)
-    3D minimization per chunk:    O(2^c × f(8)) where f(8) is 3D cost
-    4D cluster identification:    O(|patterns| × |chunks|)
-    Span-wise merging:            O(|Γ₄ᴰ| × 2^(2c))
-    EPI selection:                O(|Λ|²)
-    Coverage verification:        O(2^n)
-    
-Overall: O(2^n + |Γ₄ᴰ| × 2^(2c))
-    where c = n - 8, typically |Γ₄ᴰ| << 2^n
-
-Space Complexity: O(2^n) for storing K-map chunks
-
-Optimality:
-    3D minimization per chunk:    Exact (via 3D algorithm)
-    Span-wise merging:            Exact (Quine-McCluskey)
-    Span dominance:               Maximal grouping across chunks
-    Coverage completion:          Greedy (if needed)
+End Algorithm
 
 ═══════════════════════════════════════════════════════════════════
 END OF ALGORITHM
