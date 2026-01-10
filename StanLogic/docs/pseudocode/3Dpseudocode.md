@@ -511,36 +511,137 @@ Output: Set of all concrete strings matching π
     return result
 
 ═══════════════════════════════════════════════════════════════════
-PHASE 6: COVERAGE VERIFICATION & COMPLETION
+PHASE 6: COVERAGE VERIFICATION & 2D PATTERN COLLECTION
 ═══════════════════════════════════════════════════════════════════
 
-Algorithm: VERIFY-AND-COMPLETE(Ψ, K, Λ, I)
-Input: Ψ - selected EPIs
+Algorithm: VERIFY-AND-COLLECT-2D(Ψ, β, K, I, M_all)
+Input: Ψ - selected 3D EPIs
+       β - dictionary mapping identifier → patterns
        K - all K-maps
-       Λ - all clusters
        I - all identifiers
-Output: Ψ' - complete coverage EPIs
+       M_all - all target minterms
+Output: Ψ_complete - complete coverage with 2D patterns
 
-    // Get all minterms that should be covered (where F = 1)
-    M_all ← GET-ALL-MINTERMS(K, I)
+    // Get patterns from 3D EPIs
+    Π₃ᴰ ← {λ.full_pattern : λ ∈ Ψ}
     
-    // Check which minterms are covered by selected EPIs
-    M_cov ← ⋃_{λ ∈ Ψ} EXPAND-PATTERN(λ.full_pattern)
+    // Check which minterms are covered by 3D EPIs
+    M_cov₃ᴰ ← ⋃_{π ∈ Π₃ᴰ} EXPAND-PATTERN(π)
     
-    // Find any uncovered minterms
-    M_unc ← M_all \ M_cov
+    // Find uncovered minterms
+    M_unc ← M_all \ M_cov₃ᴰ
     
     if M_unc ≠ ∅ then
-        // Attempt greedy coverage of remaining minterms
-        Ψ_add ← GREEDY-COVER-FROM-CLUSTERS(M_unc, Λ, Ψ)
-        Ψ ← Ψ ∪ Ψ_add
+        // Collect 2D patterns for coverage
+        Π₂ᴰ ← COLLECT-2D-FOR-COVERAGE(β, Π₃ᴰ, M_unc, M_all)
         
-        // Re-verify coverage
-        M_cov ← ⋃_{λ ∈ Ψ} EXPAND-PATTERN(λ.full_pattern)
-        M_unc ← M_all \ M_cov
+        // Combine 3D and 2D patterns
+        Π_all ← Π₃ᴰ ∪ Π₂ᴰ
+        
+        // Verify complete coverage
+        M_cov_final ← ⋃_{π ∈ Π_all} EXPAND-PATTERN(π)
+        M_still_unc ← M_all \ M_cov_final
+        
+        if M_still_unc ≠ ∅ then
+            // Apply fallback coverage
+            Π_fallback ← FALLBACK-COVERAGE(M_still_unc)
+            Π_all ← Π_all ∪ Π_fallback
+        end if
+    else
+        Π_all ← Π₃ᴰ
     end if
     
-    return Ψ
+    return Π_all
+
+───────────────────────────────────────────────────────────────────
+
+Function: COLLECT-2D-FOR-COVERAGE(β, Π₃ᴰ, M_unc, M_all)
+Input: β - dictionary mapping identifier → patterns
+       Π₃ᴰ - set of 3D patterns already selected
+       M_unc - uncovered minterms
+       M_all - all target minterms
+Output: Π₂ᴰ - set of 2D patterns for coverage
+
+    if M_unc = ∅ then
+        return ∅                         // All covered by 3D patterns
+    end if
+    
+    // Build list of 2D candidate patterns
+    candidates ← []
+    
+    for each δ ∈ β do
+        for each π ∈ β[δ] do
+            π_full ← δ ∘ π               // Full pattern
+            
+            if π_full ∈ Π₃ᴰ then
+                continue                 // Skip 3D patterns
+            end if
+            
+            // Calculate coverage
+            M_covered ← EXPAND-PATTERN(π_full) ∩ M_all
+            M_overlap ← M_covered ∩ M_unc
+            
+            if M_overlap ≠ ∅ then
+                candidates.append({
+                    pattern: π_full,
+                    covered: M_covered,
+                    unc_count: |M_overlap|
+                })
+            end if
+        end for
+    end for
+    
+    // Find essential 2D patterns
+    essential ← []
+    M_cov_essential ← ∅
+    
+    // Build minterm-to-patterns mapping
+    MT_map ← ∅
+    for each c ∈ candidates do
+        for each m ∈ (c.covered ∩ M_unc) do
+            MT_map[m].append(c)
+        end for
+    end for
+    
+    // Select essential patterns (only pattern covering a minterm)
+    for each (m, patterns) ∈ MT_map do
+        if |patterns| = 1 then
+            c ← patterns[0]
+            if c ∉ essential then
+                essential.append(c)
+                M_cov_essential ← M_cov_essential ∪ c.covered
+            end if
+        end if
+    end for
+    
+    // Greedy set cover for remaining
+    selected ← essential
+    M_remaining ← M_unc \ M_cov_essential
+    available ← candidates \ essential
+    
+    while M_remaining ≠ ∅ ∧ available ≠ ∅ do
+        // Select pattern covering most remaining minterms
+        best ← arg max_{c ∈ available} |c.covered ∩ M_remaining|
+        
+        if |best.covered ∩ M_remaining| = 0 then
+            break
+        end if
+        
+        selected.append(best)
+        M_remaining ← M_remaining \ best.covered
+        available.remove(best)
+    end while
+    
+    return {c.pattern : c ∈ selected}
+
+───────────────────────────────────────────────────────────────────
+
+Function: FALLBACK-COVERAGE(M_unc)
+Input: M_unc - uncovered minterms
+Output: Set of fallback patterns (direct minterm patterns)
+
+    // Direct coverage: use each minterm as its own pattern
+    return M_unc
 
 ───────────────────────────────────────────────────────────────────
 
@@ -565,36 +666,58 @@ Output: Set of all minterms where F = 1
     
     return M
 
-───────────────────────────────────────────────────────────────────
-// N.B: This function was discovered unnecessary and removed from implementation in the library, however, anyone looking to reporoduce the algorithm may wish to implement it according to their needs 
 
-Function: GREEDY-COVER-FROM-CLUSTERS(M_unc, Λ, Ψ)
-Input: M_unc - uncovered minterms
-       Λ - all available clusters
-       Ψ - already selected EPIs
-Output: Additional EPIs to cover M_unc
-
-    Ψ_add ← []
-    R ← M_unc
-    
-    used_patterns ← {λ.full_pattern : λ ∈ Ψ}
-    available ← {λ ∈ Λ : λ.full_pattern ∉ used_patterns}
-    
-    while R ≠ ∅ ∧ available ≠ ∅ do
-        λ* ← arg max_{λ ∈ available} |EXPAND-PATTERN(λ.full_pattern) ∩ R|
-        coverage ← EXPAND-PATTERN(λ*.full_pattern) ∩ R
-        
-        if |coverage| = 0 then break
-        
-        Ψ_add.append(λ*)
-        R ← R \ coverage
-        available ← available \ {λ*}
-    end while
-    
-    return Ψ_add
 
 ═══════════════════════════════════════════════════════════════════
-PHASE 7: EXPRESSION GENERATION
+PHASE 7: FINAL QUINE-MCCLUSKEY OPTIMIZATION
+═══════════════════════════════════════════════════════════════════
+
+Algorithm: OPTIMIZE-WITH-QUINE-MCCLUSKEY(Π_all, M_all)
+Input: Π_all - set of all patterns (3D + 2D + fallback)
+       M_all - all target minterms
+Output: Π_optimal - globally minimal set of patterns
+
+    if |Π_all| ≤ 1 then
+        return Π_all
+    end if
+    
+    // Expand patterns to verify coverage
+    M_covered ← ⋃_{π ∈ Π_all} EXPAND-PATTERN(π)
+    
+    if M_covered ≠ M_all then
+        // Coverage mismatch - return patterns as-is
+        return Π_all
+    end if
+    
+    // Re-minimize from scratch using complete Quine-McCluskey
+    Π_prime ← FIND-ALL-PRIME-IMPLICANTS(M_all)
+    
+    // Filter out invalid prime implicants
+    Π_valid ← ∅
+    for each π ∈ Π_prime do
+        if EXPAND-PATTERN(π) ⊆ M_all then
+            Π_valid ← Π_valid ∪ {π}
+        end if
+    end for
+    
+    // Select essential PIs for minimal cover
+    Π_optimal ← SELECT-ESSENTIAL-PRIME-IMPLICANTS(Π_valid, M_all)
+    
+    return Π_optimal
+
+───────────────────────────────────────────────────────────────────
+
+Note: This final optimization step ensures global minimality by:
+    1. Expanding all patterns back to their minterms
+    2. Re-applying Quine-McCluskey from scratch on the minterm set
+    3. Filtering invalid prime implicants that cover unwanted minterms
+    4. Selecting essential prime implicants for minimal cover
+    
+This allows patterns from different sources (3D, 2D, fallback) to be
+merged and optimized together, producing a globally minimal result.
+
+═══════════════════════════════════════════════════════════════════
+PHASE 8: EXPRESSION GENERATION
 ═══════════════════════════════════════════════════════════════════
 
 Algorithm: GENERATE-EXPRESSION(Ψ, form, n)
@@ -672,17 +795,29 @@ Begin:
     K ← BUILD-KMAPS(n, T, F)
     I ← KEYS(K)
     
+    // Get all target minterms
+    M_all ← GET-ALL-MINTERMS(K, I)
+    
+    // Build pattern dictionary from 2D minimization
     β ← ∅
     for each δ ∈ SORTED(I) do
         patterns ← SOLVE-SINGLE-KMAP(K[δ], form)
         β[δ] ← patterns
     end for
     
+    // 3D clustering and merging
     Γ ← IDENTIFY-3D-CLUSTERS(β, I)
     Λ ← DEPTH-WISE-MERGE(Γ)
     Ψ ← SELECT-EPIS-BY-DEPTH-DOMINANCE(Λ)
-    Ψ ← VERIFY-AND-COMPLETE(Ψ, K, Λ, I)
-    (T, E) ← GENERATE-EXPRESSION(Ψ, form, n)
+    
+    // Coverage verification and 2D pattern collection
+    Π_all ← VERIFY-AND-COLLECT-2D(Ψ, β, K, I, M_all)
+    
+    // Final global optimization
+    Π_optimal ← OPTIMIZE-WITH-QUINE-MCCLUSKEY(Π_all, M_all)
+    
+    // Generate expression
+    (T, E) ← GENERATE-EXPRESSION(Π_optimal, form, n)
     
     return (T, E)
 

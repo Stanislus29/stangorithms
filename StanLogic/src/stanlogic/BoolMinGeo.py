@@ -522,7 +522,8 @@ class BoolMinGeo:
         
         This is the main entry point for 5-8 variable minimization.
         Includes both 3D clusters (spanning multiple K-maps) AND 2D clusters
-        (within individual K-maps).
+        (within individual K-maps), with proper coverage verification and
+        final Quine-McCluskey optimization.
         
         Args:
             form (str): 'sop' or 'pos'
@@ -542,28 +543,71 @@ class BoolMinGeo:
         
         for idx in id_set:
             # Use _solve_single_kmap to get correct bit patterns
-            # This method properly extracts patterns from K-map cell structures
             result = self._solve_single_kmap(idx, form)
             β[idx] = result['terms_bits']  # These are the correct 4-bit patterns
+        
+        # Get all target minterms for coverage verification
+        target_val = 0 if form.lower() == 'pos' else 1
+        all_target_minterms = set()
+        for i, val in enumerate(self.output_values):
+            if val == target_val:
+                bits = format(i, f'0{self.num_vars}b')
+                all_target_minterms.add(bits)
+        
+        print(f"Total target minterms to cover: {len(all_target_minterms)}")
         
         # Apply 3D clustering algorithm (returns 3D patterns)
         minimal_3d_patterns = self._minimize_with_3d_clustering(β, id_set)
         
-        # Collect 2D-only patterns (patterns that appear in single K-maps only)
-        patterns_2d_only = self._collect_2d_only_patterns(β, minimal_3d_patterns)
+        # Check coverage after 3D clustering
+        covered_by_3d = self._get_covered_minterms(minimal_3d_patterns)
+        uncovered_after_3d = all_target_minterms - covered_by_3d
+        
+        print(f"\nAfter 3D clustering:")
+        print(f"  Covered: {len(covered_by_3d)} minterms")
+        print(f"  Uncovered: {len(uncovered_after_3d)} minterms")
+        
+        # Collect 2D patterns to cover remaining minterms
+        patterns_2d_only = self._collect_2d_for_coverage(
+            β, minimal_3d_patterns, uncovered_after_3d, all_target_minterms
+        )
+        
+        print(f"\nAfter adding 2D patterns:")
+        print(f"  Added {len(patterns_2d_only)} 2D patterns")
         
         # Combine both 2D and 3D patterns
         all_patterns = minimal_3d_patterns | patterns_2d_only
         
+        # Verify complete coverage
+        final_covered = self._get_covered_minterms(all_patterns)
+        still_uncovered = all_target_minterms - final_covered
+        
+        if still_uncovered:
+            print(f"\n⚠ WARNING: {len(still_uncovered)} minterms still uncovered!")
+            print(f"  Applying fallback coverage...")
+            fallback_patterns = self._fallback_coverage(still_uncovered, β)
+            all_patterns |= fallback_patterns
+        
+        # CRITICAL: Apply final Quine-McCluskey minimization to merge redundant terms
+        print(f"\n{'='*60}")
+        print("FINAL OPTIMIZATION: Quine-McCluskey Merging")
+        print(f"{'='*60}")
+        
+        optimized_patterns = self._optimize_with_quine_mccluskey(
+            all_patterns, all_target_minterms
+        )
+        
+        print(f"\nPattern count: {len(all_patterns)} → {len(optimized_patterns)}")
+        
         # Convert patterns to final terms
         final_terms = []
-        for pattern in sorted(all_patterns):
+        for pattern in sorted(optimized_patterns):
             term_str = self._bits_to_term(pattern, form)
             final_terms.append(term_str)
         
         # Build final expression
         join_operator = " * " if form.lower() == 'pos' else " + "
-        final_expression = join_operator.join(final_terms)
+        final_expression = join_operator.join(final_terms) if final_terms else ("0" if form.lower() == 'sop' else "1")
         
         print(f"\n{'='*60}")
         print(f"FINAL EXPRESSION: {len(final_terms)} terms")
@@ -905,6 +949,331 @@ class BoolMinGeo:
         
         print(f"\nCollected {len(patterns_2d)} 2D-only patterns")
         return patterns_2d
+    
+    def _collect_2d_for_coverage(self, β, minimal_3d_patterns, uncovered, all_minterms):
+        """
+        Collect 2D patterns needed to cover remaining uncovered minterms.
+        Uses essential prime implicant detection and greedy set cover.
+        
+        Args:
+            β: Dictionary mapping identifier → list of patterns
+            minimal_3d_patterns: Set of full patterns from 3D clustering
+            uncovered: Set of uncovered minterm strings
+            all_minterms: Set of all target minterms
+            
+        Returns:
+            set: Full patterns for 2D coverage
+        """
+        print("\n" + "="*60)
+        print("COLLECTING 2D PATTERNS FOR COVERAGE")
+        print("="*60)
+        
+        if not uncovered:
+            print("  All minterms covered by 3D patterns!")
+            return set()
+        
+        # Build list of all 2D candidate patterns
+        candidates = []
+        
+        for idx in sorted(β.keys()):
+            for pattern in β[idx]:
+                full_pattern = idx + pattern
+                
+                # Skip if this is part of a 3D cluster
+                if full_pattern in minimal_3d_patterns:
+                    continue
+                
+                # Calculate coverage
+                covered = self._expand_pattern(full_pattern) & all_minterms
+                overlap_uncovered = covered & uncovered
+                
+                if overlap_uncovered:
+                    candidates.append({
+                        'pattern': full_pattern,
+                        'covered': covered,
+                        'uncovered_count': len(overlap_uncovered)
+                    })
+        
+        print(f"  Found {len(candidates)} 2D candidate patterns")
+        
+        # Find essential 2D patterns (cover minterms no other pattern covers)
+        essential_2d = []
+        covered_by_essential = set()
+        
+        # Build minterm-to-patterns mapping
+        minterm_to_patterns = defaultdict(list)
+        for cand in candidates:
+            for mt in cand['covered'] & uncovered:
+                minterm_to_patterns[mt].append(cand)
+        
+        # Find essential patterns
+        for mt, patterns in minterm_to_patterns.items():
+            if len(patterns) == 1:
+                # Only one pattern covers this minterm - essential!
+                cand = patterns[0]
+                if cand not in essential_2d:
+                    essential_2d.append(cand)
+                    covered_by_essential.update(cand['covered'])
+                    print(f"  ✓ Essential 2D: {cand['pattern']} (covers {cand['uncovered_count']} uncovered)")
+        
+        # Greedy set cover for remaining
+        selected = essential_2d.copy()
+        remaining_uncovered = uncovered - covered_by_essential
+        available = [c for c in candidates if c not in essential_2d]
+        
+        while remaining_uncovered and available:
+            # Find pattern covering most remaining uncovered minterms
+            best = max(available, 
+                      key=lambda c: len(c['covered'] & remaining_uncovered),
+                      default=None)
+            
+            if best is None or len(best['covered'] & remaining_uncovered) == 0:
+                break
+            
+            selected.append(best)
+            remaining_uncovered -= best['covered']
+            available.remove(best)
+            print(f"  + Added 2D: {best['pattern']} (covers {len(best['covered'] & (uncovered - remaining_uncovered))} more)")
+        
+        result = {cand['pattern'] for cand in selected}
+        print(f"\nSelected {len(result)} 2D patterns for coverage")
+        
+        return result
+    
+    def _collect_3d_for_coverage(self, chunk_results, minimal_4d_patterns, uncovered, all_minterms):
+        """
+        Collect 3D patterns needed to cover remaining uncovered minterms after 4D clustering.
+        Uses essential prime implicant detection and greedy set cover.
+        
+        Args:
+            chunk_results: Dictionary mapping chunk_id → set of 3D patterns
+            minimal_4d_patterns: Set of full patterns from 4D clustering
+            uncovered: Set of uncovered minterm strings
+            all_minterms: Set of all target minterms
+            
+        Returns:
+            set: Full patterns for 3D coverage
+        """
+        print("\n" + "="*70)
+        print("COLLECTING 3D PATTERNS FOR COVERAGE")
+        print("="*70)
+        
+        if not uncovered:
+            print("  All minterms covered by 4D patterns!")
+            return set()
+        
+        # Build list of all 3D candidate patterns
+        candidates = []
+        
+        for chunk_id, patterns in sorted(chunk_results.items()):
+            for pattern in patterns:
+                full_pattern = chunk_id + pattern
+                
+                # Skip if this is part of a 4D cluster
+                if full_pattern in minimal_4d_patterns:
+                    continue
+                
+                # Calculate coverage
+                covered = self._expand_pattern(full_pattern) & all_minterms
+                overlap_uncovered = covered & uncovered
+                
+                if overlap_uncovered:
+                    candidates.append({
+                        'pattern': full_pattern,
+                        'covered': covered,
+                        'uncovered_count': len(overlap_uncovered)
+                    })
+        
+        print(f"  Found {len(candidates)} 3D candidate patterns")
+        
+        # Find essential 3D patterns (cover minterms no other pattern covers)
+        essential_3d = []
+        covered_by_essential = set()
+        
+        # Build minterm-to-patterns mapping
+        minterm_to_patterns = defaultdict(list)
+        for cand in candidates:
+            for mt in cand['covered'] & uncovered:
+                minterm_to_patterns[mt].append(cand)
+        
+        # Find essential patterns
+        for mt, patterns in minterm_to_patterns.items():
+            if len(patterns) == 1:
+                # Only one pattern covers this minterm - essential!
+                cand = patterns[0]
+                if cand not in essential_3d:
+                    essential_3d.append(cand)
+                    covered_by_essential.update(cand['covered'])
+                    print(f"  ✓ Essential 3D: {cand['pattern']} (covers {cand['uncovered_count']} uncovered)")
+        
+        # Greedy set cover for remaining
+        selected = essential_3d.copy()
+        remaining_uncovered = uncovered - covered_by_essential
+        available = [c for c in candidates if c not in essential_3d]
+        
+        while remaining_uncovered and available:
+            # Find pattern covering most remaining uncovered minterms
+            best = max(available, 
+                      key=lambda c: len(c['covered'] & remaining_uncovered),
+                      default=None)
+            
+            if best is None or len(best['covered'] & remaining_uncovered) == 0:
+                break
+            
+            selected.append(best)
+            remaining_uncovered -= best['covered']
+            available.remove(best)
+            print(f"  + Added 3D: {best['pattern']} (covers {len(best['covered'] & (uncovered - remaining_uncovered))} more)")
+        
+        result = {cand['pattern'] for cand in selected}
+        print(f"\nSelected {len(result)} 3D patterns for coverage")
+        
+        return result
+    
+    def _fallback_coverage(self, uncovered, β):
+        """
+        Fallback method to cover any remaining uncovered minterms.
+        Uses direct pattern generation from uncovered minterms.
+        
+        Args:
+            uncovered: Set of uncovered minterm strings
+            β: Dictionary of patterns per identifier
+            
+        Returns:
+            set: Fallback patterns
+        """
+        print(f"\n  Applying fallback coverage for {len(uncovered)} minterms...")
+        
+        fallback = set()
+        for minterm in uncovered:
+            # Direct coverage: use the minterm itself as a pattern
+            fallback.add(minterm)
+            print(f"    Fallback: {minterm}")
+        
+        return fallback
+    
+    def _optimize_with_quine_mccluskey(self, patterns, all_minterms):
+        """
+        Apply complete re-minimization to ensure global minimality.
+        This expands patterns back to minterms and re-minimizes from scratch.
+        
+        Args:
+            patterns: Set of pattern strings (with possible '-')
+            all_minterms: Set of all target minterm strings
+            
+        Returns:
+            set: Optimized minimal set of patterns
+        """
+        if len(patterns) <= 1:
+            return patterns
+        
+        print(f"\n  Starting with {len(patterns)} patterns")
+        print(f"  Re-minimizing from scratch using complete Quine-McCluskey...")
+        
+        # Expand all patterns to get the complete minterm set they cover
+        covered_minterms = set()
+        for pattern in patterns:
+            covered_minterms.update(self._expand_pattern(pattern) & all_minterms)
+        
+        # Verify we have the correct minterms
+        if covered_minterms != all_minterms:
+            print(f"  ⚠ WARNING: Pattern coverage mismatch!")
+            print(f"    Patterns cover: {len(covered_minterms)} minterms")
+            print(f"    Expected: {len(all_minterms)} minterms")
+            # Use the patterns we have - don't re-minimize
+            return patterns
+        
+        # Re-minimize from scratch using complete Quine-McCluskey
+        minterm_list = sorted(list(all_minterms))
+        all_prime_implicants = self._find_all_prime_implicants_bitwise(minterm_list)
+        
+        # Filter out prime implicants that cover unwanted minterms
+        valid_pis = []
+        for pi in all_prime_implicants:
+            pi_minterms = self._expand_pattern(pi)
+            if pi_minterms.issubset(all_minterms):
+                valid_pis.append(pi)
+            else:
+                print(f"    Filtered: {pi} (covers unwanted minterms)")
+        
+        print(f"    Found {len(all_prime_implicants)} PIs ({len(valid_pis)} valid)")
+        
+        # Select essential PIs
+        optimized_patterns = self._select_essential_prime_implicants(valid_pis, minterm_list)
+        
+        print(f"  Final optimization: {len(patterns)} → {len(optimized_patterns)} patterns")
+        
+        return set(optimized_patterns)
+    
+    def _try_combine_patterns(self, pattern1, pattern2):
+        """
+        Try to combine two patterns that differ in exactly one position.
+        Returns combined pattern or None if cannot combine.
+        
+        Args:
+            pattern1, pattern2: Pattern strings with possible '-'
+            
+        Returns:
+            str or None: Combined pattern if possible
+        """
+        if len(pattern1) != len(pattern2):
+            return None
+        
+        diff_count = 0
+        diff_pos = -1
+        
+        for i in range(len(pattern1)):
+            if pattern1[i] != pattern2[i]:
+                # Both must be 0 or 1 (not '-') at differing position
+                if pattern1[i] == '-' or pattern2[i] == '-':
+                    return None
+                diff_count += 1
+                diff_pos = i
+        
+        # Must differ in exactly one position
+        if diff_count != 1:
+            return None
+        
+        # Create combined pattern with '-' at the differing position
+        combined = list(pattern1)
+        combined[diff_pos] = '-'
+        return ''.join(combined)
+    
+    def _remove_redundant_patterns(self, patterns, all_minterms):
+        """
+        Remove patterns that are redundant (covered by other patterns).
+        
+        Args:
+            patterns: List of pattern strings
+            all_minterms: Set of target minterms
+            
+        Returns:
+            list: Non-redundant patterns
+        """
+        if len(patterns) <= 1:
+            return patterns
+        
+        # Calculate coverage for each pattern
+        pattern_coverage = {}
+        for pattern in patterns:
+            pattern_coverage[pattern] = self._expand_pattern(pattern) & all_minterms
+        
+        # Remove redundant patterns
+        non_redundant = []
+        for i, pattern in enumerate(patterns):
+            # Check if removing this pattern loses coverage
+            other_coverage = set()
+            for j, other in enumerate(patterns):
+                if i != j:
+                    other_coverage.update(pattern_coverage[other])
+            
+            if not pattern_coverage[pattern].issubset(other_coverage):
+                # This pattern covers some minterms not covered by others
+                non_redundant.append(pattern)
+            else:
+                print(f"    Removed redundant: {pattern}")
+        
+        return non_redundant
 
     def _minimize_boolean_function_complete(self, minterm_list):
         """
@@ -1632,38 +2001,89 @@ class BoolMinGeo:
         
         print(f"Selected {len(epis)} essential prime implicants")
 
-        #  # Step 6: Verify coverage
-        # print(f"\n{'='*70}")
-        # print(f"PHASE 6: COVERAGE VERIFICATION")
-        # print(f"{'='*70}\n")
+        # Step 6: Verify coverage
+        print(f"\n{'='*70}")
+        print(f"PHASE 6: COVERAGE VERIFICATION")
+        print(f"{'='*70}\n")
         
-        # all_minterms = self._get_all_minterms_from_kmaps(list(self.kmaps.keys()))
-        # covered = self._get_covered_minterms([c['full_pattern'] for c in epis])
-        # uncovered = all_minterms - covered
+        # Get all target minterms
+        target_val = 0 if form.lower() == 'pos' else 1
+        all_target_minterms = set()
+        for i, val in enumerate(self.output_values):
+            if val == target_val:
+                bits = format(i, f'0{self.num_vars}b')
+                all_target_minterms.add(bits)
         
-        # if uncovered:
-        #     print(f"  ⚠ WARNING: {len(uncovered)} minterms not covered!")
-        #     additional = self._greedy_cover_4d(uncovered, merged_4d_clusters, epis)
-        #     epis.extend(additional)
+        # Check coverage after 4D clustering
+        minimal_4d_patterns = {c['full_pattern'] for c in epis}
+        covered_by_4d = self._get_covered_minterms(minimal_4d_patterns)
+        uncovered_after_4d = all_target_minterms - covered_by_4d
+        
+        if uncovered_after_4d:
+            print(f"  ⚠ WARNING: {len(uncovered_after_4d)} minterms not covered by 4D clusters!")
+            print(f"  Uncovered minterms: {list(uncovered_after_4d)[:10]}...")
+            print(f"\n  Attempting to cover with remaining 4D clusters...")
+            additional = self._greedy_cover_from_clusters(uncovered_after_4d, merged_4d_clusters, epis)
+            epis.extend(additional)
             
-        #     covered = self._get_covered_minterms([c['full_pattern'] for c in epis])
-        #     still_uncovered = all_minterms - covered
+            # Re-verify
+            minimal_4d_patterns = {c['full_pattern'] for c in epis}
+            covered_by_4d = self._get_covered_minterms(minimal_4d_patterns)
+            uncovered_after_4d = all_target_minterms - covered_by_4d
             
-        #     if still_uncovered:
-        #         print(f"  ✗ CRITICAL: {len(still_uncovered)} minterms still uncovered!")
-        #     else:
-        #         print(f"  ✓ Coverage achieved with {len(additional)} additional clusters")
-        # else:
-        #     print(f"  ✓ All {len(all_minterms)} minterms covered")
+            if uncovered_after_4d:
+                print(f"  ✗ CRITICAL: {len(uncovered_after_4d)} minterms still uncovered!")
+                print(f"  This indicates incomplete 4D clustering.")
+                print(f"  The function may have isolated regions requiring 3D clusters.")
+            else:
+                print(f"  ✓ Coverage achieved with {len(additional)} additional clusters")
+        else:
+            print(f"  ✓ All {len(all_target_minterms)} minterms covered by 4D clusters")
+        
+        print(f"\nAfter 4D clustering:")
+        print(f"  Covered: {len(covered_by_4d)} minterms")
+        print(f"  Uncovered: {len(uncovered_after_4d)} minterms")
+        
+        # Collect 3D patterns to cover remaining minterms
+        patterns_3d_only = self._collect_3d_for_coverage(
+            chunk_results, minimal_4d_patterns, uncovered_after_4d, all_target_minterms
+        )
+        
+        print(f"\nAfter adding 3D patterns:")
+        print(f"  Added {len(patterns_3d_only)} 3D patterns")
+        
+        # Combine both 3D and 4D patterns
+        all_patterns = minimal_4d_patterns | patterns_3d_only
+        
+        # Verify complete coverage
+        final_covered = self._get_covered_minterms(all_patterns)
+        still_uncovered = all_target_minterms - final_covered
+        
+        if still_uncovered:
+            print(f"\n⚠ WARNING: {len(still_uncovered)} minterms still uncovered!")
+            print(f"  Applying fallback coverage...")
+            fallback_patterns = self._fallback_coverage(still_uncovered, None)
+            all_patterns |= fallback_patterns
+        
+        # CRITICAL: Apply final Quine-McCluskey minimization to merge redundant terms
+        print(f"\n{'='*70}")
+        print("FINAL OPTIMIZATION: Quine-McCluskey Merging")
+        print(f"{'='*70}")
+        
+        optimized_patterns = self._optimize_with_quine_mccluskey(
+            all_patterns, all_target_minterms
+        )
+        
+        print(f"\nPattern count: {len(all_patterns)} → {len(optimized_patterns)}")
         
         # Step 7: Convert to final expression
         final_terms = []
-        for cluster in epis:
-            term_str = self._bits_to_term(cluster['full_pattern'], form)
+        for pattern in sorted(optimized_patterns):
+            term_str = self._bits_to_term(pattern, form)
             final_terms.append(term_str)
         
         join_operator = " * " if form.lower() == 'pos' else " + "
-        final_expression = join_operator.join(final_terms)
+        final_expression = join_operator.join(final_terms) if final_terms else ("0" if form.lower() == 'sop' else "1")
         
         print(f"\n{'='*70}")
         print(f"FINAL 4D-MINIMIZED EXPRESSION")
@@ -1727,8 +2147,28 @@ class BoolMinGeo:
         # Create new K-map object for 8 variables
         from copy import deepcopy
         
-        chunk_minimizer = self.__class__(8)  # Assuming your class is callable with num_vars
-        chunk_minimizer.kmaps = deepcopy(chunk_kmaps)
+        # Build output values for this chunk (256 values for 8 variables)
+        chunk_output_values = [0] * 256
+        gray_code = ['00', '01', '11', '10']
+        
+        for idx_str, kmap in chunk_kmaps.items():
+            idx_val = int(idx_str, 2)  # 4-bit identifier value
+            
+            for row in range(4):
+                for col in range(4):
+                    cell = kmap[row][col]
+                    if cell and cell.get('value') == 1:
+                        # Calculate position in chunk's output values
+                        # First 4 bits from identifier, last 4 from K-map position
+                        row_bits = gray_code[row]
+                        col_bits = gray_code[col]
+                        kmap_bits = col_bits + row_bits  # 4 bits
+                        full_bits = idx_str + kmap_bits  # 8 bits total
+                        position = int(full_bits, 2)
+                        chunk_output_values[position] = 1
+        
+        # Create minimizer with proper output values
+        chunk_minimizer = self.__class__(8, chunk_output_values)
         chunk_minimizer.num_extra_vars = 4
         chunk_minimizer.num_maps = 16
         
@@ -1748,9 +2188,14 @@ class BoolMinGeo:
         patterns = []
         
         for term in terms:
-            # Convert term back to bit pattern
-            pattern = self._term_to_pattern(term, 8)
-            patterns.append(pattern)
+            try:
+                # Convert term back to bit pattern (8-bit for chunk)
+                pattern = self._term_to_pattern(term, 8)
+                patterns.append(pattern)
+            except Exception as e:
+                print(f"Warning: Failed to extract pattern from term '{term}': {e}")
+                # Skip this term
+                continue
         
         return patterns
 

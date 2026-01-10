@@ -1,5 +1,5 @@
 """
-Benchmark test for 3D minimization (5-8 variables).
+Benchmark test for 4D minimization (9+ variables).
 Tests variable ordering fix and tracks performance vitals.
 """
 
@@ -8,9 +8,10 @@ import os
 import random
 import time
 import re
+import signal
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'src')))
 
-from stanlogic.kmapsolver3D import KMapSolver3D
+from stanlogic.BoolMinGeo import BoolMinGeo
 from sympy import And as SymAnd, Or as SymOr, Not as SymNot, symbols, sympify, true, false, simplify, Equivalent
 from pyeda.inter import *
 import numpy as np
@@ -248,8 +249,8 @@ def test_single_case(num_vars, output_values, test_name):
     minterms = [i for i, v in enumerate(output_values) if v == 1]
     dont_cares = [i for i, v in enumerate(output_values) if v == 'd']
     
-    # Create PyEDA variables
-    pyeda_var_names = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+    # Create PyEDA variables (support up to 16 variables)
+    pyeda_var_names = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p']
     pyeda_vars = [exprvar(pyeda_var_names[i]) for i in range(num_vars)]
     
     # PyEDA minimization with timing
@@ -297,24 +298,62 @@ def test_single_case(num_vars, output_values, test_name):
         # Suppress verbose output
         import io
         import sys as sys_module
+        import signal
+        
         old_stdout = sys_module.stdout
         sys_module.stdout = io.StringIO()
         
-        solver = KMapSolver3D(num_vars, output_values)
-        kmap_func = lambda: solver.minimize_3d(form='sop')
+        # Set up timeout (60 seconds max per test)
+        def timeout_handler(signum, frame):
+            raise TimeoutError("BoolMinGeo minimization timed out after 60 seconds")
         
-        # Time the minimization
-        t_kmap = benchmark_with_warmup(kmap_func, ())
-        terms, expr_str = kmap_func()
+        # Only set alarm on Unix-like systems
+        if hasattr(signal, 'SIGALRM'):
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(60)
         
-        # Restore stdout
-        sys_module.stdout = old_stdout
+        try:
+            solver = BoolMinGeo(num_vars, output_values)
+            kmap_func = lambda: solver.minimize_4d(form='sop')
+            
+            # Time the minimization
+            t_kmap = benchmark_with_warmup(kmap_func, ())
+            terms, expr_str = kmap_func()
+            
+            # Cancel timeout
+            if hasattr(signal, 'SIGALRM'):
+                signal.alarm(0)
+        finally:
+            # Always restore stdout
+            sys_module.stdout = old_stdout
         
         # Count literals
         kmap_terms, kmap_literals = count_literals(expr_str, form='sop')
         
         print(f"✓ ({t_kmap:.6f}s, {kmap_literals} lits)", flush=True)
+    except KeyboardInterrupt:
+        if hasattr(signal, 'SIGALRM'):
+            signal.alarm(0)
+        sys_module.stdout = old_stdout
+        kmap_error = "Interrupted by user"
+        t_kmap = 0.0
+        kmap_terms, kmap_literals = 0, 0
+        expr_str = ""
+        print(f"✗ INTERRUPTED", flush=True)
+        print("\nTest interrupted by user. Continuing to next test...\n")
+    except TimeoutError as e:
+        if hasattr(signal, 'SIGALRM'):
+            signal.alarm(0)
+        sys_module.stdout = old_stdout
+        kmap_error = str(e)
+        t_kmap = 0.0
+        kmap_terms, kmap_literals = 0, 0
+        expr_str = ""
+        print(f"✗ TIMEOUT", flush=True)
     except Exception as e:
+        if hasattr(signal, 'SIGALRM'):
+            signal.alarm(0)
+        sys_module.stdout = old_stdout
         kmap_error = str(e)
         t_kmap = 0.0
         kmap_terms, kmap_literals = 0, 0
@@ -423,13 +462,13 @@ def test_single_case(num_vars, output_values, test_name):
 
 # Run tests
 print("="*80)
-print("BENCHMARK - 10 RANDOM FUNCTIONS EACH FOR 5-8 VARIABLES")
+print("BENCHMARK - 10 RANDOM FUNCTIONS EACH FOR 9-10 VARIABLES (4D MINIMIZATION)")
 print("="*80)
 
 results = []
 
 # Configuration: (num_vars, output_size)
-configs = [(5, 32), (6, 64), (7, 128), (8, 256)]
+configs = [(9, 512), (10, 1024)]
 
 # Test 10 random functions for each variable count
 for num_vars, output_size in configs:

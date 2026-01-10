@@ -2314,10 +2314,10 @@ def main():
     configurations = [
         # (2, "sop"),
         # (2, "pos"),
-        (3, "sop"),
+        # (3, "sop"),
         # (3, "pos"),
-        # (4, "sop"),
-        # (4, "pos"),
+        (4, "sop"),
+        (4, "pos"),
     ]
     
     print(f"\n🔬 Test configurations: {len(configurations)}")

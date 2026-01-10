@@ -304,70 +304,140 @@ Dominance Criterion:
     cells with the same inner pattern dominates smaller-span clusters
 
 ═══════════════════════════════════════════════════════════════════
-PHASE 6: COVERAGE VERIFICATION & COMPLETION
+PHASE 6: COVERAGE VERIFICATION & 3D PATTERN COLLECTION
 ═══════════════════════════════════════════════════════════════════
 
-// The greedy coverage used here was found to be inconsequential on the final result
-// and was eliminated from the python implementation. Users seeking to replicate the algorithm  
-// are at liberty to determine if to include this fallback or not. 
-
-Function: VERIFY-AND-COMPLETE(Ψ, K, Λ)
-Input: Ψ - selected EPIs
+Algorithm: VERIFY-AND-COLLECT-3D(Ψ, R, K, M_all)
+Input: Ψ - selected 4D EPIs (clusters spanning chunks)
+       R - chunk results dictionary (identifier → patterns)
        K - original K-map structure
-       Λ - all available clusters
-Output: Ψ - complete coverage EPIs (with additions if needed)
+       M_all - all target minterms
+Output: Π_all - combined set of 4D and 3D patterns
 
-    // Get all minterms where function = 1
-    M_all ← {(ι, ρ) : K[ι][ρ] = 1, ∀ι, ρ}
+    // Separate 4D patterns from 3D chunk patterns
+    Π₄ᴰ ← {λ.full_pattern : λ ∈ Ψ}
     
-    // Get minterms covered by selected EPIs
-    M_cov ← ⋃_{λ ∈ Ψ} EXPAND-PATTERN(λ.full_pattern)
+    // Calculate 4D pattern coverage
+    M_cov₄ᴰ ← ⋃_{π ∈ Π₄ᴰ} EXPAND-PATTERN(π)
+    M_unc ← M_all \ M_cov₄ᴰ
     
-    // Find uncovered minterms
-    M_unc ← M_all \ M_cov
+    print("4D clusters: ", |Π₄ᴰ|, " patterns")
+    print("4D coverage: ", |M_cov₄ᴰ|, "/", |M_all|, " minterms")
+    print("Uncovered after 4D: ", |M_unc|, " minterms")
     
+    // Collect 3D patterns for uncovered minterms
+    Π₃ᴰ ← COLLECT-3D-FOR-COVERAGE(R, Π₄ᴰ, M_unc, M_all)
+    
+    // Calculate 3D coverage
+    M_cov₃ᴰ ← ⋃_{π ∈ Π₃ᴰ} EXPAND-PATTERN(π)
+    M_unc ← M_unc \ M_cov₃ᴰ
+    
+    print("3D patterns: ", |Π₃ᴰ|, " additional patterns")
+    print("3D coverage: ", |M_cov₃ᴰ|, " additional minterms")
+    print("Uncovered after 3D: ", |M_unc|, " minterms")
+    
+    // Fallback coverage for remaining uncovered
     if M_unc ≠ ∅ then
-        // Attempt greedy coverage with remaining clusters
-        Ψ_add ← GREEDY-COVER-4D(M_unc, Λ, Ψ)
-        Ψ ← Ψ ∪ Ψ_add
-        
-        // Re-verify coverage
-        M_cov ← ⋃_{λ ∈ Ψ} EXPAND-PATTERN(λ.full_pattern)
-        M_unc ← M_all \ M_cov
-        
-        if M_unc ≠ ∅ then
-            ERROR: "Incomplete coverage - isolated regions exist"
-        end if
+        Π_fallback ← FALLBACK-COVERAGE(M_unc)
+        print("Fallback: ", |Π_fallback|, " direct minterm patterns")
+    else
+        Π_fallback ← ∅
     end if
     
-    return Ψ
+    // Combine all patterns
+    Π_all ← Π₄ᴰ ∪ Π₃ᴰ ∪ Π_fallback
+    
+    return Π_all
 
 ───────────────────────────────────────────────────────────────────
 
-Function: GREEDY-COVER-4D(M_unc, Λ, Ψ)
-Input: M_unc - uncovered minterms
-       Λ - all available clusters
-       Ψ - already selected EPIs
-Output: Ψ_add - additional clusters to cover M_unc
+Function: COLLECT-3D-FOR-COVERAGE(R, Π₄ᴰ, M_unc, M_all)
+Input: R - chunk results dictionary (identifier → patterns)
+       Π₄ᴰ - set of 4D patterns already selected
+       M_unc - uncovered minterms
+       M_all - all target minterms
+Output: Π₃ᴰ - set of 3D patterns for coverage
 
-    Ψ_add ← ∅
-    R ← M_unc                            // Remaining uncovered
-    Λ' ← Λ \ {λ : λ ∈ Ψ}                 // Available clusters (not yet used)
+    if M_unc = ∅ then
+        return ∅                         // All covered by 4D patterns
+    end if
     
-    while R ≠ ∅ and Λ' ≠ ∅ do
-        // Find cluster covering most remaining minterms
-        λ* ← arg max_{λ ∈ Λ'} |EXPAND-PATTERN(λ.full_pattern) ∩ R|
+    // Build list of 3D candidate patterns from chunks
+    candidates ← []
+    
+    for each (δ, patterns) ∈ R do
+        for each π ∈ patterns do
+            π_full ← δ ∘ π               // Full pattern (chunk ID + inner)
+            
+            if π_full ∈ Π₄ᴰ then
+                continue                 // Skip 4D patterns
+            end if
+            
+            // Calculate coverage
+            M_covered ← EXPAND-PATTERN(π_full) ∩ M_all
+            M_overlap ← M_covered ∩ M_unc
+            
+            if M_overlap ≠ ∅ then
+                candidates.append({
+                    pattern: π_full,
+                    covered: M_covered,
+                    unc_count: |M_overlap|
+                })
+            end if
+        end for
+    end for
+    
+    // Find essential 3D patterns
+    essential ← []
+    M_cov_essential ← ∅
+    
+    // Build minterm-to-patterns mapping
+    MT_map ← ∅
+    for each c ∈ candidates do
+        for each m ∈ (c.covered ∩ M_unc) do
+            MT_map[m].append(c)
+        end for
+    end for
+    
+    // Select essential patterns (only pattern covering a minterm)
+    for each (m, patterns) ∈ MT_map do
+        if |patterns| = 1 then
+            c ← patterns[0]
+            if c ∉ essential then
+                essential.append(c)
+                M_cov_essential ← M_cov_essential ∪ c.covered
+            end if
+        end if
+    end for
+    
+    // Greedy set cover for remaining
+    selected ← essential
+    M_remaining ← M_unc \ M_cov_essential
+    available ← candidates \ essential
+    
+    while M_remaining ≠ ∅ ∧ available ≠ ∅ do
+        // Select pattern covering most remaining minterms
+        best ← arg max_{c ∈ available} |c.covered ∩ M_remaining|
         
-        if |EXPAND-PATTERN(λ*.full_pattern) ∩ R| = 0 then
-            break                        // No more coverage possible
+        if |best.covered ∩ M_remaining| = 0 then
+            break
         end if
         
-        Ψ_add ← Ψ_add ∪ {λ*}
-        R ← R \ EXPAND-PATTERN(λ*.full_pattern)
-        Λ' ← Λ' \ {λ*}
+        selected.append(best)
+        M_remaining ← M_remaining \ best.covered
+        available.remove(best)
     end while
     
-    return Ψ_add
+    return {c.pattern : c ∈ selected}
+
+───────────────────────────────────────────────────────────────────
+
+Function: FALLBACK-COVERAGE(M_unc)
+Input: M_unc - uncovered minterms
+Output: Set of fallback patterns (direct minterm patterns)
+
+    // Direct coverage: use each minterm as its own pattern
+    return M_unc
 
 ───────────────────────────────────────────────────────────────────
 
@@ -387,7 +457,55 @@ Output: M - set of all concrete minterms matching π
     return M
 
 ═══════════════════════════════════════════════════════════════════
-PHASE 7: EXPRESSION GENERATION
+PHASE 7: FINAL QUINE-MCCLUSKEY OPTIMIZATION
+═══════════════════════════════════════════════════════════════════
+
+Algorithm: OPTIMIZE-WITH-QUINE-MCCLUSKEY(Π_all, M_all)
+Input: Π_all - set of all patterns (4D + 3D + fallback)
+       M_all - all target minterms
+Output: Π_optimal - globally minimal set of patterns
+
+    if |Π_all| ≤ 1 then
+        return Π_all
+    end if
+    
+    // Expand patterns to verify coverage
+    M_covered ← ⋃_{π ∈ Π_all} EXPAND-PATTERN(π)
+    
+    if M_covered ≠ M_all then
+        // Coverage mismatch - return patterns as-is
+        return Π_all
+    end if
+    
+    // Re-minimize from scratch using complete Quine-McCluskey
+    Π_prime ← FIND-ALL-PRIME-IMPLICANTS(M_all)
+    
+    // Filter out invalid prime implicants
+    Π_valid ← ∅
+    for each π ∈ Π_prime do
+        if EXPAND-PATTERN(π) ⊆ M_all then
+            Π_valid ← Π_valid ∪ {π}
+        end if
+    end for
+    
+    // Select essential PIs for minimal cover
+    Π_optimal ← SELECT-ESSENTIAL-PRIME-IMPLICANTS(Π_valid, M_all)
+    
+    return Π_optimal
+
+───────────────────────────────────────────────────────────────────
+
+Note: This final optimization step ensures global minimality by:
+    1. Expanding all patterns back to their minterms
+    2. Re-applying Quine-McCluskey from scratch on the minterm set
+    3. Filtering invalid prime implicants that cover unwanted minterms
+    4. Selecting essential prime implicants for minimal cover
+    
+This allows patterns from different sources (4D, 3D, fallback) to be
+merged and optimized together, producing a globally minimal result.
+
+═══════════════════════════════════════════════════════════════════
+PHASE 8: EXPRESSION GENERATION
 ═══════════════════════════════════════════════════════════════════
 
 Function: GENERATE-EXPRESSION(Ψ, form)
@@ -429,6 +547,9 @@ Output: T - set of terms
         return 3D-MINIMIZE(K, form)
     end if
     
+    // Get all target minterms
+    M_all ← GET-ALL-MINTERMS(K)
+    
     // Phase 1: Partition into 8-variable chunks
     C ← PARTITION-INTO-CHUNKS(K, n)
     
@@ -444,11 +565,14 @@ Output: T - set of terms
     // Phase 5: Select EPIs using span dominance criterion
     Ψ ← SELECT-EPIS-BY-SPAN(Λ)
     
-    // Phase 6: Verify complete coverage and add missing terms
-    Ψ ← VERIFY-AND-COMPLETE(Ψ, K, Λ)
+    // Phase 6: Coverage verification and 3D pattern collection
+    Π_all ← VERIFY-AND-COLLECT-3D(Ψ, R, K, M_all)
     
-    // Phase 7: Generate final Boolean expression
-    T, E ← GENERATE-EXPRESSION(Ψ, form)
+    // Phase 7: Final global optimization
+    Π_optimal ← OPTIMIZE-WITH-QUINE-MCCLUSKEY(Π_all, M_all)
+    
+    // Phase 8: Generate final Boolean expression
+    T, E ← GENERATE-EXPRESSION(Π_optimal, form)
     
     return T, E
 
