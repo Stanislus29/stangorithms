@@ -314,7 +314,7 @@ def test_single_case(num_vars, output_values, test_name):
         
         try:
             solver = BoolMinGeo(num_vars, output_values)
-            kmap_func = lambda: solver.minimize_4d(form='sop')
+            kmap_func = lambda: solver.minimize_3d(form='sop')
             
             # Time the minimization
             t_kmap = benchmark_with_warmup(kmap_func, ())

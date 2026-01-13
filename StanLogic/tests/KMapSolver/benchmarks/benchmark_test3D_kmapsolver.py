@@ -1,7 +1,6 @@
 """
-Peimary Benchmark test for 3D minimization (5-8 variables).
+Benchmark test for 3D minimization (5-8 variables).
 Tests variable ordering fix and tracks performance vitals.
-Saves results to CSV file.
 """
 
 import sys
@@ -9,11 +8,9 @@ import os
 import random
 import time
 import re
-import csv
-from datetime import datetime
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'src')))
 
-from stanlogic.BoolMinGeo import BoolMinGeo
+from stanlogic.kmapsolver3D import KMapSolver3D
 from sympy import And as SymAnd, Or as SymOr, Not as SymNot, symbols, sympify, true, false, simplify, Equivalent
 from pyeda.inter import *
 import numpy as np
@@ -251,8 +248,8 @@ def test_single_case(num_vars, output_values, test_name):
     minterms = [i for i, v in enumerate(output_values) if v == 1]
     dont_cares = [i for i, v in enumerate(output_values) if v == 'd']
     
-    # Create PyEDA variables (extended to support 16 variables)
-    pyeda_var_names = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p']
+    # Create PyEDA variables
+    pyeda_var_names = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
     pyeda_vars = [exprvar(pyeda_var_names[i]) for i in range(num_vars)]
     
     # PyEDA minimization with timing
@@ -303,7 +300,7 @@ def test_single_case(num_vars, output_values, test_name):
         old_stdout = sys_module.stdout
         sys_module.stdout = io.StringIO()
         
-        solver = BoolMinGeo(num_vars, output_values)
+        solver = KMapSolver3D(num_vars, output_values)
         kmap_func = lambda: solver.minimize_3d(form='sop')
         
         # Time the minimization
@@ -426,24 +423,19 @@ def test_single_case(num_vars, output_values, test_name):
 
 # Run tests
 print("="*80)
-print("BENCHMARK - 10 RANDOM FUNCTIONS EACH FOR 5-16 VARIABLES")
+print("BENCHMARK - 10 RANDOM FUNCTIONS EACH FOR 5-8 VARIABLES")
 print("="*80)
 
 results = []
-results_by_var = {}  # Store results grouped by variable count
 
 # Configuration: (num_vars, output_size)
-configs = [
-    (5, 32), (6, 64), (7, 128), (8, 256)
-]
+configs = [(5, 32), (6, 64), (7, 128), (8, 256)]
 
 # Test 10 random functions for each variable count
 for num_vars, output_size in configs:
     print("\n" + "="*80)
     print(f"{num_vars}-VARIABLE FUNCTIONS (10 random tests)")
     print("="*80)
-    
-    var_results = []
     
     for i in range(10):
         print("\n" + "-"*80)
@@ -461,49 +453,11 @@ for num_vars, output_size in configs:
             output_values = [1 if random.random() < 0.7 else 0 for _ in range(output_size)]
             density = "dense 70%"
         
-        test_result = test_single_case(num_vars, output_values, f"{num_vars}-var test {i+1}: {density}")
-        results.append((f"{num_vars}-var test {i+1}", test_result))
-        var_results.append(test_result)
-    
-    # Store results for this variable count
-    results_by_var[num_vars] = var_results
-    
-    # Print statistics for this variable count
-    print("\n" + "="*80)
-    print(f"RESULTS FOR {num_vars} VARIABLES")
-    print("="*80)
-    
-    # Filter valid results (where both succeeded)
-    valid_results = [r for r in var_results if r['pyeda_time'] > 0 and r['kmap_time'] > 0]
-    
-    if valid_results:
-        avg_pyeda_time = np.mean([r['pyeda_time'] for r in valid_results])
-        avg_kmap_time = np.mean([r['kmap_time'] for r in valid_results])
-        avg_pyeda_lits = np.mean([r['pyeda_literals'] for r in valid_results if r['pyeda_literals'] > 0])
-        avg_kmap_lits = np.mean([r['kmap_literals'] for r in valid_results if r['kmap_literals'] > 0])
-        
-        speedup = avg_pyeda_time / avg_kmap_time if avg_kmap_time > 0 else 0
-        lit_ratio = avg_kmap_lits / avg_pyeda_lits if avg_pyeda_lits > 0 else 0
-        
-        print(f"\nAverage Times:")
-        print(f"  PyEDA:      {avg_pyeda_time:.6f}s")
-        print(f"  BoolMinGeo: {avg_kmap_time:.6f}s")
-        print(f"  Speedup:    {speedup:.2f}x")
-        
-        print(f"\nAverage Literal Count:")
-        print(f"  PyEDA:      {avg_pyeda_lits:.1f}")
-        print(f"  BoolMinGeo: {avg_kmap_lits:.1f}")
-        print(f"  Ratio:      {lit_ratio:.4f}")
-        
-        passed_count = sum(1 for r in var_results if r['passed'] == True)
-        print(f"\nTests Passed: {passed_count}/10")
-    else:
-        print("\nNo valid results for this variable count")
+        results.append((f"{num_vars}-var test {i+1}", test_single_case(num_vars, output_values, f"{num_vars}-var test {i+1}: {density}")))
 
-
-# Overall Summary
+# Summary
 print("\n" + "="*80)
-print("OVERALL SUMMARY")
+print("SUMMARY")
 print("="*80)
 
 # Count passes and failures
@@ -511,102 +465,48 @@ passed = sum(1 for _, r in results if r['passed'] == True)
 failed = sum(1 for _, r in results if r['passed'] == False)
 errors = sum(1 for _, r in results if r['passed'] is None)
 
-print(f"\nTotal Results: {passed}/{len(results)} tests passed, {failed} failed, {errors} errors")
+print(f"Results: {passed}/{len(results)} tests passed, {failed} failed, {errors} errors")
 
-# Calculate overall statistics
+# Calculate statistics
 pyeda_times = [r['pyeda_time'] for _, r in results if r['pyeda_time'] > 0]
 kmap_times = [r['kmap_time'] for _, r in results if r['kmap_time'] > 0]
 pyeda_lits = [r['pyeda_literals'] for _, r in results if r['pyeda_literals'] > 0]
 kmap_lits = [r['kmap_literals'] for _, r in results if r['kmap_literals'] > 0]
 
 if pyeda_times and kmap_times:
-    print(f"\nOverall Timing Statistics:")
+    print(f"\nTiming Statistics:")
     print(f"  PyEDA:      avg={np.mean(pyeda_times):.6f}s, min={np.min(pyeda_times):.6f}s, max={np.max(pyeda_times):.6f}s")
     print(f"  BoolMinGeo: avg={np.mean(kmap_times):.6f}s, min={np.min(kmap_times):.6f}s, max={np.max(kmap_times):.6f}s")
     speedup = np.mean(pyeda_times) / np.mean(kmap_times)
     print(f"  Speedup:    {speedup:.2f}x ({'BoolMinGeo faster' if speedup > 1 else 'PyEDA faster'})")
 
 if pyeda_lits and kmap_lits:
-    print(f"\nOverall Literal Count Statistics:")
+    print(f"\nLiteral Count Statistics:")
     print(f"  PyEDA:      avg={np.mean(pyeda_lits):.1f}, min={np.min(pyeda_lits)}, max={np.max(pyeda_lits)}")
     print(f"  BoolMinGeo: avg={np.mean(kmap_lits):.1f}, min={np.min(kmap_lits)}, max={np.max(kmap_lits)}")
     lit_ratio = np.mean(kmap_lits) / np.mean(pyeda_lits) if np.mean(pyeda_lits) > 0 else 1.0
-    print(f"  Ratio:      {lit_ratio:.4f} ({'BoolMinGeo more compact' if lit_ratio < 1 else 'PyEDA more compact' if lit_ratio > 1 else 'Equal'})")
+    print(f"  Ratio:      {lit_ratio:.2f} ({'BoolMinGeo more compact' if lit_ratio < 1 else 'PyEDA more compact' if lit_ratio > 1 else 'Equal'})")
 
-# Per-variable summary table
-print(f"\n{'='*80}")
-print("PER-VARIABLE SUMMARY")
-print(f"{'='*80}")
-print(f"{'Vars':<6} {'Avg Time (PyEDA)':<18} {'Avg Time (BoolMin)':<18} {'Speedup':<10} {'Avg Lits (PyEDA)':<18} {'Avg Lits (BoolMin)':<18} {'Ratio':<10} {'Passed':<8}")
-print("-"*80)
-
-for num_vars in sorted(results_by_var.keys()):
-    var_results = results_by_var[num_vars]
-    valid_results = [r for r in var_results if r['pyeda_time'] > 0 and r['kmap_time'] > 0]
+print("\nDetailed Results:")
+for name, result in results:
+    if result['passed'] == True:
+        status = "PASS"
+        symbol = "✓"
+    elif result['passed'] == False:
+        status = "FAIL"
+        symbol = "✗"
+    else:
+        status = "ERROR"
+        symbol = "⚠"
     
-    if valid_results:
-        avg_pyeda_time = np.mean([r['pyeda_time'] for r in valid_results])
-        avg_kmap_time = np.mean([r['kmap_time'] for r in valid_results])
-        avg_pyeda_lits = np.mean([r['pyeda_literals'] for r in valid_results if r['pyeda_literals'] > 0])
-        avg_kmap_lits = np.mean([r['kmap_literals'] for r in valid_results if r['kmap_literals'] > 0])
-        
-        speedup = avg_pyeda_time / avg_kmap_time if avg_kmap_time > 0 else 0
-        lit_ratio = avg_kmap_lits / avg_pyeda_lits if avg_pyeda_lits > 0 else 0
-        passed_count = sum(1 for r in var_results if r['passed'] == True)
-        
-        print(f"{num_vars:<6} {avg_pyeda_time:<18.6f} {avg_kmap_time:<18.6f} {speedup:<10.2f} {avg_pyeda_lits:<18.1f} {avg_kmap_lits:<18.1f} {lit_ratio:<10.4f} {passed_count}/10")
-
-# Save results to CSV
-csv_filename = f"benchmark_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-csv_path = os.path.join(os.path.dirname(__file__), csv_filename)
-
-print(f"\n{'='*80}")
-print(f"Saving results to: {csv_filename}")
-print(f"{'='*80}")
-
-with open(csv_path, 'w', newline='') as csvfile:
-    fieldnames = ['num_vars', 'test_num', 'density', 'pyeda_time', 'kmap_time', 'speedup',
-                  'pyeda_literals', 'kmap_literals', 'literal_ratio', 'passed']
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    time_str = f"T:{result['pyeda_time']:.4f}s/{result['kmap_time']:.4f}s" if result['pyeda_time'] > 0 and result['kmap_time'] > 0 else "N/A"
+    lit_str = f"L:{result['pyeda_literals']}/{result['kmap_literals']}" if result['pyeda_literals'] > 0 or result['kmap_literals'] > 0 else "N/A"
     
-    writer.writeheader()
-    
-    for name, result in results:
-        # Parse name to extract num_vars and test_num
-        parts = name.split('-var test ')
-        num_vars = int(parts[0])
-        test_num = int(parts[1])
-        
-        # Determine density
-        if test_num <= 3:
-            density = "sparse_20%"
-        elif test_num <= 6:
-            density = "balanced_50%"
-        else:
-            density = "dense_70%"
-        
-        speedup = result['pyeda_time'] / result['kmap_time'] if result['kmap_time'] > 0 and result['pyeda_time'] > 0 else None
-        lit_ratio = result['kmap_literals'] / result['pyeda_literals'] if result['pyeda_literals'] > 0 else None
-        
-        writer.writerow({
-            'num_vars': num_vars,
-            'test_num': test_num,
-            'density': density,
-            'pyeda_time': result['pyeda_time'],
-            'kmap_time': result['kmap_time'],
-            'speedup': speedup,
-            'pyeda_literals': result['pyeda_literals'],
-            'kmap_literals': result['kmap_literals'],
-            'literal_ratio': lit_ratio,
-            'passed': result['passed']
-        })
-
-print(f"✓ Results saved to {csv_path}")
+    print(f"  {symbol} {name:20s}: {status:5s} | {time_str:20s} | {lit_str}")
 
 if passed == len(results):
-    print("\n✓ All tests passed!")
+    print("\n✓ All tests passed! Variable ordering fix is working.")
 elif passed > 0:
     print(f"\n⚠ {passed}/{len(results)} tests passed. Some issues remain.")
 else:
     print(f"\n✗ All tests failed. Further debugging needed.")
-

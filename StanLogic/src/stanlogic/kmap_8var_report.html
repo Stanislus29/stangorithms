@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>K-Map Minimization Results (8 Variables)</title>
+<!-- Viz.js for Graphviz DOT -> SVG -->
+<script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/viz.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/viz.js@2.1.2/full.render.js"></script>
+<style>
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f5f5;
+    }
+    .container {
+        background: white; border-radius: 8px; padding: 30px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px;
+    }
+    h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+    h2 { color: #34495e; margin-top: 30px; }
+    .expression {
+        background: #ecf0f1; padding: 20px; border-radius: 5px;
+        font-family: 'Courier New', monospace; font-size: 24px; text-align: center;
+        color: #2c3e50; border-left: 4px solid #3498db;
+    }
+    .logic-diagram { margin: 20px 0; padding: 20px; background: #fafafa; border-radius: 5px; overflow-x: auto; }
+    .verilog-code {
+        background: #2c3e50; color: #ecf0f1; padding: 20px; border-radius: 5px;
+        font-family: 'Courier New', monospace; font-size: 14px; overflow-x: auto; white-space: pre;
+    }
+    .keyword { color: #3498db; }
+    .comment { color: #95a5a6; }
+    .wire { color: #e74c3c; }
+    .info {
+        background: #d4edda; border: 1px solid #c3e6cb; color: #155724;
+        padding: 15px; border-radius: 5px; margin: 15px 0;
+    }
+    .copy-btn {
+        background: #3498db; color: white; border: none; padding: 10px 20px;
+        border-radius: 5px; cursor: pointer; font-size: 14px; margin-top: 10px;
+    }
+    .copy-btn:hover { background: #2980b9; }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>K-Map Minimization Results (8 Variables)</h1>
+
+    <div class="info">
+        <strong>Form:</strong> SOP (Sum of Products)<br>
+        <strong>Variables:</strong> 8<br>
+        <strong>Terms:</strong> 41<br>
+        <strong>4x4 K-maps:</strong> 16<br>
+        <strong>Extra Variables:</strong> 4
+    </div>
+
+    <h2>Minimized Expression</h2>
+    <div class="expression">
+        F = x1'x2'x3'x4'x5'x6x7'x8' + x1'x2'x3'x4'x5x6x7x8 + x1'x2'x3'x4x5x6x7x8' + x1'x2'x3x4'x6'x7'x8' + x1'x2'x3x4'x6x7x8' + x1'x2'x3x4'x5'x7x8' + x1'x2'x3x4'x5'x6x7x8 + x1'x2'x3x4'x5x6'x7x8 + x1'x2'x3x4x8 + x1'x2'x3x4x6x7 + x1'x2'x3x4x5'x6' + x1'x2'x3x4x5x6 + x1'x2x3'x4'x6x8 + x1'x2x3'x4'x5x7x8 + x1'x2x3'x4'x5x6 + x1'x2x3'x4x5'x7'x8 + x1'x2x3'x4x5'x6'x7x8' + x1'x2x3x4'x7'x8 + x1'x2x3x4'x5'x6'x7 + x1'x2x3x4'x5x6x7 + x1'x2x3x4x6x7'x8' + x1'x2x3x4x5'x6x7x8 + x1'x2x3x4x5x7'x8' + x1'x2x3x4x5x6'x7x8' + x1x3'x4x5'x6x7x8 + x1x3x4'x5x6'x7'x8' + x1x2'x3'x4'x5' + x1x2'x3'x4'x5x7'x8' + x1x2'x3'x4x6x7'x8' + x1x2'x3'x4x5x6'x8' + x1x2'x3x4'x5'x6x8' + x1x2'x3x4'x5x8 + x1x2'x3x4x5'x6x7'x8 + x1x2'x3x4x5x6'x7x8 + x1x2x3'x4'x7x8' + x1x2x3'x4'x5'x7'x8 + x1x2x3'x4x5'x6x7'x8' + x1x2x3'x4x5x6'x7x8' + x1x2x3x4'x6x7'x8 + x1x2x3x4'x5' + x1x2x3x4x5x6x7'x8'
+    </div>
+
+    <h2>Logic Gate Diagram</h2>
+    <div class="logic-diagram">
+        <div id="graphviz"></div>
+    </div>
+
+    <h2>Verilog HDL Code</h2>
+    <button class="copy-btn" onclick="copyVerilog()">Copy Verilog Code</button>
+    <div class="verilog-code" id="verilog"><span class="keyword">module</span> logic_circuit_8var(x1, x2, x3, x4, x5, x6, x7, x8, F);
+        <span class="comment">// Inputs</span>
+        <span class="keyword">input</span> x1, x2, x3, x4, x5, x6, x7, x8;
+        
+        <span class="comment">// Output</span>
+        <span class="keyword">output</span> F;
+        
+        <span class="comment">// Minimized expression: x1'x2'x3'x4'x5'x6x7'x8' + x1'x2'x3'x4'x5x6x7x8 + x1'x2'x3'x4x5x6x7x8' + x1'x2'x3x4'x6'x7'x8' + x1'x2'x3x4'x6x7x8' + x1'x2'x3x4'x5'x7x8' + x1'x2'x3x4'x5'x6x7x8 + x1'x2'x3x4'x5x6'x7x8 + x1'x2'x3x4x8 + x1'x2'x3x4x6x7 + x1'x2'x3x4x5'x6' + x1'x2'x3x4x5x6 + x1'x2x3'x4'x6x8 + x1'x2x3'x4'x5x7x8 + x1'x2x3'x4'x5x6 + x1'x2x3'x4x5'x7'x8 + x1'x2x3'x4x5'x6'x7x8' + x1'x2x3x4'x7'x8 + x1'x2x3x4'x5'x6'x7 + x1'x2x3x4'x5x6x7 + x1'x2x3x4x6x7'x8' + x1'x2x3x4x5'x6x7x8 + x1'x2x3x4x5x7'x8' + x1'x2x3x4x5x6'x7x8' + x1x3'x4x5'x6x7x8 + x1x3x4'x5x6'x7'x8' + x1x2'x3'x4'x5' + x1x2'x3'x4'x5x7'x8' + x1x2'x3'x4x6x7'x8' + x1x2'x3'x4x5x6'x8' + x1x2'x3x4'x5'x6x8' + x1x2'x3x4'x5x8 + x1x2'x3x4x5'x6x7'x8 + x1x2'x3x4x5x6'x7x8 + x1x2x3'x4'x7x8' + x1x2x3'x4'x5'x7'x8 + x1x2x3'x4x5'x6x7'x8' + x1x2x3'x4x5x6'x7x8' + x1x2x3x4'x6x7'x8 + x1x2x3x4'x5' + x1x2x3x4x5x6x7'x8'</span>
+        
+    <span class="comment">// Intermediate product terms</span>
+    <span class="keyword">wire</span> p0;
+    <span class="keyword">wire</span> p1;
+    <span class="keyword">wire</span> p2;
+    <span class="keyword">wire</span> p3;
+    <span class="keyword">wire</span> p4;
+    <span class="keyword">wire</span> p5;
+    <span class="keyword">wire</span> p6;
+    <span class="keyword">wire</span> p7;
+    <span class="keyword">wire</span> p8;
+    <span class="keyword">wire</span> p9;
+    <span class="keyword">wire</span> p10;
+    <span class="keyword">wire</span> p11;
+    <span class="keyword">wire</span> p12;
+    <span class="keyword">wire</span> p13;
+    <span class="keyword">wire</span> p14;
+    <span class="keyword">wire</span> p15;
+    <span class="keyword">wire</span> p16;
+    <span class="keyword">wire</span> p17;
+    <span class="keyword">wire</span> p18;
+    <span class="keyword">wire</span> p19;
+    <span class="keyword">wire</span> p20;
+    <span class="keyword">wire</span> p21;
+    <span class="keyword">wire</span> p22;
+    <span class="keyword">wire</span> p23;
+    <span class="keyword">wire</span> p24;
+    <span class="keyword">wire</span> p25;
+    <span class="keyword">wire</span> p26;
+    <span class="keyword">wire</span> p27;
+    <span class="keyword">wire</span> p28;
+    <span class="keyword">wire</span> p29;
+    <span class="keyword">wire</span> p30;
+    <span class="keyword">wire</span> p31;
+    <span class="keyword">wire</span> p32;
+    <span class="keyword">wire</span> p33;
+    <span class="keyword">wire</span> p34;
+    <span class="keyword">wire</span> p35;
+    <span class="keyword">wire</span> p36;
+    <span class="keyword">wire</span> p37;
+    <span class="keyword">wire</span> p38;
+    <span class="keyword">wire</span> p39;
+    <span class="keyword">wire</span> p40;
+
+    <span class="keyword">assign</span> p0 = ~x1 &amp; ~x2 &amp; ~x3 &amp; ~x4 &amp; ~x5 &amp; x6 &amp; ~x7 &amp; ~x8;
+    <span class="keyword">assign</span> p1 = ~x1 &amp; ~x2 &amp; ~x3 &amp; ~x4 &amp; x5 &amp; x6 &amp; x7 &amp; x8;
+    <span class="keyword">assign</span> p2 = ~x1 &amp; ~x2 &amp; ~x3 &amp; x4 &amp; x5 &amp; x6 &amp; x7 &amp; ~x8;
+    <span class="keyword">assign</span> p3 = ~x1 &amp; ~x2 &amp; x3 &amp; ~x4 &amp; ~x6 &amp; ~x7 &amp; ~x8;
+    <span class="keyword">assign</span> p4 = ~x1 &amp; ~x2 &amp; x3 &amp; ~x4 &amp; x6 &amp; x7 &amp; ~x8;
+    <span class="keyword">assign</span> p5 = ~x1 &amp; ~x2 &amp; x3 &amp; ~x4 &amp; ~x5 &amp; x7 &amp; ~x8;
+    <span class="keyword">assign</span> p6 = ~x1 &amp; ~x2 &amp; x3 &amp; ~x4 &amp; ~x5 &amp; x6 &amp; x7 &amp; x8;
+    <span class="keyword">assign</span> p7 = ~x1 &amp; ~x2 &amp; x3 &amp; ~x4 &amp; x5 &amp; ~x6 &amp; x7 &amp; x8;
+    <span class="keyword">assign</span> p8 = ~x1 &amp; ~x2 &amp; x3 &amp; x4 &amp; x8;
+    <span class="keyword">assign</span> p9 = ~x1 &amp; ~x2 &amp; x3 &amp; x4 &amp; x6 &amp; x7;
+    <span class="keyword">assign</span> p10 = ~x1 &amp; ~x2 &amp; x3 &amp; x4 &amp; ~x5 &amp; ~x6;
+    <span class="keyword">assign</span> p11 = ~x1 &amp; ~x2 &amp; x3 &amp; x4 &amp; x5 &amp; x6;
+    <span class="keyword">assign</span> p12 = ~x1 &amp; x2 &amp; ~x3 &amp; ~x4 &amp; x6 &amp; x8;
+    <span class="keyword">assign</span> p13 = ~x1 &amp; x2 &amp; ~x3 &amp; ~x4 &amp; x5 &amp; x7 &amp; x8;
+    <span class="keyword">assign</span> p14 = ~x1 &amp; x2 &amp; ~x3 &amp; ~x4 &amp; x5 &amp; x6;
+    <span class="keyword">assign</span> p15 = ~x1 &amp; x2 &amp; ~x3 &amp; x4 &amp; ~x5 &amp; ~x7 &amp; x8;
+    <span class="keyword">assign</span> p16 = ~x1 &amp; x2 &amp; ~x3 &amp; x4 &amp; ~x5 &amp; ~x6 &amp; x7 &amp; ~x8;
+    <span class="keyword">assign</span> p17 = ~x1 &amp; x2 &amp; x3 &amp; ~x4 &amp; ~x7 &amp; x8;
+    <span class="keyword">assign</span> p18 = ~x1 &amp; x2 &amp; x3 &amp; ~x4 &amp; ~x5 &amp; ~x6 &amp; x7;
+    <span class="keyword">assign</span> p19 = ~x1 &amp; x2 &amp; x3 &amp; ~x4 &amp; x5 &amp; x6 &amp; x7;
+    <span class="keyword">assign</span> p20 = ~x1 &amp; x2 &amp; x3 &amp; x4 &amp; x6 &amp; ~x7 &amp; ~x8;
+    <span class="keyword">assign</span> p21 = ~x1 &amp; x2 &amp; x3 &amp; x4 &amp; ~x5 &amp; x6 &amp; x7 &amp; x8;
+    <span class="keyword">assign</span> p22 = ~x1 &amp; x2 &amp; x3 &amp; x4 &amp; x5 &amp; ~x7 &amp; ~x8;
+    <span class="keyword">assign</span> p23 = ~x1 &amp; x2 &amp; x3 &amp; x4 &amp; x5 &amp; ~x6 &amp; x7 &amp; ~x8;
+    <span class="keyword">assign</span> p24 = x1 &amp; ~x3 &amp; x4 &amp; ~x5 &amp; x6 &amp; x7 &amp; x8;
+    <span class="keyword">assign</span> p25 = x1 &amp; x3 &amp; ~x4 &amp; x5 &amp; ~x6 &amp; ~x7 &amp; ~x8;
+    <span class="keyword">assign</span> p26 = x1 &amp; ~x2 &amp; ~x3 &amp; ~x4 &amp; ~x5;
+    <span class="keyword">assign</span> p27 = x1 &amp; ~x2 &amp; ~x3 &amp; ~x4 &amp; x5 &amp; ~x7 &amp; ~x8;
+    <span class="keyword">assign</span> p28 = x1 &amp; ~x2 &amp; ~x3 &amp; x4 &amp; x6 &amp; ~x7 &amp; ~x8;
+    <span class="keyword">assign</span> p29 = x1 &amp; ~x2 &amp; ~x3 &amp; x4 &amp; x5 &amp; ~x6 &amp; ~x8;
+    <span class="keyword">assign</span> p30 = x1 &amp; ~x2 &amp; x3 &amp; ~x4 &amp; ~x5 &amp; x6 &amp; ~x8;
+    <span class="keyword">assign</span> p31 = x1 &amp; ~x2 &amp; x3 &amp; ~x4 &amp; x5 &amp; x8;
+    <span class="keyword">assign</span> p32 = x1 &amp; ~x2 &amp; x3 &amp; x4 &amp; ~x5 &amp; x6 &amp; ~x7 &amp; x8;
+    <span class="keyword">assign</span> p33 = x1 &amp; ~x2 &amp; x3 &amp; x4 &amp; x5 &amp; ~x6 &amp; x7 &amp; x8;
+    <span class="keyword">assign</span> p34 = x1 &amp; x2 &amp; ~x3 &amp; ~x4 &amp; x7 &amp; ~x8;
+    <span class="keyword">assign</span> p35 = x1 &amp; x2 &amp; ~x3 &amp; ~x4 &amp; ~x5 &amp; ~x7 &amp; x8;
+    <span class="keyword">assign</span> p36 = x1 &amp; x2 &amp; ~x3 &amp; x4 &amp; ~x5 &amp; x6 &amp; ~x7 &amp; ~x8;
+    <span class="keyword">assign</span> p37 = x1 &amp; x2 &amp; ~x3 &amp; x4 &amp; x5 &amp; ~x6 &amp; x7 &amp; ~x8;
+    <span class="keyword">assign</span> p38 = x1 &amp; x2 &amp; x3 &amp; ~x4 &amp; x6 &amp; ~x7 &amp; x8;
+    <span class="keyword">assign</span> p39 = x1 &amp; x2 &amp; x3 &amp; ~x4 &amp; ~x5;
+    <span class="keyword">assign</span> p40 = x1 &amp; x2 &amp; x3 &amp; x4 &amp; x5 &amp; x6 &amp; ~x7 &amp; ~x8;
+
+    <span class="comment">// Sum of products</span>
+    <span class="keyword">assign</span> F = p0 | p1 | p2 | p3 | p4 | p5 | p6 | p7 | p8 | p9 | p10 | p11 | p12 | p13 | p14 | p15 | p16 | p17 | p18 | p19 | p20 | p21 | p22 | p23 | p24 | p25 | p26 | p27 | p28 | p29 | p30 | p31 | p32 | p33 | p34 | p35 | p36 | p37 | p38 | p39 | p40;
+
+end<span class="keyword">module</span></div>
+</div>
+
+<script>
+    // Render DOT to SVG
+    const dot = `digraph SOP_Circuit {
+        rankdir=LR;
+        node [fontname="Arial"];
+        edge [arrowsize=0.8];
+        
+        // Graph attributes
+        graph [splines=ortho, nodesep=0.8, ranksep=1.2];
+        
+        // Input variables
+    subgraph cluster_inputs {
+        rank=same;
+        style=invis;
+        x1 [label="x1", shape=plaintext, fontsize=14];
+        x2 [label="x2", shape=plaintext, fontsize=14];
+        x3 [label="x3", shape=plaintext, fontsize=14];
+        x4 [label="x4", shape=plaintext, fontsize=14];
+        x5 [label="x5", shape=plaintext, fontsize=14];
+        x6 [label="x6", shape=plaintext, fontsize=14];
+        x7 [label="x7", shape=plaintext, fontsize=14];
+        x8 [label="x8", shape=plaintext, fontsize=14];
+    }
+
+    // NOT gates
+    NOT_x1 [label="NOT", shape=invtriangle, style=filled, fillcolor=lightyellow, width=0.6, height=0.6];
+    x1 -> NOT_x1;
+    NOT_x2 [label="NOT", shape=invtriangle, style=filled, fillcolor=lightyellow, width=0.6, height=0.6];
+    x2 -> NOT_x2;
+    NOT_x3 [label="NOT", shape=invtriangle, style=filled, fillcolor=lightyellow, width=0.6, height=0.6];
+    x3 -> NOT_x3;
+    NOT_x4 [label="NOT", shape=invtriangle, style=filled, fillcolor=lightyellow, width=0.6, height=0.6];
+    x4 -> NOT_x4;
+    NOT_x5 [label="NOT", shape=invtriangle, style=filled, fillcolor=lightyellow, width=0.6, height=0.6];
+    x5 -> NOT_x5;
+    NOT_x6 [label="NOT", shape=invtriangle, style=filled, fillcolor=lightyellow, width=0.6, height=0.6];
+    x6 -> NOT_x6;
+    NOT_x7 [label="NOT", shape=invtriangle, style=filled, fillcolor=lightyellow, width=0.6, height=0.6];
+    x7 -> NOT_x7;
+    NOT_x8 [label="NOT", shape=invtriangle, style=filled, fillcolor=lightyellow, width=0.6, height=0.6];
+    x8 -> NOT_x8;
+
+    // AND gates (product terms)
+    AND0 [label="AND\\nx1̄x2̄x3̄x4̄x5̄x6x7̄x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND0;
+    NOT_x2 -> AND0;
+    NOT_x3 -> AND0;
+    NOT_x4 -> AND0;
+    NOT_x5 -> AND0;
+    x6 -> AND0;
+    NOT_x7 -> AND0;
+    NOT_x8 -> AND0;
+    AND1 [label="AND\\nx1̄x2̄x3̄x4̄x5x6x7x8", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND1;
+    NOT_x2 -> AND1;
+    NOT_x3 -> AND1;
+    NOT_x4 -> AND1;
+    x5 -> AND1;
+    x6 -> AND1;
+    x7 -> AND1;
+    x8 -> AND1;
+    AND2 [label="AND\\nx1̄x2̄x3̄x4x5x6x7x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND2;
+    NOT_x2 -> AND2;
+    NOT_x3 -> AND2;
+    x4 -> AND2;
+    x5 -> AND2;
+    x6 -> AND2;
+    x7 -> AND2;
+    NOT_x8 -> AND2;
+    AND3 [label="AND\\nx1̄x2̄x3x4̄x6̄x7̄x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND3;
+    NOT_x2 -> AND3;
+    x3 -> AND3;
+    NOT_x4 -> AND3;
+    NOT_x6 -> AND3;
+    NOT_x7 -> AND3;
+    NOT_x8 -> AND3;
+    AND4 [label="AND\\nx1̄x2̄x3x4̄x6x7x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND4;
+    NOT_x2 -> AND4;
+    x3 -> AND4;
+    NOT_x4 -> AND4;
+    x6 -> AND4;
+    x7 -> AND4;
+    NOT_x8 -> AND4;
+    AND5 [label="AND\\nx1̄x2̄x3x4̄x5̄x7x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND5;
+    NOT_x2 -> AND5;
+    x3 -> AND5;
+    NOT_x4 -> AND5;
+    NOT_x5 -> AND5;
+    x7 -> AND5;
+    NOT_x8 -> AND5;
+    AND6 [label="AND\\nx1̄x2̄x3x4̄x5̄x6x7x8", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND6;
+    NOT_x2 -> AND6;
+    x3 -> AND6;
+    NOT_x4 -> AND6;
+    NOT_x5 -> AND6;
+    x6 -> AND6;
+    x7 -> AND6;
+    x8 -> AND6;
+    AND7 [label="AND\\nx1̄x2̄x3x4̄x5x6̄x7x8", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND7;
+    NOT_x2 -> AND7;
+    x3 -> AND7;
+    NOT_x4 -> AND7;
+    x5 -> AND7;
+    NOT_x6 -> AND7;
+    x7 -> AND7;
+    x8 -> AND7;
+    AND8 [label="AND\\nx1̄x2̄x3x4x8", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND8;
+    NOT_x2 -> AND8;
+    x3 -> AND8;
+    x4 -> AND8;
+    x8 -> AND8;
+    AND9 [label="AND\\nx1̄x2̄x3x4x6x7", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND9;
+    NOT_x2 -> AND9;
+    x3 -> AND9;
+    x4 -> AND9;
+    x6 -> AND9;
+    x7 -> AND9;
+    AND10 [label="AND\\nx1̄x2̄x3x4x5̄x6̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND10;
+    NOT_x2 -> AND10;
+    x3 -> AND10;
+    x4 -> AND10;
+    NOT_x5 -> AND10;
+    NOT_x6 -> AND10;
+    AND11 [label="AND\\nx1̄x2̄x3x4x5x6", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND11;
+    NOT_x2 -> AND11;
+    x3 -> AND11;
+    x4 -> AND11;
+    x5 -> AND11;
+    x6 -> AND11;
+    AND12 [label="AND\\nx1̄x2x3̄x4̄x6x8", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND12;
+    x2 -> AND12;
+    NOT_x3 -> AND12;
+    NOT_x4 -> AND12;
+    x6 -> AND12;
+    x8 -> AND12;
+    AND13 [label="AND\\nx1̄x2x3̄x4̄x5x7x8", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND13;
+    x2 -> AND13;
+    NOT_x3 -> AND13;
+    NOT_x4 -> AND13;
+    x5 -> AND13;
+    x7 -> AND13;
+    x8 -> AND13;
+    AND14 [label="AND\\nx1̄x2x3̄x4̄x5x6", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND14;
+    x2 -> AND14;
+    NOT_x3 -> AND14;
+    NOT_x4 -> AND14;
+    x5 -> AND14;
+    x6 -> AND14;
+    AND15 [label="AND\\nx1̄x2x3̄x4x5̄x7̄x8", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND15;
+    x2 -> AND15;
+    NOT_x3 -> AND15;
+    x4 -> AND15;
+    NOT_x5 -> AND15;
+    NOT_x7 -> AND15;
+    x8 -> AND15;
+    AND16 [label="AND\\nx1̄x2x3̄x4x5̄x6̄x7x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND16;
+    x2 -> AND16;
+    NOT_x3 -> AND16;
+    x4 -> AND16;
+    NOT_x5 -> AND16;
+    NOT_x6 -> AND16;
+    x7 -> AND16;
+    NOT_x8 -> AND16;
+    AND17 [label="AND\\nx1̄x2x3x4̄x7̄x8", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND17;
+    x2 -> AND17;
+    x3 -> AND17;
+    NOT_x4 -> AND17;
+    NOT_x7 -> AND17;
+    x8 -> AND17;
+    AND18 [label="AND\\nx1̄x2x3x4̄x5̄x6̄x7", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND18;
+    x2 -> AND18;
+    x3 -> AND18;
+    NOT_x4 -> AND18;
+    NOT_x5 -> AND18;
+    NOT_x6 -> AND18;
+    x7 -> AND18;
+    AND19 [label="AND\\nx1̄x2x3x4̄x5x6x7", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND19;
+    x2 -> AND19;
+    x3 -> AND19;
+    NOT_x4 -> AND19;
+    x5 -> AND19;
+    x6 -> AND19;
+    x7 -> AND19;
+    AND20 [label="AND\\nx1̄x2x3x4x6x7̄x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND20;
+    x2 -> AND20;
+    x3 -> AND20;
+    x4 -> AND20;
+    x6 -> AND20;
+    NOT_x7 -> AND20;
+    NOT_x8 -> AND20;
+    AND21 [label="AND\\nx1̄x2x3x4x5̄x6x7x8", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND21;
+    x2 -> AND21;
+    x3 -> AND21;
+    x4 -> AND21;
+    NOT_x5 -> AND21;
+    x6 -> AND21;
+    x7 -> AND21;
+    x8 -> AND21;
+    AND22 [label="AND\\nx1̄x2x3x4x5x7̄x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND22;
+    x2 -> AND22;
+    x3 -> AND22;
+    x4 -> AND22;
+    x5 -> AND22;
+    NOT_x7 -> AND22;
+    NOT_x8 -> AND22;
+    AND23 [label="AND\\nx1̄x2x3x4x5x6̄x7x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    NOT_x1 -> AND23;
+    x2 -> AND23;
+    x3 -> AND23;
+    x4 -> AND23;
+    x5 -> AND23;
+    NOT_x6 -> AND23;
+    x7 -> AND23;
+    NOT_x8 -> AND23;
+    AND24 [label="AND\\nx1x3̄x4x5̄x6x7x8", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND24;
+    NOT_x3 -> AND24;
+    x4 -> AND24;
+    NOT_x5 -> AND24;
+    x6 -> AND24;
+    x7 -> AND24;
+    x8 -> AND24;
+    AND25 [label="AND\\nx1x3x4̄x5x6̄x7̄x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND25;
+    x3 -> AND25;
+    NOT_x4 -> AND25;
+    x5 -> AND25;
+    NOT_x6 -> AND25;
+    NOT_x7 -> AND25;
+    NOT_x8 -> AND25;
+    AND26 [label="AND\\nx1x2̄x3̄x4̄x5̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND26;
+    NOT_x2 -> AND26;
+    NOT_x3 -> AND26;
+    NOT_x4 -> AND26;
+    NOT_x5 -> AND26;
+    AND27 [label="AND\\nx1x2̄x3̄x4̄x5x7̄x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND27;
+    NOT_x2 -> AND27;
+    NOT_x3 -> AND27;
+    NOT_x4 -> AND27;
+    x5 -> AND27;
+    NOT_x7 -> AND27;
+    NOT_x8 -> AND27;
+    AND28 [label="AND\\nx1x2̄x3̄x4x6x7̄x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND28;
+    NOT_x2 -> AND28;
+    NOT_x3 -> AND28;
+    x4 -> AND28;
+    x6 -> AND28;
+    NOT_x7 -> AND28;
+    NOT_x8 -> AND28;
+    AND29 [label="AND\\nx1x2̄x3̄x4x5x6̄x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND29;
+    NOT_x2 -> AND29;
+    NOT_x3 -> AND29;
+    x4 -> AND29;
+    x5 -> AND29;
+    NOT_x6 -> AND29;
+    NOT_x8 -> AND29;
+    AND30 [label="AND\\nx1x2̄x3x4̄x5̄x6x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND30;
+    NOT_x2 -> AND30;
+    x3 -> AND30;
+    NOT_x4 -> AND30;
+    NOT_x5 -> AND30;
+    x6 -> AND30;
+    NOT_x8 -> AND30;
+    AND31 [label="AND\\nx1x2̄x3x4̄x5x8", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND31;
+    NOT_x2 -> AND31;
+    x3 -> AND31;
+    NOT_x4 -> AND31;
+    x5 -> AND31;
+    x8 -> AND31;
+    AND32 [label="AND\\nx1x2̄x3x4x5̄x6x7̄x8", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND32;
+    NOT_x2 -> AND32;
+    x3 -> AND32;
+    x4 -> AND32;
+    NOT_x5 -> AND32;
+    x6 -> AND32;
+    NOT_x7 -> AND32;
+    x8 -> AND32;
+    AND33 [label="AND\\nx1x2̄x3x4x5x6̄x7x8", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND33;
+    NOT_x2 -> AND33;
+    x3 -> AND33;
+    x4 -> AND33;
+    x5 -> AND33;
+    NOT_x6 -> AND33;
+    x7 -> AND33;
+    x8 -> AND33;
+    AND34 [label="AND\\nx1x2x3̄x4̄x7x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND34;
+    x2 -> AND34;
+    NOT_x3 -> AND34;
+    NOT_x4 -> AND34;
+    x7 -> AND34;
+    NOT_x8 -> AND34;
+    AND35 [label="AND\\nx1x2x3̄x4̄x5̄x7̄x8", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND35;
+    x2 -> AND35;
+    NOT_x3 -> AND35;
+    NOT_x4 -> AND35;
+    NOT_x5 -> AND35;
+    NOT_x7 -> AND35;
+    x8 -> AND35;
+    AND36 [label="AND\\nx1x2x3̄x4x5̄x6x7̄x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND36;
+    x2 -> AND36;
+    NOT_x3 -> AND36;
+    x4 -> AND36;
+    NOT_x5 -> AND36;
+    x6 -> AND36;
+    NOT_x7 -> AND36;
+    NOT_x8 -> AND36;
+    AND37 [label="AND\\nx1x2x3̄x4x5x6̄x7x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND37;
+    x2 -> AND37;
+    NOT_x3 -> AND37;
+    x4 -> AND37;
+    x5 -> AND37;
+    NOT_x6 -> AND37;
+    x7 -> AND37;
+    NOT_x8 -> AND37;
+    AND38 [label="AND\\nx1x2x3x4̄x6x7̄x8", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND38;
+    x2 -> AND38;
+    x3 -> AND38;
+    NOT_x4 -> AND38;
+    x6 -> AND38;
+    NOT_x7 -> AND38;
+    x8 -> AND38;
+    AND39 [label="AND\\nx1x2x3x4̄x5̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND39;
+    x2 -> AND39;
+    x3 -> AND39;
+    NOT_x4 -> AND39;
+    NOT_x5 -> AND39;
+    AND40 [label="AND\\nx1x2x3x4x5x6x7̄x8̄", shape=trapezium, style=filled, fillcolor=lightgreen, width=1.2, height=0.8, fontsize=10];
+    x1 -> AND40;
+    x2 -> AND40;
+    x3 -> AND40;
+    x4 -> AND40;
+    x5 -> AND40;
+    x6 -> AND40;
+    NOT_x7 -> AND40;
+    NOT_x8 -> AND40;
+
+    // OR gate (final sum)
+    OR [label="OR", shape=trapezium, style=filled, fillcolor=lightcoral, width=1.0, height=0.8];
+    AND0 -> OR;
+    AND1 -> OR;
+    AND2 -> OR;
+    AND3 -> OR;
+    AND4 -> OR;
+    AND5 -> OR;
+    AND6 -> OR;
+    AND7 -> OR;
+    AND8 -> OR;
+    AND9 -> OR;
+    AND10 -> OR;
+    AND11 -> OR;
+    AND12 -> OR;
+    AND13 -> OR;
+    AND14 -> OR;
+    AND15 -> OR;
+    AND16 -> OR;
+    AND17 -> OR;
+    AND18 -> OR;
+    AND19 -> OR;
+    AND20 -> OR;
+    AND21 -> OR;
+    AND22 -> OR;
+    AND23 -> OR;
+    AND24 -> OR;
+    AND25 -> OR;
+    AND26 -> OR;
+    AND27 -> OR;
+    AND28 -> OR;
+    AND29 -> OR;
+    AND30 -> OR;
+    AND31 -> OR;
+    AND32 -> OR;
+    AND33 -> OR;
+    AND34 -> OR;
+    AND35 -> OR;
+    AND36 -> OR;
+    AND37 -> OR;
+    AND38 -> OR;
+    AND39 -> OR;
+    AND40 -> OR;
+    OR -> F;
+
+    // Output
+    F [label="F", shape=doublecircle, style=filled, fillcolor=salmon, width=0.7, height=0.7];
+}
+`;
+    const viz = new Viz();
+    viz.renderSVGElement(dot)
+      .then(svg => {
+        const container = document.getElementById('graphviz');
+        container.innerHTML = '';
+        container.appendChild(svg);
+      })
+      .catch(err => {
+        const container = document.getElementById('graphviz');
+        container.innerHTML = '<pre style="color:#c0392b;white-space:pre-wrap"></pre>';
+        container.firstChild.textContent = 'Failed to render Graphviz diagram:\n' + err;
+      });
+
+    function copyVerilog() {
+        const code = `module logic_circuit_8var(x1, x2, x3, x4, x5, x6, x7, x8, F);
+        // Inputs
+        input x1, x2, x3, x4, x5, x6, x7, x8;
+        
+        // Output
+        output F;
+        
+        // Minimized expression: x1'x2'x3'x4'x5'x6x7'x8' + x1'x2'x3'x4'x5x6x7x8 + x1'x2'x3'x4x5x6x7x8' + x1'x2'x3x4'x6'x7'x8' + x1'x2'x3x4'x6x7x8' + x1'x2'x3x4'x5'x7x8' + x1'x2'x3x4'x5'x6x7x8 + x1'x2'x3x4'x5x6'x7x8 + x1'x2'x3x4x8 + x1'x2'x3x4x6x7 + x1'x2'x3x4x5'x6' + x1'x2'x3x4x5x6 + x1'x2x3'x4'x6x8 + x1'x2x3'x4'x5x7x8 + x1'x2x3'x4'x5x6 + x1'x2x3'x4x5'x7'x8 + x1'x2x3'x4x5'x6'x7x8' + x1'x2x3x4'x7'x8 + x1'x2x3x4'x5'x6'x7 + x1'x2x3x4'x5x6x7 + x1'x2x3x4x6x7'x8' + x1'x2x3x4x5'x6x7x8 + x1'x2x3x4x5x7'x8' + x1'x2x3x4x5x6'x7x8' + x1x3'x4x5'x6x7x8 + x1x3x4'x5x6'x7'x8' + x1x2'x3'x4'x5' + x1x2'x3'x4'x5x7'x8' + x1x2'x3'x4x6x7'x8' + x1x2'x3'x4x5x6'x8' + x1x2'x3x4'x5'x6x8' + x1x2'x3x4'x5x8 + x1x2'x3x4x5'x6x7'x8 + x1x2'x3x4x5x6'x7x8 + x1x2x3'x4'x7x8' + x1x2x3'x4'x5'x7'x8 + x1x2x3'x4x5'x6x7'x8' + x1x2x3'x4x5x6'x7x8' + x1x2x3x4'x6x7'x8 + x1x2x3x4'x5' + x1x2x3x4x5x6x7'x8'
+        
+    // Intermediate product terms
+    wire p0;
+    wire p1;
+    wire p2;
+    wire p3;
+    wire p4;
+    wire p5;
+    wire p6;
+    wire p7;
+    wire p8;
+    wire p9;
+    wire p10;
+    wire p11;
+    wire p12;
+    wire p13;
+    wire p14;
+    wire p15;
+    wire p16;
+    wire p17;
+    wire p18;
+    wire p19;
+    wire p20;
+    wire p21;
+    wire p22;
+    wire p23;
+    wire p24;
+    wire p25;
+    wire p26;
+    wire p27;
+    wire p28;
+    wire p29;
+    wire p30;
+    wire p31;
+    wire p32;
+    wire p33;
+    wire p34;
+    wire p35;
+    wire p36;
+    wire p37;
+    wire p38;
+    wire p39;
+    wire p40;
+
+    assign p0 = ~x1 & ~x2 & ~x3 & ~x4 & ~x5 & x6 & ~x7 & ~x8;
+    assign p1 = ~x1 & ~x2 & ~x3 & ~x4 & x5 & x6 & x7 & x8;
+    assign p2 = ~x1 & ~x2 & ~x3 & x4 & x5 & x6 & x7 & ~x8;
+    assign p3 = ~x1 & ~x2 & x3 & ~x4 & ~x6 & ~x7 & ~x8;
+    assign p4 = ~x1 & ~x2 & x3 & ~x4 & x6 & x7 & ~x8;
+    assign p5 = ~x1 & ~x2 & x3 & ~x4 & ~x5 & x7 & ~x8;
+    assign p6 = ~x1 & ~x2 & x3 & ~x4 & ~x5 & x6 & x7 & x8;
+    assign p7 = ~x1 & ~x2 & x3 & ~x4 & x5 & ~x6 & x7 & x8;
+    assign p8 = ~x1 & ~x2 & x3 & x4 & x8;
+    assign p9 = ~x1 & ~x2 & x3 & x4 & x6 & x7;
+    assign p10 = ~x1 & ~x2 & x3 & x4 & ~x5 & ~x6;
+    assign p11 = ~x1 & ~x2 & x3 & x4 & x5 & x6;
+    assign p12 = ~x1 & x2 & ~x3 & ~x4 & x6 & x8;
+    assign p13 = ~x1 & x2 & ~x3 & ~x4 & x5 & x7 & x8;
+    assign p14 = ~x1 & x2 & ~x3 & ~x4 & x5 & x6;
+    assign p15 = ~x1 & x2 & ~x3 & x4 & ~x5 & ~x7 & x8;
+    assign p16 = ~x1 & x2 & ~x3 & x4 & ~x5 & ~x6 & x7 & ~x8;
+    assign p17 = ~x1 & x2 & x3 & ~x4 & ~x7 & x8;
+    assign p18 = ~x1 & x2 & x3 & ~x4 & ~x5 & ~x6 & x7;
+    assign p19 = ~x1 & x2 & x3 & ~x4 & x5 & x6 & x7;
+    assign p20 = ~x1 & x2 & x3 & x4 & x6 & ~x7 & ~x8;
+    assign p21 = ~x1 & x2 & x3 & x4 & ~x5 & x6 & x7 & x8;
+    assign p22 = ~x1 & x2 & x3 & x4 & x5 & ~x7 & ~x8;
+    assign p23 = ~x1 & x2 & x3 & x4 & x5 & ~x6 & x7 & ~x8;
+    assign p24 = x1 & ~x3 & x4 & ~x5 & x6 & x7 & x8;
+    assign p25 = x1 & x3 & ~x4 & x5 & ~x6 & ~x7 & ~x8;
+    assign p26 = x1 & ~x2 & ~x3 & ~x4 & ~x5;
+    assign p27 = x1 & ~x2 & ~x3 & ~x4 & x5 & ~x7 & ~x8;
+    assign p28 = x1 & ~x2 & ~x3 & x4 & x6 & ~x7 & ~x8;
+    assign p29 = x1 & ~x2 & ~x3 & x4 & x5 & ~x6 & ~x8;
+    assign p30 = x1 & ~x2 & x3 & ~x4 & ~x5 & x6 & ~x8;
+    assign p31 = x1 & ~x2 & x3 & ~x4 & x5 & x8;
+    assign p32 = x1 & ~x2 & x3 & x4 & ~x5 & x6 & ~x7 & x8;
+    assign p33 = x1 & ~x2 & x3 & x4 & x5 & ~x6 & x7 & x8;
+    assign p34 = x1 & x2 & ~x3 & ~x4 & x7 & ~x8;
+    assign p35 = x1 & x2 & ~x3 & ~x4 & ~x5 & ~x7 & x8;
+    assign p36 = x1 & x2 & ~x3 & x4 & ~x5 & x6 & ~x7 & ~x8;
+    assign p37 = x1 & x2 & ~x3 & x4 & x5 & ~x6 & x7 & ~x8;
+    assign p38 = x1 & x2 & x3 & ~x4 & x6 & ~x7 & x8;
+    assign p39 = x1 & x2 & x3 & ~x4 & ~x5;
+    assign p40 = x1 & x2 & x3 & x4 & x5 & x6 & ~x7 & ~x8;
+
+    // Sum of products
+    assign F = p0 | p1 | p2 | p3 | p4 | p5 | p6 | p7 | p8 | p9 | p10 | p11 | p12 | p13 | p14 | p15 | p16 | p17 | p18 | p19 | p20 | p21 | p22 | p23 | p24 | p25 | p26 | p27 | p28 | p29 | p30 | p31 | p32 | p33 | p34 | p35 | p36 | p37 | p38 | p39 | p40;
+
+endmodule`;
+        navigator.clipboard.writeText(code).then(() => {
+            alert('Verilog code copied to clipboard!');
+        });
+    }
+</script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 """
-Peimary Benchmark test for 3D minimization (5-8 variables).
+Primary Benchmark test for 3D/4D minimization (5-16 variables).
 Tests variable ordering fix and tracks performance vitals.
 Saves results to CSV file.
 """
@@ -304,7 +304,7 @@ def test_single_case(num_vars, output_values, test_name):
         sys_module.stdout = io.StringIO()
         
         solver = BoolMinGeo(num_vars, output_values)
-        kmap_func = lambda: solver.minimize_3d(form='sop')
+        kmap_func = lambda: solver.minimize_4d(form='sop')
         
         # Time the minimization
         t_kmap = benchmark_with_warmup(kmap_func, ())
@@ -434,7 +434,7 @@ results_by_var = {}  # Store results grouped by variable count
 
 # Configuration: (num_vars, output_size)
 configs = [
-    (5, 32), (6, 64), (7, 128), (8, 256)
+    (9, 512), (10, 1024)
 ]
 
 # Test 10 random functions for each variable count
