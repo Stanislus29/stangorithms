@@ -712,14 +712,15 @@
             <div>
             <h1 style="margin: 0;">StanLogic - KMapSolver (Viz)</h1>
             <p class="subtitle" style="margin: 5px 0 0 0;">
-                Visualization of our Clustering-Coordinate Based Algorithm for solving Karnaugh Maps
+                Visualization of our Optimized Clustering-Coordinate Based Algorithm with Bitmask Operations
             </p>
             </div>
         </div>
 
         <div class="info-box">
             <strong>Instructions:</strong> Click cells to cycle through values (0 → 1 → Don't Care → 0). 
-            Select your K-map size, minimization form, and convention, then click "Solve & Visualize" to see the algorithm in action!
+            Select your K-map size, minimization form, and convention, then click "Solve & Visualize" to see our optimized algorithm in action!<br>
+            <strong>Key Optimizations:</strong> Size-based prime filtering • Weighted greedy scoring • Subsumption-based redundancy removal • Exhaustive coverage verification
         </div>
 
         <div class="controls">
@@ -796,6 +797,73 @@
     </div>
 
     <script>
+        /*
+         * ========================================================================
+         * STANLOGIC K-MAP SOLVER VISUALIZER
+         * ========================================================================
+         * 
+         * This visualizer demonstrates the optimized clustering-coordinate based
+         * algorithm implemented in BoolMin2D (2-4 vars) and KMapSolver3D (5+ vars).
+         * 
+         * KEY ALGORITHM OPTIMIZATIONS (implemented in Python backend):
+         * 
+         * 1. CONSTANT FUNCTION DETECTION (O(n) early exit)
+         *    - Before group enumeration, check if all defined cells have same value
+         *    - Return immediate constant result if detected
+         * 
+         * 2. BITMASK OPERATIONS (constant-time operations)
+         *    - Groups represented as integer bitmasks for efficient set operations
+         *    - Subset checking: (g & h) == g
+         *    - Union: g | h
+         *    - Coverage counting: mask.bit_count()
+         * 
+         * 3. SIZE-BASED PRIME FILTERING
+         *    - Groups sorted by size (descending) before filtering
+         *    - Only check against same-or-larger groups (smaller can't contain larger)
+         *    - Significantly reduces O(|G|²) comparisons in practice
+         * 
+         * 4. TARGET-ONLY COVERAGE MASKS
+         *    - Coverage includes ONLY target cells (1 for SOP, 0 for POS)
+         *    - Don't-cares contribute to group SIZE but not coverage/simplification
+         *    - Critical for semantic correctness
+         * 
+         * 5. LITERAL COUNT PREPROCESSING
+         *    - Each prime's literal count computed from bit pattern analysis
+         *    - Non-varying bit positions = literals
+         *    - Enables weighted scoring in greedy selection
+         * 
+         * 6. WEIGHTED GREEDY SET COVER
+         *    - Score = overlap / (literal_count²)
+         *    - Heavily favors simpler terms (fewer literals)
+         *    - Better than naive "max coverage" heuristic
+         * 
+         * 7. ENHANCED REDUNDANCY REMOVAL (two-phase)
+         *    - Phase 1: Subsumption checking (remove terms subsumed by simpler ones)
+         *    - Phase 2: Standard redundancy (remove terms with redundant coverage)
+         *    - Ensures minimal literal count in final expression
+         * 
+         * 8. EXHAUSTIVE COVERAGE VERIFICATION
+         *    - After selection, verify all target cells are covered
+         *    - Greedy recovery if gaps detected
+         *    - Guarantees complete coverage
+         * 
+         * COMPLEXITY SUMMARY:
+         * - Constant Detection: O(n)
+         * - Group Enumeration: O(n · |G| · s)
+         * - Prime Filtering: O(|G|²) with size pruning
+         * - Literal Counting: O(|P| · num_vars)
+         * - Coverage Build: O(|P| · n)
+         * - Essentials: O(n)
+         * - Weighted Greedy: O(|P| · n · i)
+         * - Subsumption: O(|S|² · n)
+         * - Standard Redundancy: O(|S| · n)
+         * - Coverage Verification: O(|P| · n)
+         * 
+         * For 4-variable K-maps (16 cells), total time is sub-millisecond.
+         * 
+         * ========================================================================
+         */
+        
         // State management
         let state = {
             size: 2,
@@ -1089,7 +1157,15 @@
                     <button class="btn-replay">🔄 Replay</button>
                 </div>
                 <div class="step-content">
-                    <p><strong>Process:</strong> Apply clustering algorithm to each of the ${numMaps} sub-maps</p>
+                    <p><strong>Process:</strong> Apply enhanced clustering algorithm to each of the ${numMaps} sub-maps</p>
+                    <p><strong>Per-Map Optimizations:</strong></p>
+                    <ul style="margin:0 0 10px 18px;padding:0;color:#a8b3c7;font-size:0.9em;">
+                        <li>Constant function detection (all 0s/1s) for early exit</li>
+                        <li>Target-only coverage masks (don't-cares excluded)</li>
+                        <li>Weighted greedy selection favoring simpler terms</li>
+                        <li>Enhanced redundancy removal with subsumption checking</li>
+                        <li>Exhaustive coverage verification with recovery</li>
+                    </ul>
                     <div id="map-solving-animation" style="background: rgba(11, 24, 50, 0.7); padding: 30px; border-radius: 10px; margin: 15px 0; text-align: center;">
                         <div style="font-size: 3em; margin-bottom: 10px;">🗺️</div>
                         <div id="solving-status" style="font-size: 1.2em; color: #7ee787; margin-bottom: 15px;">
@@ -1141,7 +1217,9 @@
                     <button class="btn-replay">🔄 Replay</button>
                 </div>
                 <div class="step-content">
-                    <p><strong>Combining Results:</strong> Group terms with identical 4-bit patterns across different maps</p>
+                    <p><strong>Combining Results:</strong> Group terms with identical 4-bit patterns (base map variables) across different sub-maps</p>
+                    <p><strong>Bitwise Union Optimization:</strong> For each unique 4-bit pattern, collect all sub-map indices where it appears. The extra variable portion is then simplified by analyzing which extra variable bits vary (set to '-') vs. remain constant.</p>
+                    <p><strong>Why This Works:</strong> If pattern "01--" appears in maps 0,1,2,3 (binary: 000, 001, 010, 011), the first extra variable bit varies while others don't, so we get "0-- 01--" → simplified term.</p>
                     <div id="union-animation" style="background: rgba(11, 24, 50, 0.7); padding: 30px; border-radius: 10px; margin: 15px 0;">
                         <div style="display: flex; justify-content: space-around; align-items: center; margin-bottom: 20px;">
                             <div class="pattern-box" style="background: #1b2f55; padding: 15px; border-radius: 8px; border: 2px solid #4ea1ff;">
@@ -1210,9 +1288,10 @@
                     <div style="background: rgba(126, 231, 135, 0.1); border-left: 4px solid #7ee787; padding: 15px; margin-top: 20px; border-radius: 5px;">
                         <p style="margin: 0;"><strong>Algorithm Complexity Summary:</strong></p>
                         <ul style="margin: 10px 0 0 20px; padding: 0; color: #a8b3c7;">
-                            <li>Sub-map solving: O(${numMaps} × standard K-map complexity)</li>
-                            <li>Pattern grouping: O(total terms × pattern length)</li>
-                            <li>Variable simplification: O(terms per pattern × ${numExtraVars})</li>
+                            <li>Sub-map solving: O(${numMaps} × BoolMin2D complexity) with all optimizations</li>
+                            <li>Pattern grouping: O(total terms × pattern length) bitwise comparison</li>
+                            <li>Variable simplification: O(terms per pattern × ${numExtraVars}) bit analysis</li>
+                            <li><strong>Key optimization:</strong> Identical 4-bit patterns merged via bitwise union</li>
                         </ul>
                     </div>
                 </div>
@@ -1683,9 +1762,10 @@
                         <button class="btn-replay">🔄 Replay</button>
                     </div>
                     <div class="step-content">
+                        <p><strong>Pre-optimization:</strong> Before group enumeration, we check for constant functions (all same value). If all defined cells are ${targetName === "1's" ? "0" : "1"}, we return empty immediately. If all are ${targetName}, we return a single constant term. This O(n) check avoids unnecessary computation.</p>
                         <p><strong>What happens here?</strong> We systematically enumerate every rectangular, power-of-two sized cluster (including wrap-around/toroidal cases). Each cluster becomes a bitmask: a single integer whose set bits mark the covered cells. Only cells with ${targetName} and optional don't cares enter these masks, guaranteeing semantic correctness.</p>
-                        <p><strong>Why bitmasks?</strong> They allow constant-time subset checks, unions, and popcounts using native CPU operations.</p>
-                        <p><strong>Complexity:</strong> O(n · |G| · s) where n = cells (4/8/16), |G| ≤ 9 possible dimensions, s = average group size. For 4×4 maps this remains very small.</p>
+                        <p><strong>Why bitmasks?</strong> They allow constant-time subset checks, unions, and popcounts using native CPU operations (bit_count(), bitwise AND/OR).</p>
+                        <p><strong>Complexity:</strong> O(n) constant check + O(n · |G| · s) enumeration where n = cells (4/8/16), |G| ≤ 9 possible dimensions, s = average group size. For 4×4 maps this remains very small.</p>
                         <p>Found <strong>${result.steps.allGroups.count}</strong> valid rectangular groups.</p>
                         <p><em>Each group contains ONLY ${targetName} (and optionally don't cares)</em></p>
                     </div>
@@ -1722,8 +1802,8 @@
                         <button class="btn-replay">🔄 Replay</button>
                     </div>
                     <div class="step-content">
-                        <p><strong>What happens?</strong> We remove any group fully covered by a larger group. Using bitmasks, a subset test is simply (g & h) == g. Survivors are maximal rectangles → prime implicants.</p>
-                        <p><strong>Complexity:</strong> O(|G|²) worst-case (|G| groups before pruning). Very manageable for ≤16 cells.</p>
+                        <p><strong>What happens?</strong> We remove any group fully covered by a larger group. Using bitmasks, a subset test is simply (g & h) == g. <strong>Optimization:</strong> Groups are sorted by size (descending) and we only check against same-or-larger groups, significantly reducing comparisons. Survivors are maximal rectangles → prime implicants.</p>
+                        <p><strong>Complexity:</strong> O(|G|²) worst-case with size-based pruning (|G| groups before filtering). Very manageable for ≤16 cells.</p>
                         <p>Removed ${result.steps.allGroups.count - result.steps.primeImplicants.count} redundant groups. <strong>${result.steps.primeImplicants.count}</strong> prime implicants remain:</p>
                         <div class="group-list">
                             ${result.steps.primeImplicants.terms.map((term, i) =>
@@ -1756,7 +1836,7 @@
                         <button class="btn-replay">🔄 Replay</button>
                     </div>
                     <div class="step-content">
-                        <p><strong>What happens?</strong> For each prime implicant we build a <em>coverage mask</em> retaining only target cells (ignoring pure don't-care positions). This creates a prime–minterm incidence map.</p>
+                        <p><strong>What happens?</strong> For each prime implicant we build a <em>coverage mask</em> retaining only target cells (ignoring pure don't-care positions). <strong>Critical optimization:</strong> Coverage includes ONLY cells with target values (1 for SOP, 0 for POS), not don't-cares. Don't-cares contribute to group size but not to coverage or term simplification.</p>
                         <p><strong>Complexity:</strong> O(|P| · n) where |P| is number of prime implicants and n is cell count.</p>
                         <p>Each prime covers these ${targetName} counts:</p>
                         ${result.steps.primeWithCoverage.terms.map((term, i) =>
@@ -1842,8 +1922,9 @@
                         <button class="btn-replay">🔄 Replay</button>
                     </div>
                     <div class="step-content">
-                        <p><strong>What happens?</strong> Remaining uncovered ${targetName} are handled by repeatedly selecting the prime implicant that covers the largest number of still-uncovered targets. This heuristic is a classic logarithmic approximation to optimal set cover.</p>
-                        <p><strong>Complexity:</strong> O(|P| · n · i) where i ≤ number of selections (small). For K-maps this is trivial in practice.</p>
+                        <p><strong>What happens?</strong> Remaining uncovered ${targetName} are handled using <strong>enhanced weighted scoring</strong>: score = overlap / (literal_count²). This heavily favors simpler terms (fewer literals) while maintaining coverage. Instead of just maximizing coverage, we now optimize for both coverage and simplicity.</p>
+                        <p><strong>Literal Count Tracking:</strong> Each prime's literal count is precomputed by analyzing its bit pattern (non-varying positions = literals).</p>
+                        <p><strong>Complexity:</strong> O(|P| · n · i) where i ≤ number of selections (small). Literal counting adds O(|P| · num_vars) preprocessing. For K-maps this is trivial in practice.</p>
                         <p>Selections:</p>
                         ${
                             result.steps.greedySelections.length
@@ -1877,16 +1958,25 @@
                         <span>✨ Final Minimized Expression</span>
                     </div>
                     <div class="step-content">
-                        <p><strong>Assembly & Redundancy Check:</strong> We optionally remove any selected prime whose exclusion does not reduce total coverage (bitmask difference test). This guarantees no superfluous term remains.</p>
-                        <p><strong>Redundancy Phase Complexity:</strong> O(|S| · n) where |S| is selected implicants. Combined pipeline stays comfortably sub-millisecond for 4-variable maps.</p>
-                        <p><strong>Aggregate Complexity Summary:</strong></p>
+                        <p><strong>Assembly & Enhanced Redundancy Removal:</strong> Two-phase optimization:</p>
                         <ul style="margin:0 0 10px 18px;padding:0;">
+                            <li><strong>Phase 1 - Subsumption:</strong> Remove terms subsumed by simpler terms. A term T1 subsumes T2 if T1 has fewer literals AND covers all minterms of T2.</li>
+                            <li><strong>Phase 2 - Standard Redundancy:</strong> Remove any term whose coverage is completely provided by others (bitmask difference test).</li>
+                            <li><strong>Exhaustive Coverage Verification:</strong> If coverage is incomplete, greedy recovery adds primes until all targets are covered.</li>
+                        </ul>
+                        <p><strong>Redundancy Phase Complexity:</strong> O(|S|² · n) for subsumption + O(|S| · n) for standard redundancy where |S| is selected implicants. Combined pipeline stays comfortably sub-millisecond for 4-variable maps.</p>
+                        <p><strong>Aggregate Complexity Summary (with optimizations):</strong></p>
+                        <ul style="margin:0 0 10px 18px;padding:0;">
+                            <li>Constant Function Detection: O(n) [early exit]</li>
                             <li>Group Enumeration: O(n · |G| · s)</li>
-                            <li>Prime Filtering: O(|G|²)</li>
-                            <li>Coverage Build: O(|P| · n)</li>
+                            <li>Prime Filtering: O(|G|²) [with size-based pruning]</li>
+                            <li>Literal Count Preprocessing: O(|P| · num_vars)</li>
+                            <li>Coverage Build: O(|P| · n) [target-only coverage]</li>
                             <li>Essentials Detection: O(n)</li>
-                            <li>Greedy Cover: O(|P| · n · i)</li>
-                            <li>Redundancy Removal: O(|S| · n)</li>
+                            <li>Weighted Greedy Cover: O(|P| · n · i)</li>
+                            <li>Subsumption Removal: O(|S|² · n)</li>
+                            <li>Standard Redundancy: O(|S| · n)</li>
+                            <li>Exhaustive Coverage Verification: O(|P| · n) [fallback]</li>
                         </ul>
                         <div class="result">${result.expression}</div>
                         <br>

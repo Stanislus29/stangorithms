@@ -1,3 +1,5 @@
+"Heirarchical only minimization for 5+ variable K-maps using 4x4 K-maps as building blocks."
+
 from stanlogic.BoolMin2D import BoolMin2D
 from collections import defaultdict
 

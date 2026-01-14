@@ -10,8 +10,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(BASE_DIR, 'src'))
 
 try:
-    from stanlogic import KMapSolver
-    from stanlogic.BoolMinGeo import KMapSolver3D
+    from stanlogic import BoolMin2D, BoolMinGeo
 except ImportError as e:
     print(f"Error: Could not import stanlogic modules: {e}")
     print(f"BASE_DIR: {BASE_DIR}")
@@ -63,7 +62,7 @@ def solve_kmap():
             output_values = data['output_values']
             
             # Initialize 3D solver
-            solver = KMapSolver3D(num_vars=num_vars, output_values=output_values)
+            solver = BoolMinGeo(num_vars=num_vars, output_values=output_values)
             
             # Get minimized expression
             terms, expression = solver.minimize_3d(form=form)
@@ -95,7 +94,7 @@ def solve_kmap():
             kmap_data = data['kmap']
             
             # Initialize the solver with the provided data
-            solver = KMapSolver(kmap=kmap_data, convention=convention)
+            solver = BoolMin2D(kmap=kmap_data, convention=convention)
             
             # Use the new visualization method to get detailed steps
             expression, steps = solver.minimize_visualize(form=form)
