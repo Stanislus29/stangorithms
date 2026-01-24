@@ -2036,6 +2036,105 @@ class BoolMinGeo:
         
         return prime_implicants if prime_implicants else minterm_list
 
+    def _minimize_with_4d_clustering(self, chunk_results):
+        """
+        Apply 4D clustering to chunk results and return essential prime implicants.
+        
+        This is the core clustering logic extracted from minimize_4d for reusability.
+        Performs:
+        1. 4D cluster identification (patterns spanning multiple chunks)
+        2. Span-wise merging of chunks
+        3. EPI selection using span dominance
+        
+        Args:
+            chunk_results (dict): chunk_id → list of 3D minimized patterns
+            
+        Returns:
+            list: Essential prime implicants (cluster dictionaries with full_pattern)
+        """
+        # Step 3: Identify 4D clusters (patterns spanning multiple chunks)
+        print(f"\n{'='*70}")
+        print(f"PHASE 3: 4D CLUSTER IDENTIFICATION")
+        print(f"{'='*70}\n")
+        import sys
+        sys.stdout.flush()
+        
+        pattern_to_chunks = self._map_patterns_to_chunks(chunk_results)
+        
+        valid_4d_clusters = {}
+        eliminated_3d = []
+        
+        for pattern, chunk_list in pattern_to_chunks.items():
+            if len(chunk_list) == 1:
+                # Pure 3D cluster (no span)
+                eliminated_3d.append((pattern, chunk_list[0]))
+                print(f"  ✗ ELIMINATED 3D: '{pattern}' in chunk {chunk_list[0]}")
+            elif not self._has_adjacent_chunks(chunk_list):
+                # Non-adjacent chunks
+                eliminated_3d.extend([(pattern, chunk) for chunk in chunk_list])
+                print(f"  ✗ ELIMINATED Non-adjacent: '{pattern}' in chunks {chunk_list}")
+            else:
+                # Valid 4D cluster
+                valid_4d_clusters[pattern] = chunk_list
+                print(f"  ✓ VALID 4D: '{pattern}' spans {len(chunk_list)} chunks")
+        
+        print(f"\n  Kept: {len(valid_4d_clusters)} 4D clusters")
+        print(f"  Eliminated: {len(eliminated_3d)} 3D-only patterns")
+        import sys
+        sys.stdout.flush()
+        
+        if not valid_4d_clusters:
+            print("\n  WARNING: No 4D clusters found!")
+            print("  Falling back to treating all patterns as 3D...")
+            valid_4d_clusters = pattern_to_chunks
+        
+        # Step 4: Merge chunks (span-wise) for each pattern
+        print(f"\n{'='*70}")
+        print(f"PHASE 4: SPAN-WISE MERGING")
+        print(f"{'='*70}\n")
+        import sys
+        sys.stdout.flush()
+        
+        merged_4d_clusters = []
+        
+        for pattern, chunk_list in valid_4d_clusters.items():
+            print(f"Merging chunks for pattern '{pattern}':")
+            print(f"  Chunks: {chunk_list}")
+            
+            # Apply Quine-McCluskey to chunk identifiers
+            merged_chunks = self._minimize_boolean_function_complete(chunk_list)
+            
+            print(f"  Span implicants: {merged_chunks}")
+            
+            for merged_chunk in merged_chunks:
+                cluster = {
+                    'inner_pattern': pattern,      # 8-bit pattern from 3D minimization
+                    'chunk_pattern': merged_chunk,  # Chunk identifier with don't cares
+                    'full_pattern': merged_chunk + pattern,  # Complete n-bit pattern
+                    'span': self._count_depth(merged_chunk),  # Number of chunks
+                    'cells_3d': self._get_3d_cell_coverage(pattern)  # 3D space coverage
+                }
+                merged_4d_clusters.append(cluster)
+                print(f"    4D Cluster: {merged_chunk} + {pattern} (span={cluster['span']})")
+        
+        # Step 5: Select EPIs using span dominance
+        print(f"\n{'='*70}")
+        print(f"PHASE 5: ESSENTIAL PRIME IMPLICANT SELECTION (Span-wise)")
+        print(f"{'='*70}\n")
+        import sys
+        sys.stdout.flush()
+        
+        epis = self._select_epis_by_span_dominance(merged_4d_clusters)
+        
+        print(f"\nSelected {len(epis)} essential 4D prime implicants:")
+        for i, epi in enumerate(epis[:10]):  # Show first 10
+            print(f"  {i+1}. {epi['full_pattern']} (span={epi['span']})")
+        if len(epis) > 10:
+            print(f"  ... and {len(epis)-10} more")
+        sys.stdout.flush()
+        
+        return epis
+
     def minimize_4d(self, form='sop'):
         """
         4D Karnaugh map minimization for n > 8 variables.
@@ -2102,73 +2201,19 @@ class BoolMinGeo:
             if len(patterns) > 5:
                 print(f"    ... and {len(patterns)-5} more")
         
-        # Step 3: Identify 4D clusters (patterns spanning multiple chunks)
+        # Step 3-5: Apply 4D clustering to get EPIs
         print(f"\n{'='*70}")
-        print(f"PHASE 3: 4D CLUSTER IDENTIFICATION")
-        print(f"{'='*70}\n")
+        print(f"APPLYING 4D CLUSTERING...")
+        print(f"{'='*70}")
+        import sys
+        sys.stdout.flush()
         
-        pattern_to_chunks = self._map_patterns_to_chunks(chunk_results)
+        epis = self._minimize_with_4d_clustering(chunk_results)
         
-        valid_4d_clusters = {}
-        eliminated_3d = []
-        
-        for pattern, chunk_list in pattern_to_chunks.items():
-            if len(chunk_list) == 1:
-                # Pure 3D cluster (no span)
-                eliminated_3d.append((pattern, chunk_list[0]))
-                print(f"  ✗ ELIMINATED 3D: '{pattern}' in chunk {chunk_list[0]}")
-            elif not self._has_adjacent_chunks(chunk_list):
-                # Non-adjacent chunks
-                eliminated_3d.extend([(pattern, chunk) for chunk in chunk_list])
-                print(f"  ✗ ELIMINATED Non-adjacent: '{pattern}' in chunks {chunk_list}")
-            else:
-                # Valid 4D cluster
-                valid_4d_clusters[pattern] = chunk_list
-                print(f"  ✓ VALID 4D: '{pattern}' spans {len(chunk_list)} chunks")
-        
-        print(f"\n  Kept: {len(valid_4d_clusters)} 4D clusters")
-        print(f"  Eliminated: {len(eliminated_3d)} 3D-only patterns")
-        
-        if not valid_4d_clusters:
-            print("\n  WARNING: No 4D clusters found!")
-            print("  Falling back to treating all patterns as 3D...")
-            valid_4d_clusters = pattern_to_chunks
-        
-        # Step 4: Merge chunks (span-wise) for each pattern
         print(f"\n{'='*70}")
-        print(f"PHASE 4: SPAN-WISE MERGING")
-        print(f"{'='*70}\n")
-        
-        merged_4d_clusters = []
-        
-        for pattern, chunk_list in valid_4d_clusters.items():
-            print(f"Merging chunks for pattern '{pattern}':")
-            print(f"  Chunks: {chunk_list}")
-            
-            # Apply Quine-McCluskey to chunk identifiers
-            merged_chunks = self._minimize_boolean_function_complete(chunk_list)
-            
-            print(f"  Span implicants: {merged_chunks}")
-            
-            for merged_chunk in merged_chunks:
-                cluster = {
-                    'inner_pattern': pattern,      # 8-bit pattern from 3D minimization
-                    'chunk_pattern': merged_chunk,  # Chunk identifier with don't cares
-                    'full_pattern': merged_chunk + pattern,  # Complete n-bit pattern
-                    'span': self._count_depth(merged_chunk),  # Number of chunks
-                    'cells_3d': self._get_3d_cell_coverage(pattern)  # 3D space coverage
-                }
-                merged_4d_clusters.append(cluster)
-                print(f"    4D Cluster: {merged_chunk} + {pattern} (span={cluster['span']})")
-        
-        # Step 5: Select EPIs using span dominance
-        print(f"\n{'='*70}")
-        print(f"PHASE 5: ESSENTIAL PRIME IMPLICANT SELECTION (Span-wise)")
-        print(f"{'='*70}\n")
-        
-        epis = self._select_epis_by_span_dominance(merged_4d_clusters)
-        
-        print(f"Selected {len(epis)} essential prime implicants")
+        print(f"4D CLUSTERING COMPLETE: {len(epis)} EPIs selected")
+        print(f"{'='*70}")
+        sys.stdout.flush()
 
         # Step 6: Verify coverage
         print(f"\n{'='*70}")
@@ -2237,6 +2282,482 @@ class BoolMinGeo:
         print(f"F = {final_expression}\n")
         
         return final_terms, final_expression
+
+    def _minimize_with_5d_clustering(self, hyperchunk_results):
+        """
+        Apply 5D clustering to hyperchunk results and return essential prime implicants.
+        
+        This extends 4D clustering to handle n > 10 variables.
+        Performs:
+        1. 5D cluster identification (patterns spanning multiple hyperchunks)
+        2. Hyperspan-wise merging of hyperchunks
+        3. EPI selection using hyperspan dominance
+        
+        Args:
+            hyperchunk_results (dict): hyperchunk_id → list of 4D minimized patterns
+            
+        Returns:
+            list: Essential prime implicants (cluster dictionaries with full_pattern)
+        """
+        # Step 3: Identify 5D clusters (patterns spanning multiple hyperchunks)
+        print(f"\n{'='*70}")
+        print(f"PHASE 3: 5D CLUSTER IDENTIFICATION")
+        print(f"{'='*70}\n")
+        import sys
+        sys.stdout.flush()
+        
+        pattern_to_hyperchunks = self._map_patterns_to_chunks(hyperchunk_results)
+        
+        valid_5d_clusters = {}
+        eliminated_4d = []
+        
+        for pattern, hyperchunk_list in pattern_to_hyperchunks.items():
+            if len(hyperchunk_list) == 1:
+                # Pure 4D cluster (no hyperspan)
+                eliminated_4d.append((pattern, hyperchunk_list[0]))
+                print(f"  ✗ ELIMINATED 4D: '{pattern}' in hyperchunk {hyperchunk_list[0]}")
+            elif not self._has_adjacent_chunks(hyperchunk_list):
+                # Non-adjacent hyperchunks
+                eliminated_4d.extend([(pattern, hc) for hc in hyperchunk_list])
+                print(f"  ✗ ELIMINATED Non-adjacent: '{pattern}' in hyperchunks {hyperchunk_list}")
+            else:
+                # Valid 5D cluster
+                valid_5d_clusters[pattern] = hyperchunk_list
+                print(f"  ✓ VALID 5D: '{pattern}' spans {len(hyperchunk_list)} hyperchunks")
+        
+        print(f"\n  Kept: {len(valid_5d_clusters)} 5D clusters")
+        print(f"  Eliminated: {len(eliminated_4d)} 4D-only patterns")
+        import sys
+        sys.stdout.flush()
+        
+        if not valid_5d_clusters:
+            print("\n  WARNING: No 5D clusters found!")
+            print("  Falling back to treating all patterns as 4D...")
+            valid_5d_clusters = pattern_to_hyperchunks
+        
+        # Step 4: Merge hyperchunks (hyperspan-wise) for each pattern
+        print(f"\n{'='*70}")
+        print(f"PHASE 4: HYPERSPAN-WISE MERGING")
+        print(f"{'='*70}\n")
+        import sys
+        sys.stdout.flush()
+        
+        merged_5d_clusters = []
+        
+        for pattern, hyperchunk_list in valid_5d_clusters.items():
+            print(f"Merging hyperchunks for pattern '{pattern}':")
+            print(f"  Hyperchunks: {hyperchunk_list}")
+            
+            # Apply Quine-McCluskey to hyperchunk identifiers
+            merged_hyperchunks = self._minimize_boolean_function_complete(hyperchunk_list)
+            
+            print(f"  Hyperspan implicants: {merged_hyperchunks}")
+            
+            for merged_hc in merged_hyperchunks:
+                cluster = {
+                    'inner_pattern': pattern,           # 16-bit pattern from 4D minimization
+                    'hyperchunk_pattern': merged_hc,    # Hyperchunk identifier with don't cares
+                    'full_pattern': merged_hc + pattern,  # Complete n-bit pattern
+                    'hyperspan': self._count_depth(merged_hc),  # Number of hyperchunks
+                    'cells_4d': self._get_3d_cell_coverage(pattern[:8])  # 4D space coverage (approximation)
+                }
+                merged_5d_clusters.append(cluster)
+                print(f"    5D Cluster: {merged_hc} + {pattern} (hyperspan={cluster['hyperspan']})")
+        
+        # Step 5: Select EPIs using hyperspan dominance
+        print(f"\n{'='*70}")
+        print(f"PHASE 5: ESSENTIAL PRIME IMPLICANT SELECTION (Hyperspan-wise)")
+        print(f"{'='*70}\n")
+        import sys
+        sys.stdout.flush()
+        
+        epis = self._select_epis_by_hyperspan_dominance(merged_5d_clusters)
+        
+        print(f"\nSelected {len(epis)} essential 5D prime implicants:")
+        for i, epi in enumerate(epis[:10]):  # Show first 10
+            print(f"  {i+1}. {epi['full_pattern']} (hyperspan={epi['hyperspan']})")
+        if len(epis) > 10:
+            print(f"  ... and {len(epis)-10} more")
+        sys.stdout.flush()
+        
+        return epis
+
+    def minimize_5d(self, form='sop'):
+        """
+        5D Karnaugh map minimization for n > 16 variables.
+        
+        Dimensional structure:
+        - Length (2 bits): Rows in 2D K-map
+        - Breadth (2 bits): Columns in 2D K-map
+        - Depth (4 bits): Identifiers in 3D structure
+        - Span (c bits): Chunks in 4D structure (where c = min(8-4, n-8))
+        - Hyperspan (h bits): Hyperchunks in 5D structure (where h = n-16)
+        
+        Args:
+            form (str): 'sop' or 'pos'
+            
+        Returns:
+            tuple: (list of minimized terms, complete expression string)
+        """
+        if self.num_vars <= 10:
+            # Fall back to 4D for n ≤ 10
+            print("Using 4D minimization (n ≤ 10)")
+            return self.minimize_4d(form)
+        
+        print(f"\n{'='*70}")
+        print(f"5D K-MAP MINIMIZATION")
+        print(f"{'='*70}")
+        print(f"Total variables: {self.num_vars}")
+        print(f"Hyperchunk bits (hyperspan): {self.num_vars - 10}")
+        print(f"Variables per hyperchunk: 10")
+        print(f"Structure: {2**(self.num_vars-10)} hyperchunks × 4D structures")
+        print(f"{'='*70}\n")
+        
+        # Step 1: Partition into hyperchunks (16-variable subproblems)
+        hyperchunks = self._partition_into_hyperchunks()
+        
+        print(f"PHASE 1: HYPERCHUNK PARTITION")
+        print(f"Created {len(hyperchunks)} hyperchunks\n")
+        
+        # Step 2: Solve each hyperchunk using 4D minimization
+        hyperchunk_results = {}  # hyperchunk_id → 4D minimized patterns
+        
+        print(f"PHASE 2: 4D MINIMIZATION PER HYPERCHUNK")
+        print("-" * 70)
+        
+        for hc_id, hc_kmap in hyperchunks.items():
+            print(f"\nHyperchunk {hc_id}:")
+            print(f"  Solving 16-variable subproblem...")
+            
+            # Create temporary 16-variable K-map object
+            hc_minimizer = self._create_hyperchunk_minimizer(hc_kmap)
+            
+            # Apply 4D minimization
+            terms, _ = hc_minimizer.minimize_4d(form)
+            
+            # Extract patterns (without conversion to variables yet)
+            patterns = self._extract_patterns_from_terms(terms, hc_minimizer)
+            
+            hyperchunk_results[hc_id] = patterns
+            
+            print(f"  Found {len(patterns)} 4D-minimized patterns")
+            for pattern in patterns[:5]:  # Show first 5
+                print(f"    {pattern}")
+            if len(patterns) > 5:
+                print(f"    ... and {len(patterns)-5} more")
+        
+        # Step 3-5: Apply 5D clustering to get EPIs
+        print(f"\n{'='*70}")
+        print(f"APPLYING 5D CLUSTERING...")
+        print(f"{'='*70}")
+        import sys
+        sys.stdout.flush()
+        
+        epis = self._minimize_with_5d_clustering(hyperchunk_results)
+        
+        print(f"\n{'='*70}")
+        print(f"5D CLUSTERING COMPLETE: {len(epis)} EPIs selected")
+        print(f"{'='*70}")
+        sys.stdout.flush()
+
+        # Step 6: Verify coverage
+        print(f"\n{'='*70}")
+        print(f"PHASE 6: COVERAGE VERIFICATION")
+        print(f"{'='*70}\n")
+        
+        # Get all target minterms
+        target_val = 0 if form.lower() == 'pos' else 1
+        all_target_minterms = set()
+        for i, val in enumerate(self.output_values):
+            if val == target_val:
+                bits = format(i, f'0{self.num_vars}b')
+                all_target_minterms.add(bits)
+        
+        # Essential 5D patterns provide the core coverage
+        minimal_5d_patterns = {c['full_pattern'] for c in epis}
+        covered_by_5d = self._get_covered_minterms(minimal_5d_patterns)
+        uncovered_after_5d = all_target_minterms - covered_by_5d
+        
+        # Collect 4D patterns to cover remaining minterms
+        patterns_4d_only = self._collect_3d_for_coverage(  # Reuse this function
+            hyperchunk_results, minimal_5d_patterns, uncovered_after_5d, all_target_minterms
+        )
+        
+        print(f"\nAfter adding 4D patterns:")
+        print(f"  Added {len(patterns_4d_only)} 4D patterns")
+        
+        # Combine both 4D and 5D patterns
+        all_patterns = minimal_5d_patterns | patterns_4d_only
+        
+        # Verify complete coverage
+        final_covered = self._get_covered_minterms(all_patterns)
+        still_uncovered = all_target_minterms - final_covered
+        
+        if still_uncovered:
+            print(f"\n⚠ WARNING: {len(still_uncovered)} minterms still uncovered!")
+            print(f"  Applying fallback coverage...")
+            fallback_patterns = self._fallback_coverage(still_uncovered, None)
+            all_patterns |= fallback_patterns
+        
+        # CRITICAL: Apply final Quine-McCluskey minimization to merge redundant terms
+        print(f"\n{'='*70}")
+        print("FINAL OPTIMIZATION: Quine-McCluskey Merging")
+        print(f"{'='*70}")
+        
+        optimized_patterns = self._optimize_with_quine_mccluskey(
+            all_patterns, all_target_minterms
+        )
+        
+        print(f"\nPattern count: {len(all_patterns)} → {len(optimized_patterns)}")
+        
+        # Step 7: Convert to final expression
+        final_terms = []
+        for pattern in sorted(optimized_patterns):
+            term_str = self._bits_to_term(pattern, form)
+            final_terms.append(term_str)
+        
+        join_operator = " * " if form.lower() == 'pos' else " + "
+        final_expression = join_operator.join(final_terms) if final_terms else ("0" if form.lower() == 'sop' else "1")
+        
+        print(f"\n{'='*70}")
+        print(f"FINAL 5D-MINIMIZED EXPRESSION")
+        print(f"{'='*70}")
+        print(f"Terms: {len(final_terms)}")
+        print(f"F = {final_expression}\n")
+        
+        return final_terms, final_expression
+
+    def _partition_into_hyperchunks(self):
+        """
+        Partition the n-variable K-map into 2^(n-10) hyperchunks.
+        Each hyperchunk contains a 10-variable subproblem.
+        
+        Returns:
+            dict: hyperchunk_id → output_values for that hyperchunk
+        """
+        if self.num_vars <= 10:
+            return {'0' * (self.num_vars - 10): self.output_values}
+        
+        hyperchunk_bits = self.num_vars - 10
+        num_hyperchunks = 2 ** hyperchunk_bits
+        hyperchunk_size = 2 ** 10  # Each hyperchunk has 2^10 minterms
+        
+        hyperchunks = {}
+        
+        for hc_idx in range(num_hyperchunks):
+            hc_id = format(hc_idx, f'0{hyperchunk_bits}b')
+            
+            # Extract output values for this hyperchunk
+            start_idx = hc_idx * hyperchunk_size
+            end_idx = start_idx + hyperchunk_size
+            hc_output = self.output_values[start_idx:end_idx]
+            
+            hyperchunks[hc_id] = hc_output
+        
+        return hyperchunks
+    
+    def _create_hyperchunk_minimizer(self, hc_output_values):
+        """
+        Create a BoolMinGeo instance for a 10-variable hyperchunk.
+        
+        Args:
+            hc_output_values: Output values for this hyperchunk (2^10 values)
+            
+        Returns:
+            BoolMinGeo: Minimizer for the 10-variable subproblem
+        """
+        return BoolMinGeo(10, hc_output_values)
+
+    # ============================================================================
+    # CLUSTER COORDINATE MAPPING (Information Density Analysis)
+    # ============================================================================
+    
+    def get_cluster_coordinates(self, pattern_or_epis):
+        """
+        Get all minterm bit patterns covered by a cluster pattern or list of EPIs.
+        
+        This function expands a pattern with don't-cares to all concrete
+        minterm bit patterns it covers. Can accept either a single pattern
+        or a list of EPI patterns.
+        
+        Args:
+            pattern_or_epis: Either:
+                - str: Single pattern with possible '-' (e.g., "01--1001")
+                - list: List of EPI patterns to analyze together
+        
+        Returns:
+            If single pattern: list of minterm bit patterns (strings without '-')
+            If list of EPIs: dict mapping each EPI → list of its minterms
+        
+        Example:
+            >>> solver = BoolMinGeo(8, output_values)
+            >>> # Single pattern
+            >>> minterms = solver.get_cluster_coordinates("01--1001")
+            >>> # Returns: ['01001001', '01011001', '01101001', '01111001']
+            >>> 
+            >>> # Multiple EPIs
+            >>> epis = ["01--1001", "10--0101"]
+            >>> epi_coverage = solver.get_cluster_coordinates(epis)
+            >>> # Returns: {'01--1001': [...], '10--0101': [...]}
+        """
+        # Handle list of EPIs
+        if isinstance(pattern_or_epis, (list, set, tuple)):
+            epi_coverage = {}
+            for pattern in pattern_or_epis:
+                if len(pattern) != self.num_vars:
+                    raise ValueError(f"Pattern length {len(pattern)} doesn't match num_vars {self.num_vars}")
+                minterms = self._expand_pattern(pattern)
+                epi_coverage[pattern] = sorted(list(minterms))
+            return epi_coverage
+        
+        # Handle single pattern
+        pattern = pattern_or_epis
+        if len(pattern) != self.num_vars:
+            raise ValueError(f"Pattern length {len(pattern)} doesn't match num_vars {self.num_vars}")
+        
+        # Expand pattern to all concrete minterms
+        minterms = self._expand_pattern(pattern)
+        
+        return sorted(list(minterms))
+    
+    def get_cluster_density_map(self, patterns):
+        """
+        Analyze information density across all clusters in the K-map space.
+        
+        Creates a density map showing how many patterns cover each minterm.
+        Higher density indicates regions where multiple patterns overlap.
+        
+        Args:
+            patterns (set or list): Collection of bit patterns with don't-cares
+        
+        Returns:
+            dict: Mapping with the following keys:
+                - 'minterms': dict mapping minterm → count of patterns covering it
+                - 'total_minterms': number of unique minterms covered
+                - 'max_density': maximum overlap count
+                - 'min_density': minimum overlap count
+                - 'avg_density': average overlap count
+        
+        Example:
+            >>> patterns = {"01--1001", "1---0101", "----1111"}
+            >>> density = solver.get_cluster_density_map(patterns)
+            >>> print(density['max_density'])  # Shows most overlapped minterm
+        """
+        density_map = defaultdict(int)
+        
+        for pattern in patterns:
+            minterms = self.get_cluster_coordinates(pattern)
+            for minterm in minterms:
+                density_map[minterm] += 1
+        
+        # Calculate statistics
+        densities = list(density_map.values())
+        
+        result = {
+            'minterms': dict(density_map),
+            'total_minterms': len(density_map),
+            'max_density': max(densities) if densities else 0,
+            'min_density': min(densities) if densities else 0,
+            'avg_density': sum(densities) / len(densities) if densities else 0,
+        }
+        
+        return result
+    
+    def get_3d_cluster_regions(self, patterns):
+        """
+        Identify distinct 3D cluster regions by grouping minterms by identifier.
+        
+        Groups minterms by their identifier (first n-4 bits) to show which
+        K-maps have coverage and what minterms within each map are covered.
+        
+        Args:
+            patterns (set or list): Collection of bit patterns
+        
+        Returns:
+            dict: identifier → list of minterm bit patterns in that K-map
+        
+        Example:
+            >>> regions = solver.get_3d_cluster_regions(patterns)
+            >>> for id_str, minterms in regions.items():
+            >>>     print(f"Identifier {id_str}: {len(minterms)} minterms")
+        """
+        regions = defaultdict(list)
+        
+        for pattern in patterns:
+            minterms = self.get_cluster_coordinates(pattern)
+            for minterm in minterms:
+                # Extract identifier portion
+                identifier = minterm[:self.num_extra_vars]
+                regions[identifier].append(minterm)
+        
+        # Remove duplicates and sort
+        for identifier in regions:
+            regions[identifier] = sorted(list(set(regions[identifier])))
+        
+        return dict(regions)
+    
+    def visualize_cluster_coverage(self, pattern, display=True):
+        """
+        Create a textual visualization of a pattern's coverage in 3D space.
+        
+        Shows which K-maps (identifiers) are covered and highlights the cells
+        in each 4x4 K-map.
+        
+        Args:
+            pattern (str): Bit pattern to visualize
+            display (bool): If True, print visualization; if False, return string
+        
+        Returns:
+            str: Visualization text (if display=False)
+        """
+        minterms = self.get_cluster_coordinates(pattern)
+        
+        # Group by identifier and convert to (row, col) coordinates
+        gray_code = ['00', '01', '11', '10']
+        regions = defaultdict(set)
+        
+        for minterm in minterms:
+            identifier = minterm[:self.num_extra_vars]
+            kmap_part = minterm[self.num_extra_vars:]
+            
+            # Convert K-map position to (row, col)
+            col_bits = kmap_part[:2]
+            row_bits = kmap_part[2:]
+            col = gray_code.index(col_bits)
+            row = gray_code.index(row_bits)
+            
+            regions[identifier].add((row, col))
+        
+        output = []
+        output.append(f"\n{'='*60}")
+        output.append(f"CLUSTER COVERAGE VISUALIZATION")
+        output.append(f"Pattern: {pattern}")
+        output.append(f"Total minterms: {len(minterms)}")
+        output.append(f"K-maps covered: {len(regions)}")
+        output.append(f"{'='*60}\n")
+        
+        for identifier in sorted(regions.keys()):
+            cells = regions[identifier]
+            output.append(f"Identifier: {identifier} ({len(cells)} cells)")
+            output.append("  " + "  ".join([f"C{i}" for i in range(4)]))
+            
+            for row in range(4):
+                row_str = f"R{row}"
+                for col in range(4):
+                    if (row, col) in cells:
+                        row_str += "  ■ "
+                    else:
+                        row_str += "  □ "
+                output.append("  " + row_str)
+            output.append("")
+        
+        viz_text = "\n".join(output)
+        
+        if display:
+            print(viz_text)
+            return None
+        else:
+            return viz_text
 
     # ============================================================================
     # CHUNK PARTITIONING (4D Structure)
@@ -2382,15 +2903,17 @@ class BoolMinGeo:
         Create mapping: pattern → list of chunks where it appears.
         
         Args:
-            chunk_results: dict of chunk_id → list of patterns
+            chunk_results: dict of chunk_id → list of EPIs (dicts with 'full_pattern')
             
         Returns:
-            dict: pattern → list of chunk_ids
+            dict: pattern (str) → list of chunk_ids
         """
         pattern_to_chunks = {}
         
-        for chunk_id, patterns in chunk_results.items():
-            for pattern in patterns:
+        for chunk_id, epis in chunk_results.items():
+            for epi in epis:
+                # Extract pattern string from EPI dictionary
+                pattern = epi['full_pattern'] if isinstance(epi, dict) else epi
                 if pattern not in pattern_to_chunks:
                     pattern_to_chunks[pattern] = []
                 pattern_to_chunks[pattern].append(chunk_id)
@@ -2492,6 +3015,60 @@ class BoolMinGeo:
                     else:
                         print(f"      ✗ Dominated: {cluster['chunk_pattern']} + {cluster['inner_pattern']} "
                             f"(span={cluster['span']}) < {max_span}")
+        
+        return epis
+
+    def _select_epis_by_hyperspan_dominance(self, clusters):
+        """
+        Select EPIs using hyperspan dominance criterion for 5D clusters.
+        
+        For clusters with same 4D cell coverage:
+        - Keep the one with maximum hyperspan (most hyperchunks)
+        - Eliminate others
+        
+        Args:
+            clusters: List of 5D cluster dictionaries
+            
+        Returns:
+            list: Essential prime implicants
+        """
+        # Group by inner pattern (4D structure)
+        pattern_groups = {}
+        for cluster in clusters:
+            inner = cluster['inner_pattern']
+            if inner not in pattern_groups:
+                pattern_groups[inner] = []
+            pattern_groups[inner].append(cluster)
+        
+        epis = []
+        
+        for inner_pattern, group in pattern_groups.items():
+            print(f"\n  Analyzing pattern '{inner_pattern}':")
+            
+            # Further group by 4D cell coverage
+            cell_groups = {}
+            for cluster in group:
+                cells_key = cluster['cells_4d']
+                if cells_key not in cell_groups:
+                    cell_groups[cells_key] = []
+                cell_groups[cells_key].append(cluster)
+            
+            # For each cell group, select maximum hyperspan
+            for cells, cell_group in cell_groups.items():
+                print(f"    4D coverage: {len(cells)} cells")
+                
+                # Find maximum hyperspan
+                max_hyperspan = max(c['hyperspan'] for c in cell_group)
+                
+                # Keep only clusters with maximum hyperspan
+                for cluster in cell_group:
+                    if cluster['hyperspan'] == max_hyperspan:
+                        epis.append(cluster)
+                        print(f"      ✓ EPI: {cluster['hyperchunk_pattern']} + {cluster['inner_pattern']} "
+                            f"(hyperspan={cluster['hyperspan']}) - MAX HYPERSPAN")
+                    else:
+                        print(f"      ✗ Dominated: {cluster['hyperchunk_pattern']} + {cluster['inner_pattern']} "
+                            f"(hyperspan={cluster['hyperspan']}) < {max_hyperspan}")
         
         return epis
 
@@ -3407,7 +3984,7 @@ def main():
     # Example: 8-variable K-map with random pattern
     print("EXAMPLE: 8-VARIABLE K-MAP (Random Pattern)")
     print("="*60)
-    num_vars = 8
+    num_vars = 10
     
     # Generate random output values (256 total for 8 variables)
     # Set random seed for reproducibility
@@ -3419,7 +3996,7 @@ def main():
     kmap_solver_8.print_kmaps()
     
     # Minimize the 8-variable K-map
-    terms, expression = kmap_solver_8.minimize_3d(form='sop')
+    terms, expression = kmap_solver_8.minimize_4d(form='sop')
     
     # Generate HTML report
     print("\n" + "="*60)

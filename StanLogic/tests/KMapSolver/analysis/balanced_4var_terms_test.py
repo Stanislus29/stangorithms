@@ -41,7 +41,7 @@ NUM_TEST_CASES_4VAR = 200  # 4-var has 16 cells
 
 # Output directory
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-OUTPUTS_DIR = os.path.join(SCRIPT_DIR, "..", "outputs")
+OUTPUTS_DIR = os.path.join(SCRIPT_DIR, "..", "outputs", "obtain_terms_frequency")
 os.makedirs(OUTPUTS_DIR, exist_ok=True)
 
 RESULTS_CSV_2VAR = os.path.join(OUTPUTS_DIR, "balanced_2var_terms_results.csv")

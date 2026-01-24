@@ -1,0 +1,71 @@
+Dense 8-Variable 3D EPI Analysis with QM Merging
+======================================================================
+
+Configuration:
+  Random Seed: 42
+  Number of Test Cases: 500
+  Function Type: Dense 8-variable (90%-90% density)
+  K-Map Size: 256 cells (2^8)
+
+3D EPIs (Before QM Merging):
+----------------------------------------------------------------------
+  Mean:       13.93 EPIs
+  Median:     14.0 EPIs
+  Mode:       15 EPIs
+  Std Dev:    3.68
+  Range:      [3, 29]
+  Distribution: {3: 1, 5: 1, 6: 9, 7: 7, 8: 11, 9: 22, 10: 33, 11: 50, 12: 45, 13: 51, 14: 56, 15: 59, 16: 39, 17: 32, 18: 30, 19: 21, 20: 14, 21: 7, 22: 4, 23: 4, 24: 1, 25: 2, 29: 1}
+
+Merged Terms (After QM Merging):
+----------------------------------------------------------------------
+  Mean:       13.93 terms
+  Median:     14.0 terms
+  Mode:       15 terms
+  Std Dev:    3.68
+  Range:      [3, 29]
+  Distribution: {3: 1, 5: 1, 6: 9, 7: 7, 8: 11, 9: 22, 10: 33, 11: 50, 12: 45, 13: 51, 14: 56, 15: 59, 16: 39, 17: 32, 18: 30, 19: 21, 20: 14, 21: 7, 22: 4, 23: 4, 24: 1, 25: 2, 29: 1}
+
+Reduction Analysis:
+----------------------------------------------------------------------
+  Mean reduction ratio:   100.00%
+  Median reduction ratio: 100.00%
+  Mean EPIs reduced:      0.00
+
+Function Density:
+----------------------------------------------------------------------
+  Mean density:   89.84%
+  Median density: 89.84%
+======================================================================
+\nDistribution of 3D EPI Counts:\n----------------------------------------------------------------------\n    3 EPIs:  1 cases\n    5 EPIs:  1 cases\n    6 EPIs:  9 cases\n    7 EPIs:  7 cases\n    8 EPIs: 11 cases\n    9 EPIs: 22 cases\n   10 EPIs: 33 cases\n   11 EPIs: 50 cases\n   12 EPIs: 45 cases\n   13 EPIs: 51 cases\n   14 EPIs: 56 cases\n   15 EPIs: 59 cases\n   16 EPIs: 39 cases\n   17 EPIs: 32 cases\n   18 EPIs: 30 cases\n   19 EPIs: 21 cases\n   20 EPIs: 14 cases\n   21 EPIs:  7 cases\n   22 EPIs:  4 cases\n   23 EPIs:  4 cases\n   24 EPIs:  1 cases\n   25 EPIs:  2 cases\n   29 EPIs:  1 cases\n\nDistribution of Merged Term Counts:\n----------------------------------------------------------------------\n    3 terms:  1 cases
+    5 terms:  1 cases
+    6 terms:  9 cases
+    7 terms:  7 cases
+    8 terms: 11 cases
+    9 terms: 22 cases
+   10 terms: 33 cases
+   11 terms: 50 cases
+   12 terms: 45 cases
+   13 terms: 51 cases
+   14 terms: 56 cases
+   15 terms: 59 cases
+   16 terms: 39 cases
+   17 terms: 32 cases
+   18 terms: 30 cases
+   19 terms: 21 cases
+   20 terms: 14 cases
+   21 terms:  7 cases
+   22 terms:  4 cases
+   23 terms:  4 cases
+   24 terms:  1 cases
+   25 terms:  2 cases
+   29 terms:  1 cases
+
+======================================================================
+
+Analysis Notes:
+----------------------------------------------------------------------
+1. 8-variable K-maps have 2^8 = 256 cells
+2. Dense functions have 90%-90% of cells as 1s
+3. 3D EPIs are extracted using depth-based clustering without 2D optimization
+4. QM merging combines 3D EPIs to produce final minimal terms
+5. Reduction ratio shows compression achieved by QM merging

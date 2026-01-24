@@ -723,9 +723,26 @@ class KMapSolver3D:
         # Remove redundant terms
         final_terms = self._remove_redundant_terms(final_terms, form, global_minterms)
         
-        # Step 5: Apply second-level Quine-McCluskey to further minimize across ALL terms
-        print("\nApplying final Quine-McCluskey minimization...")
-        final_terms = self._second_level_minimize(final_terms, form, global_minterms)
+        # Step 5: Apply recursive Quine-McCluskey optimization
+        print("\nApplying recursive Quine-McCluskey optimization...")
+        
+        # Convert terms to patterns
+        patterns = set()
+        for term in final_terms:
+            pattern = self._term_to_pattern(term)
+            patterns.add(pattern)
+        
+        # Get all target minterms as patterns
+        all_minterm_patterns = set()
+        for idx in global_minterms:
+            minterm_bits = format(idx, f'0{self.num_vars}b')
+            all_minterm_patterns.add(minterm_bits)
+        
+        # Apply full QM optimization
+        optimized_patterns = self._optimize_with_quine_mccluskey(patterns, all_minterm_patterns)
+        
+        # Convert back to terms
+        final_terms = [self._bits_to_term(pattern, form) for pattern in optimized_patterns]
         
         # Build final expression
         join_operator = " * " if form.lower() == 'pos' else " + "
@@ -1095,6 +1112,471 @@ class KMapSolver3D:
                 elif bit == '1':
                     literals.append(vars_[i])
             return "".join(literals) if literals else "1"
+    
+    def _optimize_with_quine_mccluskey(self, patterns, all_minterms):
+        """
+        Apply complete re-minimization with iterative optimization and enhanced redundancy removal.
+        This expands patterns back to minterms and re-minimizes from scratch.
+        
+        Args:
+            patterns: Set of pattern strings (with possible '-')
+            all_minterms: Set of all target minterm strings
+            
+        Returns:
+            set: Optimized minimal set of patterns
+        """
+        if len(patterns) <= 1:
+            return patterns
+        
+        print(f"\n  Starting with {len(patterns)} patterns")
+        
+        # Pre-merge: try to combine patterns before QM
+        merged_patterns = self._pre_merge_patterns(patterns, all_minterms)
+        print(f"  After pre-merge: {len(patterns)} → {len(merged_patterns)} patterns")
+        
+        print(f"  Re-minimizing from scratch using iterative Quine-McCluskey...")
+        
+        # Expand all patterns to get the complete minterm set they cover
+        covered_minterms = set()
+        for pattern in merged_patterns:
+            covered_minterms.update(self._expand_pattern_to_minterms(pattern) & all_minterms)
+        
+        # Verify we have the correct minterms
+        if covered_minterms != all_minterms:
+            print(f"  ⚠ WARNING: Pattern coverage mismatch!")
+            print(f"    Patterns cover: {len(covered_minterms)} minterms")
+            print(f"    Expected: {len(all_minterms)} minterms")
+            return merged_patterns
+        
+        # Iterative optimization: keep applying QM until no further improvement
+        current_patterns = set(merged_patterns)
+        best_literal_count = self._count_total_literals(current_patterns)
+        print(f"  Initial literal count: {best_literal_count}")
+        
+        minterm_list = sorted(list(all_minterms))
+        max_iterations = 3
+        
+        for iteration in range(max_iterations):
+            # Re-minimize from scratch using complete Quine-McCluskey
+            all_prime_implicants = self._find_all_prime_implicants_bitwise(minterm_list)
+            
+            # Filter out prime implicants that cover unwanted minterms
+            valid_pis = []
+            for pi in all_prime_implicants:
+                pi_minterms = self._expand_pattern_to_minterms(pi)
+                if pi_minterms.issubset(all_minterms):
+                    valid_pis.append(pi)
+            
+            # Select essential PIs
+            essential_pis = self._select_essential_prime_implicants(valid_pis, minterm_list)
+            
+            # Enhanced redundancy removal with subsumption checking
+            optimized = self._remove_redundant_patterns_enhanced(essential_pis, all_minterms)
+            
+            # Check if we improved
+            new_literal_count = self._count_total_literals(optimized)
+            
+            if new_literal_count < best_literal_count:
+                print(f"  Iteration {iteration + 1}: {best_literal_count} → {new_literal_count} literals")
+                current_patterns = optimized
+                best_literal_count = new_literal_count
+            else:
+                # No improvement, stop iterating
+                print(f"  Iteration {iteration + 1}: No improvement, stopping")
+                break
+        
+        orig_lits = self._count_total_literals(patterns)
+        print(f"  Final optimization: {len(patterns)} → {len(current_patterns)} patterns, {orig_lits} → {best_literal_count} literals")
+        
+        return current_patterns
+    
+    def _pre_merge_patterns(self, patterns, all_minterms):
+        """
+        Pre-merge compatible patterns before QM optimization.
+        Attempts to combine patterns that differ in only one position.
+        
+        Args:
+            patterns: Set of patterns to merge
+            all_minterms: Set of all target minterms
+            
+        Returns:
+            set: Merged pattern set
+        """
+        pattern_list = list(patterns)
+        merged = True
+        iterations = 0
+        max_iterations = 5
+        
+        while merged and iterations < max_iterations:
+            merged = False
+            new_patterns = []
+            used = set()
+            
+            for i in range(len(pattern_list)):
+                if i in used:
+                    continue
+                    
+                found_merge = False
+                for j in range(i + 1, len(pattern_list)):
+                    if j in used:
+                        continue
+                    
+                    # Try to combine these patterns
+                    combined = self._try_combine_patterns_qm(pattern_list[i], pattern_list[j])
+                    if combined:
+                        # Verify combined pattern doesn't cover unwanted minterms
+                        combined_minterms = self._expand_pattern_to_minterms(combined)
+                        if combined_minterms.issubset(all_minterms):
+                            new_patterns.append(combined)
+                            used.add(i)
+                            used.add(j)
+                            found_merge = True
+                            merged = True
+                            break
+                
+                if not found_merge:
+                    new_patterns.append(pattern_list[i])
+                    used.add(i)
+            
+            pattern_list = new_patterns
+            iterations += 1
+        
+        return set(pattern_list)
+    
+    def _try_combine_patterns_qm(self, pattern1, pattern2):
+        """
+        Try to combine two patterns that differ in exactly one position.
+        Returns combined pattern or None if cannot combine.
+        
+        Args:
+            pattern1, pattern2: Pattern strings with possible '-'
+            
+        Returns:
+            str or None: Combined pattern if possible
+        """
+        if len(pattern1) != len(pattern2):
+            return None
+        
+        diff_count = 0
+        diff_pos = -1
+        
+        for i in range(len(pattern1)):
+            if pattern1[i] != pattern2[i]:
+                # Both must be 0 or 1 (not '-') at differing position
+                if pattern1[i] == '-' or pattern2[i] == '-':
+                    return None
+                diff_count += 1
+                diff_pos = i
+        
+        # Must differ in exactly one position
+        if diff_count != 1:
+            return None
+        
+        # Create combined pattern with '-' at the differing position
+        combined = list(pattern1)
+        combined[diff_pos] = '-'
+        return ''.join(combined)
+    
+    def _count_total_literals(self, patterns):
+        """
+        Count total number of literals in a set of patterns.
+        
+        Args:
+            patterns: Set of bit patterns
+            
+        Returns:
+            int: Total literal count
+        """
+        total = 0
+        for pattern in patterns:
+            # Count non-dash bits
+            total += sum(1 for bit in pattern if bit != '-')
+        return total
+    
+    def _expand_pattern_to_minterms(self, pattern):
+        """
+        Expand a pattern with don't-cares to all minterms it covers.
+        
+        Args:
+            pattern: String with possible '-' (e.g., "0-1")
+            
+        Returns:
+            set: Set of minterm strings covered by this pattern
+        """
+        # Count don't cares
+        n_dontcares = pattern.count('-')
+        
+        if n_dontcares == 0:
+            return {pattern}
+        
+        # Generate all combinations
+        result = set()
+        for i in range(2 ** n_dontcares):
+            concrete = list(pattern)
+            bits = format(i, f'0{n_dontcares}b')
+            bit_idx = 0
+            
+            for j in range(len(concrete)):
+                if concrete[j] == '-':
+                    concrete[j] = bits[bit_idx]
+                    bit_idx += 1
+            
+            result.add(''.join(concrete))
+        
+        return result
+    
+    def _find_all_prime_implicants_bitwise(self, minterm_list):
+        """
+        Find ALL prime implicants using bitwise operations and recursive QM.
+        
+        Args:
+            minterm_list: List of minterm strings
+            
+        Returns:
+            list: All prime implicants as pattern strings
+        """
+        bit_width = len(minterm_list[0])
+        
+        # Convert to bitwise
+        terms = set()
+        for term_str in minterm_list:
+            value, mask = self._str_to_bitwise(term_str)
+            terms.add((value, mask))
+        
+        # Iterative merging
+        prime_implicants = set()
+        iteration = 1
+        
+        while True:
+            next_terms = set()
+            used = set()
+            
+            terms_list = list(terms)
+            
+            for i in range(len(terms_list)):
+                for j in range(i + 1, len(terms_list)):
+                    val1, mask1 = terms_list[i]
+                    val2, mask2 = terms_list[j]
+                    
+                    if mask1 != mask2:
+                        continue
+                    
+                    diff = (val1 ^ val2) & mask1
+                    
+                    if diff != 0 and (diff & (diff - 1)) == 0:
+                        merged_value = val1 & val2
+                        merged_mask = mask1 & ~diff
+                        
+                        next_terms.add((merged_value, merged_mask))
+                        used.add(terms_list[i])
+                        used.add(terms_list[j])
+            
+            # Unused terms are prime implicants
+            for term in terms_list:
+                if term not in used:
+                    prime_implicants.add(term)
+            
+            if not next_terms:
+                break
+            
+            terms = next_terms
+            iteration += 1
+        
+        # Convert to strings
+        return [self._bitwise_to_str(val, mask, bit_width) 
+                for val, mask in prime_implicants]
+    
+    def _str_to_bitwise(self, pattern):
+        """
+        Convert pattern string to (value, mask) bitwise representation.
+        
+        Args:
+            pattern: String with '0', '1', or '-'
+            
+        Returns:
+            tuple: (value, mask) where mask has 1s for non-don't-care positions
+        """
+        value = 0
+        mask = 0
+        
+        for i, ch in enumerate(pattern):
+            bit_pos = len(pattern) - 1 - i
+            if ch == '1':
+                value |= (1 << bit_pos)
+                mask |= (1 << bit_pos)
+            elif ch == '0':
+                mask |= (1 << bit_pos)
+            # '-' contributes to neither value nor mask
+        
+        return (value, mask)
+    
+    def _bitwise_to_str(self, value, mask, bit_width):
+        """
+        Convert (value, mask) bitwise representation to pattern string.
+        
+        Args:
+            value: Integer value
+            mask: Mask with 1s for non-don't-care positions
+            bit_width: Width of the bit string
+            
+        Returns:
+            str: Pattern string with '0', '1', or '-'
+        """
+        result = []
+        for i in range(bit_width):
+            bit_pos = bit_width - 1 - i
+            if mask & (1 << bit_pos):
+                result.append('1' if (value & (1 << bit_pos)) else '0')
+            else:
+                result.append('-')
+        
+        return ''.join(result)
+    
+    def _select_essential_prime_implicants(self, prime_implicants, minterms):
+        """
+        Select minimum cover using essential prime implicants.
+        
+        Args:
+            prime_implicants: List of all prime implicants (strings with '-')
+            minterms: List of original minterms (strings without '-')
+            
+        Returns:
+            list: Minimal set of prime implicants covering all minterms
+        """
+        # Build coverage table: which PIs cover which minterms
+        coverage = {}
+        for pi in prime_implicants:
+            coverage[pi] = set()
+            for mt in minterms:
+                if self._implicant_covers_minterm(pi, mt):
+                    coverage[pi].add(mt)
+        
+        # Find essential prime implicants
+        essential = []
+        covered_minterms = set()
+        uncovered_minterms = set(minterms)
+        
+        # Step 1: Find essential PIs (minterms covered by only one PI)
+        for mt in minterms:
+            covering_pis = [pi for pi, covered in coverage.items() if mt in covered]
+            
+            if len(covering_pis) == 1:
+                # This is an essential prime implicant
+                pi = covering_pis[0]
+                if pi not in essential:
+                    essential.append(pi)
+                    covered_minterms.update(coverage[pi])
+                    uncovered_minterms -= coverage[pi]
+                    print(f"      Essential: {pi} (covers {len(coverage[pi])} minterms)")
+        
+        # Step 2: Cover remaining minterms (greedy heuristic)
+        remaining_pis = [pi for pi in prime_implicants if pi not in essential]
+        
+        while uncovered_minterms and remaining_pis:
+            # Choose PI that covers most uncovered minterms
+            best_pi = max(remaining_pis, 
+                        key=lambda pi: len(coverage[pi] & uncovered_minterms))
+            
+            if len(coverage[best_pi] & uncovered_minterms) == 0:
+                break
+            
+            essential.append(best_pi)
+            newly_covered = coverage[best_pi] & uncovered_minterms
+            covered_minterms.update(newly_covered)
+            uncovered_minterms -= newly_covered
+            remaining_pis.remove(best_pi)
+            
+            print(f"      Added: {best_pi} (covers {len(newly_covered)} more minterms)")
+        
+        return essential
+    
+    def _implicant_covers_minterm(self, implicant, minterm):
+        """
+        Check if an implicant covers a specific minterm.
+        
+        Args:
+            implicant: Pattern string with possible '-'
+            minterm: Concrete minterm string
+            
+        Returns:
+            bool: True if implicant covers minterm
+        """
+        if len(implicant) != len(minterm):
+            return False
+        
+        for i, (imp_bit, mt_bit) in enumerate(zip(implicant, minterm)):
+            if imp_bit != '-' and imp_bit != mt_bit:
+                return False
+        
+        return True
+    
+    def _remove_redundant_patterns_enhanced(self, patterns, all_minterms):
+        """
+        Enhanced redundancy removal with subsumption checking and absorption.
+        
+        Args:
+            patterns: List or set of patterns
+            all_minterms: Set of all target minterms
+            
+        Returns:
+            set: Minimal pattern set with subsumption and absorption applied
+        """
+        if not patterns:
+            return set()
+        
+        pattern_list = list(patterns)
+        
+        # Phase 1: Remove subsumed patterns
+        # Pattern A subsumes pattern B if A covers all minterms of B and A has fewer literals
+        pattern_info = []
+        for p in pattern_list:
+            p_minterms = self._expand_pattern_to_minterms(p)
+            p_literals = sum(1 for bit in p if bit != '-')
+            pattern_info.append({
+                'pattern': p,
+                'minterms': p_minterms,
+                'literals': p_literals
+            })
+        
+        non_subsumed = []
+        for i, info_i in enumerate(pattern_info):
+            subsumed = False
+            for j, info_j in enumerate(pattern_info):
+                if i == j:
+                    continue
+                
+                # Check if pattern j subsumes pattern i
+                if (info_i['minterms'].issubset(info_j['minterms']) and 
+                    info_j['literals'] < info_i['literals']):
+                    subsumed = True
+                    break
+            
+            if not subsumed:
+                non_subsumed.append(info_i['pattern'])
+        
+        # Phase 2: Remove redundant patterns (those whose coverage is covered by others)
+        if len(non_subsumed) <= 1:
+            return set(non_subsumed)
+        
+        # Calculate coverage for each pattern
+        pattern_coverage = {}
+        for pattern in non_subsumed:
+            pattern_coverage[pattern] = self._expand_pattern_to_minterms(pattern) & all_minterms
+        
+        # Remove redundant patterns
+        essential_patterns = []
+        for i, pattern in enumerate(non_subsumed):
+            # Check if removing this pattern loses coverage
+            other_patterns = [p for j, p in enumerate(non_subsumed) if j != i]
+            other_coverage = set()
+            for p in other_patterns:
+                other_coverage.update(pattern_coverage.get(p, set()))
+            
+            # Keep this pattern if it provides unique coverage
+            if not pattern_coverage[pattern].issubset(other_coverage):
+                essential_patterns.append(pattern)
+        
+        return set(essential_patterns)
             
 def main():
     # Example 1: 5-variable K-map

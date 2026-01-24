@@ -1,0 +1,290 @@
+================================================================================
+AVERAGE AND MODE NUMBER OF CLUSTERS AND CLUSTER SIZE BY VARIABLE COUNT AND DENSITY
+================================================================================
+
+
+9-Variable Functions:
+--------------------------------------------------------------------------------
+Density    Avg Clusters    Mode Clusters   Avg Size        Mode Size       Tests     
+--------------------------------------------------------------------------------
+0.1        22.6000         1               2.1303          1.4750          5         
+0.3        33.0000         1               3.3493          4.0000          5         
+0.5        57.2000         1               4.6802          3.5644          5         
+0.7        94.2000         93              6.4583          6.2128          5         
+0.9        24.2000         1               32.4445         32.0000         5         
+
+10-Variable Functions:
+--------------------------------------------------------------------------------
+Density    Avg Clusters    Mode Clusters   Avg Size        Mode Size       Tests     
+--------------------------------------------------------------------------------
+0.1        3.2000          4               2.0000          2.0000          5         
+0.3        33.6000         4               3.8327          4.0000          5         
+0.5        4.0000          1               6.7962          8.0000          5         
+0.7        3.0000          3               12.3733         10.6667         5         
+0.9        1.6000          2               44.8000         32.0000         5         
+
+11-Variable Functions:
+--------------------------------------------------------------------------------
+Density    Avg Clusters    Mode Clusters   Avg Size        Mode Size       Tests     
+--------------------------------------------------------------------------------
+0.1        5.0000          3               2.4600          2.0000          5         
+0.3        6.6000          4               3.9932          4.0000          5         
+0.5        8.8000          8               6.5868          5.0000          5         
+0.7        5.4000          5               11.8267         9.6000          5         
+0.9        4.6000          1               38.6921         32.0000         5         
+
+12-Variable Functions:
+--------------------------------------------------------------------------------
+Density    Avg Clusters    Mode Clusters   Avg Size        Mode Size       Tests     
+--------------------------------------------------------------------------------
+0.1        13.4000         11              2.1933          2.0000          5         
+0.3        30.0000         21              4.0136          3.7368          5         
+0.5        23.6000         21              6.9188          6.4348          5         
+0.7        17.0000         22              13.1361         12.3333         5         
+0.9        12.2000         10              36.8533         30.4000         5         
+
+13-Variable Functions:
+--------------------------------------------------------------------------------
+Density    Avg Clusters    Mode Clusters   Avg Size        Mode Size       Tests     
+--------------------------------------------------------------------------------
+0.1        45.4000         38              2.2202          2.0816          5         
+0.3        68.6000         59              4.0426          3.8684          5         
+0.5        57.0000         46              7.2266          6.9600          5         
+0.7        51.2000         35              12.7239         11.6571         5         
+0.9        31.0000         23              39.3959         37.3333         5         
+
+14-Variable Functions:
+--------------------------------------------------------------------------------
+Density    Avg Clusters    Mode Clusters   Avg Size        Mode Size       Tests     
+--------------------------------------------------------------------------------
+0.1        101.2000        100             2.2812          2.2600          5         
+0.3        147.8000        124             4.1299          4.0119          5         
+0.5        158.4000        142             6.8596          6.6545          5         
+0.7        117.2000        98              12.6445         12.1600         5         
+0.9        74.2000         68              37.8105         38.8235         5         
+
+15-Variable Functions:
+--------------------------------------------------------------------------------
+Density    Avg Clusters    Mode Clusters   Avg Size        Mode Size       Tests     
+--------------------------------------------------------------------------------
+0.1        233.2000        209             2.2444          2.2119          5         
+0.3        363.4000        349             4.0630          4.0571          5         
+0.5        341.2000        330             6.8113          6.7515          5         
+0.7        259.6000        232             12.5228         12.2146         5         
+0.9        164.0000        156             38.1695         37.4884         5         
+
+16-Variable Functions:
+--------------------------------------------------------------------------------
+Density    Avg Clusters    Mode Clusters   Avg Size        Mode Size       Tests     
+--------------------------------------------------------------------------------
+0.1        528.2000        475             2.2435          2.2087          5         
+0.3        842.2000        831             4.0189          3.9666          5         
+0.5        780.6000        742             6.8874          6.7123          5         
+0.7        593.4000        606             12.6613         12.4690         5         
+0.9        389.6000        366             37.3962         37.2148         5         
+
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+
+Overall Statistics by Variable Count:
+--------------------------------------------------------------------------------
+9.0-Variable:
+  Clusters:
+    Average:      46.2400
+    Mode:         1
+    Std dev:      41.5384
+    Min:          1
+    Max:          101
+  Cluster Size:
+    Average:      9.8125
+    Mode:         4.0000
+    Std dev:      14.0568
+    Min:          1.4750
+    Max:          64.0000
+  Total tests:    25
+
+10.0-Variable:
+  Clusters:
+    Average:      9.0800
+    Mode:         1
+    Std dev:      29.6127
+    Min:          1
+    Max:          151
+  Cluster Size:
+    Average:      13.9604
+    Mode:         2.0000
+    Std dev:      17.0769
+    Min:          2.0000
+    Max:          64.0000
+  Total tests:    25
+
+11.0-Variable:
+  Clusters:
+    Average:      6.0800
+    Mode:         4
+    Std dev:      3.0403
+    Min:          1
+    Max:          13
+  Cluster Size:
+    Average:      12.7117
+    Mode:         4.0000
+    Std dev:      13.8019
+    Min:          2.0000
+    Max:          44.0000
+  Total tests:    25
+
+12.0-Variable:
+  Clusters:
+    Average:      19.2400
+    Mode:         10
+    Std dev:      7.9387
+    Min:          10
+    Max:          38
+  Cluster Size:
+    Average:      12.6230
+    Mode:         2.0000
+    Std dev:      13.0372
+    Min:          2.0000
+    Max:          40.0000
+  Total tests:    25
+
+13.0-Variable:
+  Clusters:
+    Average:      50.6400
+    Mode:         46
+    Std dev:      14.8881
+    Min:          23
+    Max:          82
+  Cluster Size:
+    Average:      13.1219
+    Mode:         2.0816
+    Std dev:      13.9327
+    Min:          2.0816
+    Max:          43.2432
+  Total tests:    25
+
+14.0-Variable:
+  Clusters:
+    Average:      119.7600
+    Mode:         68
+    Std dev:      33.2682
+    Min:          63
+    Max:          168
+  Cluster Size:
+    Average:      12.7451
+    Mode:         38.8235
+    Std dev:      13.3132
+    Min:          2.2600
+    Max:          39.1111
+  Total tests:    25
+
+15.0-Variable:
+  Clusters:
+    Average:      272.2800
+    Mode:         156
+    Std dev:      75.4445
+    Min:          156
+    Max:          385
+  Cluster Size:
+    Average:      12.7622
+    Mode:         4.0571
+    Std dev:      13.4457
+    Min:          2.2119
+    Max:          39.3918
+  Total tests:    25
+
+16.0-Variable:
+  Clusters:
+    Average:      626.8000
+    Mode:         575
+    Std dev:      170.3252
+    Min:          366
+    Max:          854
+  Cluster Size:
+    Average:      12.6415
+    Mode:         2.2087
+    Std dev:      13.1374
+    Min:          2.2087
+    Max:          37.6735
+  Total tests:    25
+
+
+Overall Statistics by Density:
+--------------------------------------------------------------------------------
+Density 0.1:
+  Clusters:
+    Average:      119.0250
+    Mode:         4
+    Std dev:      173.5175
+    Min:          1
+    Max:          575
+  Cluster Size:
+    Average:      2.2216
+    Mode:         2.0000
+    Std dev:      0.3847
+    Min:          1.4750
+    Max:          4.0000
+  Total tests:    40
+
+Density 0.3:
+  Clusters:
+    Average:      190.6500
+    Mode:         4
+    Std dev:      274.0342
+    Min:          1
+    Max:          854
+  Cluster Size:
+    Average:      3.9304
+    Mode:         4.0000
+    Std dev:      0.5319
+    Min:          2.3636
+    Max:          5.3333
+  Total tests:    40
+
+Density 0.5:
+  Clusters:
+    Average:      178.8500
+    Mode:         1
+    Std dev:      254.4331
+    Min:          1
+    Max:          799
+  Cluster Size:
+    Average:      6.5959
+    Mode:         8.0000
+    Std dev:      1.0886
+    Min:          3.5644
+    Max:          8.0000
+  Total tests:    40
+
+Density 0.7:
+  Clusters:
+    Average:      142.6250
+    Mode:         3
+    Std dev:      190.4779
+    Min:          1
+    Max:          606
+  Cluster Size:
+    Average:      11.7934
+    Mode:         10.6667
+    Std dev:      2.2983
+    Min:          6.2128
+    Max:          16.0000
+  Total tests:    40
+
+Density 0.9:
+  Clusters:
+    Average:      87.6750
+    Mode:         1
+    Std dev:      126.9790
+    Min:          1
+    Max:          412
+  Cluster Size:
+    Average:      38.1952
+    Mode:         32.0000
+    Std dev:      8.4402
+    Min:          16.3279
+    Max:          64.0000
+  Total tests:    40
+

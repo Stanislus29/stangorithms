@@ -1,0 +1,31 @@
+Dense 4-Variable K-Map Terms Analysis
+======================================================================
+
+Configuration:
+  Random Seed: 42
+  4-Variable Test Cases: 200
+  K-Map Type: Dense (p=0.90 for 1s)
+  Density: 90%
+
+4-VARIABLE DENSE STATISTICAL SUMMARY:
+----------------------------------------------------------------------
+Mean number of terms:     3.54
+Median number of terms:   4.0
+Std deviation of terms:   1.32
+Min number of terms:      1
+Max number of terms:      7
+Mode (most frequent):     4 terms (occurred 122 times)
+
+Mean number of ones:      14.37
+Median number of ones:    15.0
+Expected ones (dense):    14
+======================================================================
+
+4-VARIABLE Term Count Distribution:
+----------------------------------------------------------------------
+  1 terms: 36 cases
+  3 terms: 17 cases
+  4 terms: 122 cases
+  5 terms: 20 cases
+  6 terms: 3 cases
+  7 terms: 2 cases
