@@ -6,14 +6,14 @@ This directory contains interactive demonstration scripts that illustrate the us
 
 ## Demo Scripts
 
-### k_map_demo.py
-**Basic Karnaugh Map Demonstration**
+### BoolMin2D_demo.py
+**Basic 2D K-Map Demonstration**
 
 Introductory demonstration of BoolMin2D functionality for 2-4 variable Boolean functions. Provides clear, commented examples of standard K-map minimization workflows.
 
 **Features:**
 - Step-by-step minimization examples
-- Multiple variable count demonstrations (2, 3, and 4 variables)
+- 4-variable K-map demonstrations
 - Don't-care condition handling illustrations
 - Both SOP and POS form generation examples
 - Console output with readable formatted results
@@ -30,43 +30,43 @@ Introductory demonstration of BoolMin2D functionality for 2-4 variable Boolean f
 - Algorithm behavior visualization
 - Quick verification of hand-calculated solutions
 
-**Typical Output:**
-```
-Original function: [0, 1, 1, 0, 1, 1, 0, 1]
-Minimized SOP: A'B + AB' + B
-Literal count: 5
-Term count: 3
-```
+### BoolMinGeo_demo.py
+**Geometric K-Map Demonstration**
 
-### kmap3Ddemo.py
-**Three-Dimensional K-Map Demonstration**
-
-Advanced demonstration showcasing BoolMinGeo's 3D minimization capabilities for 5-8 variable Boolean functions. Illustrates extended K-map methods and hierarchical decomposition strategies.
+Advanced demonstration showcasing BoolMinGeo's geometric minimization capabilities for higher-dimensional Boolean functions. Illustrates extended K-map methods and hierarchical decomposition strategies.
 
 **Features:**
-- 3D minimization workflow examples
-- Medium-complexity function handling (5-8 variables)
-- Geometric visualization concept illustrations
+- Geometric minimization workflow examples
+- Medium to high-complexity function handling
 - Performance characteristic demonstrations
 - Multiple distribution pattern examples
 
 **Educational Value:**
-- Demonstrates transition from 2D to 3D K-map thinking
+- Demonstrates transition from 2D to geometric K-map thinking
 - Illustrates spatial reasoning in higher dimensions
-- Shows practical application of cube-based grouping
-- Provides context for when 3D methods are optimal
+- Shows practical application of geometric-based grouping
+- Provides context for when geometric methods are optimal
 
-**Example Applications:**
-- Multiplexer truth table minimization
-- Digital circuit design optimization
-- Computer architecture Boolean function simplification
-- Control logic synthesis for moderate complexity systems
+### pyeda_demo.py
+**PyEDA Integration Demonstration**
 
-**Complexity Range:**
-- 5 variables: 32 truth table entries
-- 6 variables: 64 truth table entries
-- 7 variables: 128 truth table entries
-- 8 variables: 256 truth table entries
+Demonstrates the usage of the PyEDA library for Boolean minimization, providing comparative examples alongside StanLogic implementations.
+
+**Features:**
+- PyEDA library usage examples
+- Comparative minimization demonstrations
+- Alternative approach illustrations
+- Integration pattern examples
+
+### pyeda_demo2.py
+**PyEDA Advanced Demonstration #2**
+
+Additional PyEDA demonstration with different test cases and usage patterns.
+
+### pyeda_demo3.py
+**PyEDA Advanced Demonstration #3**
+
+Extended PyEDA demonstration showcasing advanced features and edge cases.
 
 ## Demo Execution
 
@@ -74,8 +74,11 @@ Run demonstrations directly:
 
 ```bash
 cd StanLogic/tests/KMapSolver/demos
-python k_map_demo.py       # Basic 2-4 variable examples
-python kmap3Ddemo.py        # Advanced 3D minimization examples
+python BoolMin2D_demo.py       # Basic 2-4 variable examples
+python BoolMinGeo_demo.py      # Advanced geometric minimization examples
+python pyeda_demo.py           # PyEDA library demonstrations
+python pyeda_demo2.py          # Additional PyEDA examples
+python pyeda_demo3.py          # Extended PyEDA examples
 ```
 
 Demos are self-contained and require no command-line arguments. Output is printed to console with clear formatting and explanatory text.

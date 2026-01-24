@@ -47,7 +47,7 @@ DENSITY_MAX = 0.9
 
 # Output directory
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-OUTPUTS_DIR = os.path.join(SCRIPT_DIR, "..", "outputs")
+OUTPUTS_DIR = os.path.join(SCRIPT_DIR, "..", "outputs", "obtain_terms_frequency")
 os.makedirs(OUTPUTS_DIR, exist_ok=True)
 
 RESULTS_CSV = os.path.join(OUTPUTS_DIR, "dense_10var_4d_epi_results.csv")

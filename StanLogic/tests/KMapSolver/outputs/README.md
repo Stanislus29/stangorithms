@@ -94,6 +94,32 @@ Contains results from balanced distribution term count studies.
 - Theoretical validation data
 - Educational visualization materials
 
+### decay/
+**Decay and Cluster Analysis Outputs**
+
+Contains results from performance decay studies and cluster density analysis across multiple dimensions.
+
+**Subdirectories:**
+- `analysis/` - Cluster density analysis results
+
+**Typical Contents:**
+- `cluster_averages.txt` - Statistical summaries of cluster averages for 3D
+- `cluster_averages4D.txt` - Statistical summaries for 4D clustering
+- `cluster_density_analysis.csv` - 3D cluster density raw data
+- `cluster_density_analysis_4D.csv` - 4D cluster density raw data
+- `cluster_density_analysis_4D_ext.csv` - Extended 4D cluster analysis data
+- `cluster_density_analysis_5D.csv` - 5D cluster density raw data
+- `cluster_density_report.pdf` - 3D cluster density visualization report
+- `cluster_density_report_4D.pdf` - 4D cluster density report
+- `cluster_density_report_4D_ext.pdf` - Extended 4D cluster report
+- `cluster_density_report_5D.pdf` - 5D cluster density report
+
+**Data Characteristics:**
+- Cluster formation patterns across dimensions
+- Density metrics and spatial distributions
+- Performance correlation analysis
+- High-dimensional clustering behavior characterization
+
 ## File Naming Conventions
 
 **Standard Patterns:**

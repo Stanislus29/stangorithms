@@ -1,0 +1,101 @@
+Dense 10-Variable 4D EPI Analysis with QM Merging
+======================================================================
+
+Configuration:
+  Random Seed: 42
+  Number of Test Cases: 500
+  Function Type: Dense 10-variable (90%-90% density)
+  K-Map Size: 1024 cells (2^10)
+
+4D EPIs (Before QM Merging):
+----------------------------------------------------------------------
+  Mean:       24.17 EPIs
+  Median:     2.0 EPIs
+  Mode:       1 EPIs
+  Std Dev:    44.60
+  Range:      [1, 124]
+  Distribution: {1: 181, 2: 120, 3: 64, 4: 27, 5: 4, 6: 4, 104: 4, 106: 2, 107: 4, 108: 3, 109: 7, 110: 2, 111: 7, 112: 10, 113: 9, 114: 15, 115: 10, 116: 8, 117: 5, 118: 4, 119: 7, 120: 2, 124: 1}
+
+Merged Terms (After QM Merging):
+----------------------------------------------------------------------
+  Mean:       19.59 terms
+  Median:     2.0 terms
+  Mode:       1 terms
+  Std Dev:    35.43
+  Range:      [1, 99]
+  Distribution: {1: 181, 2: 120, 3: 64, 4: 27, 5: 4, 6: 4, 80: 1, 82: 2, 83: 1, 84: 1, 85: 1, 86: 5, 87: 4, 88: 11, 89: 14, 90: 9, 91: 16, 92: 10, 93: 12, 94: 6, 95: 3, 96: 2, 98: 1, 99: 1}
+
+Reduction Analysis:
+----------------------------------------------------------------------
+  Mean reduction ratio:   95.96%
+  Median reduction ratio: 100.00%
+  Mean EPIs reduced:      4.58
+
+Function Density:
+----------------------------------------------------------------------
+  Mean density:   90.04%
+  Median density: 90.04%
+======================================================================
+
+Distribution of 4D EPI Counts:
+----------------------------------------------------------------------
+    1 EPIs: 181 cases
+    2 EPIs: 120 cases
+    3 EPIs: 64 cases
+    4 EPIs: 27 cases
+    5 EPIs:  4 cases
+    6 EPIs:  4 cases
+  104 EPIs:  4 cases
+  106 EPIs:  2 cases
+  107 EPIs:  4 cases
+  108 EPIs:  3 cases
+  109 EPIs:  7 cases
+  110 EPIs:  2 cases
+  111 EPIs:  7 cases
+  112 EPIs: 10 cases
+  113 EPIs:  9 cases
+  114 EPIs: 15 cases
+  115 EPIs: 10 cases
+  116 EPIs:  8 cases
+  117 EPIs:  5 cases
+  118 EPIs:  4 cases
+  119 EPIs:  7 cases
+  120 EPIs:  2 cases
+  124 EPIs:  1 cases
+
+Distribution of Merged Term Counts:
+----------------------------------------------------------------------
+    1 terms: 181 cases
+    2 terms: 120 cases
+    3 terms: 64 cases
+    4 terms: 27 cases
+    5 terms:  4 cases
+    6 terms:  4 cases
+   80 terms:  1 cases
+   82 terms:  2 cases
+   83 terms:  1 cases
+   84 terms:  1 cases
+   85 terms:  1 cases
+   86 terms:  5 cases
+   87 terms:  4 cases
+   88 terms: 11 cases
+   89 terms: 14 cases
+   90 terms:  9 cases
+   91 terms: 16 cases
+   92 terms: 10 cases
+   93 terms: 12 cases
+   94 terms:  6 cases
+   95 terms:  3 cases
+   96 terms:  2 cases
+   98 terms:  1 cases
+   99 terms:  1 cases
+
+======================================================================
+
+Analysis Notes:
+----------------------------------------------------------------------
+1. 10-variable K-maps have 2^10 = 1024 cells
+2. Dense functions have 90%-90% of cells as 1s
+3. 4D EPIs are extracted using depth and span-based clustering
+4. QM merging combines 4D EPIs to produce final minimal terms
+5. Reduction ratio shows compression achieved by QM merging

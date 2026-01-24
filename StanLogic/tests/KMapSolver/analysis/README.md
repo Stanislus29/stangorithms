@@ -90,6 +90,27 @@ Characterizes term distributions at the boundary of practical K-map visualizatio
 - Visual representations of distribution patterns
 - Comparative metrics against lower-dimensional cases
 
+### dense_4var_terms_test.py
+**4-Variable Dense Distribution Term Analysis**
+
+Analyzes term count distributions for 4-variable Boolean functions with dense output patterns (predominantly TRUE values, typically 70% ones).
+
+**Focus:**
+- Dense distribution characteristics
+- Comparison with balanced and sparse patterns
+- Impact of high TRUE ratio on minimization complexity
+- Statistical characterization of dense pattern solutions
+
+### dense_8var_terms_test.py
+**8-Variable Dense Distribution Term Analysis**
+
+Extends dense distribution analysis to 8-variable functions, examining how predominantly TRUE output patterns affect solution complexity at medium scale.
+
+### dense_10var_terms_test.py
+**10-Variable Dense Distribution Term Analysis**
+
+Characterizes dense distribution minimization at the 10-variable threshold, providing insights into high-dimensionality dense pattern handling.
+
 ## Common Analysis Workflow
 
 1. **Test Case Generation:** Random or systematic Boolean function creation

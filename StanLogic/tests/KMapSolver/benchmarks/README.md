@@ -93,6 +93,19 @@ Performance comparison of BoolMinGeo against PyEDA for 5-8 variable Boolean func
 **Outputs:**
 - `../outputs/benchmark_results3D_pyeda/` - Comparative results
 
+### benchmark_test3D_pyeda2.py
+**5-8 Variable Alternative PyEDA Benchmark**
+
+Alternative comparative benchmark implementation for BoolMinGeo vs PyEDA with different test configurations or methodologies.
+
+**Purpose:**
+- Alternative test approach validation
+- Additional PyEDA comparison data points
+- Methodological verification
+
+**Outputs:**
+- `../outputs/benchmark_results3D_pyeda2/` - Alternative comparative results
+
 ### benchmark_test4D_pyeda.py
 **9-10 Variable Comparative Benchmark: BoolMinGeo vs PyEDA**
 
@@ -155,6 +168,7 @@ python benchmark_test2D_pyeda.py
 python benchmark_test3D_kmapsolver.py
 python benchmark_test3D_sympy.py
 python benchmark_test3D_pyeda.py
+python benchmark_test3D_pyeda2.py
 
 # 9-10 variable benchmark
 python benchmark_test4D_pyeda.py
