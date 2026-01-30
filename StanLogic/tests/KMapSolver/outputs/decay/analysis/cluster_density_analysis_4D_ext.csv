@@ -1,1 +1,0 @@
-test_id,num_vars,density,total_minterms,ones_count,num_4d_clusters,avg_cluster_size,max_cluster_size,min_cluster_size,std_cluster_size,total_coverage,coverage_by_4d_percent

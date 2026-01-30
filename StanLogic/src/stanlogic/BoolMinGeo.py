@@ -663,10 +663,8 @@ class BoolMinGeo:
         
         if not valid_3d_clusters:
             print("\n  WARNING: No valid 3D clusters found!")
-            print("  This may indicate the function has no proper 3D structure.")
-            print("  Falling back to include all patterns...")
-            # Fallback: include all patterns
-            valid_3d_clusters = pattern_to_identifiers
+            print("  Returning empty set - 2D patterns will be handled by _collect_2d_for_coverage()")
+            return set()
         
         # Step 3: Merge identifiers depth-wise for each 3D cluster
         print("\n" + "="*60)
@@ -2085,8 +2083,8 @@ class BoolMinGeo:
         
         if not valid_4d_clusters:
             print("\n  WARNING: No 4D clusters found!")
-            print("  Falling back to treating all patterns as 3D...")
-            valid_4d_clusters = pattern_to_chunks
+            print("  Returning empty list - 3D patterns will be handled by _collect_3d_for_coverage()")
+            return []
         
         # Step 4: Merge chunks (span-wise) for each pattern
         print(f"\n{'='*70}")
@@ -2332,8 +2330,8 @@ class BoolMinGeo:
         
         if not valid_5d_clusters:
             print("\n  WARNING: No 5D clusters found!")
-            print("  Falling back to treating all patterns as 4D...")
-            valid_5d_clusters = pattern_to_hyperchunks
+            print("  Returning empty list - 4D patterns will be handled by _collect_3d_for_coverage()")
+            return []
         
         # Step 4: Merge hyperchunks (hyperspan-wise) for each pattern
         print(f"\n{'='*70}")
@@ -2399,18 +2397,18 @@ class BoolMinGeo:
         Returns:
             tuple: (list of minimized terms, complete expression string)
         """
-        if self.num_vars <= 10:
-            # Fall back to 4D for n ≤ 10
-            print("Using 4D minimization (n ≤ 10)")
+        if self.num_vars <= 16:
+            # Fall back to 4D for n ≤ 16
+            print("Using 4D minimization (n ≤ 16)")
             return self.minimize_4d(form)
         
         print(f"\n{'='*70}")
         print(f"5D K-MAP MINIMIZATION")
         print(f"{'='*70}")
         print(f"Total variables: {self.num_vars}")
-        print(f"Hyperchunk bits (hyperspan): {self.num_vars - 10}")
-        print(f"Variables per hyperchunk: 10")
-        print(f"Structure: {2**(self.num_vars-10)} hyperchunks × 4D structures")
+        print(f"Hyperchunk bits (hyperspan): {self.num_vars - 16}")
+        print(f"Variables per hyperchunk: 16")
+        print(f"Structure: {2**(self.num_vars-16)} hyperchunks × 4D structures")
         print(f"{'='*70}\n")
         
         # Step 1: Partition into hyperchunks (16-variable subproblems)
@@ -2529,18 +2527,18 @@ class BoolMinGeo:
 
     def _partition_into_hyperchunks(self):
         """
-        Partition the n-variable K-map into 2^(n-10) hyperchunks.
-        Each hyperchunk contains a 10-variable subproblem.
+        Partition the n-variable K-map into 2^(n-16) hyperchunks.
+        Each hyperchunk contains a 16-variable subproblem.
         
         Returns:
             dict: hyperchunk_id → output_values for that hyperchunk
         """
-        if self.num_vars <= 10:
-            return {'0' * (self.num_vars - 10): self.output_values}
+        if self.num_vars <= 16:
+            return {'0' * (self.num_vars - 16): self.output_values}
         
-        hyperchunk_bits = self.num_vars - 10
+        hyperchunk_bits = self.num_vars - 16
         num_hyperchunks = 2 ** hyperchunk_bits
-        hyperchunk_size = 2 ** 10  # Each hyperchunk has 2^10 minterms
+        hyperchunk_size = 2 ** 16  # Each hyperchunk has 2^16 minterms
         
         hyperchunks = {}
         
@@ -2558,15 +2556,15 @@ class BoolMinGeo:
     
     def _create_hyperchunk_minimizer(self, hc_output_values):
         """
-        Create a BoolMinGeo instance for a 10-variable hyperchunk.
+        Create a BoolMinGeo instance for a 16-variable hyperchunk.
         
         Args:
-            hc_output_values: Output values for this hyperchunk (2^10 values)
+            hc_output_values: Output values for this hyperchunk (2^16 values)
             
         Returns:
-            BoolMinGeo: Minimizer for the 10-variable subproblem
+            BoolMinGeo: Minimizer for the 16-variable subproblem
         """
-        return BoolMinGeo(10, hc_output_values)
+        return BoolMinGeo(16, hc_output_values)
 
     # ============================================================================
     # CLUSTER COORDINATE MAPPING (Information Density Analysis)

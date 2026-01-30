@@ -1,0 +1,174 @@
+Dense 16-Variable 4D EPI Analysis with QM Merging
+======================================================================
+
+Configuration:
+  Random Seed: 42
+  Number of Test Cases: 100
+  Function Type: Dense 16-variable (90%-90% density)
+  K-Map Size: 65536 cells (2^16)
+
+4D EPIs (Before QM Merging):
+----------------------------------------------------------------------
+  Mean:       381.90 EPIs
+  Median:     383.0 EPIs
+  Mode:       390 EPIs
+  Std Dev:    20.30
+  Range:      [335, 431]
+  Distribution: {335: 1, 337: 1, 338: 1, 343: 1, 345: 1, 346: 1, 347: 1, 350: 1, 353: 1, 356: 1, 358: 2, 359: 1, 360: 2, 364: 2, 365: 2, 366: 2, 367: 1, 368: 3, 369: 3, 371: 2, 372: 1, 373: 1, 374: 2, 375: 1, 376: 3, 377: 3, 378: 1, 379: 2, 380: 3, 381: 1, 383: 4, 384: 1, 385: 3, 386: 4, 387: 3, 388: 1, 389: 2, 390: 4, 391: 1, 392: 4, 393: 1, 395: 3, 396: 1, 397: 1, 398: 1, 400: 1, 401: 1, 404: 1, 407: 3, 408: 1, 409: 2, 410: 1, 411: 1, 412: 1, 417: 1, 418: 1, 419: 1, 422: 1, 429: 1, 431: 1}
+
+Merged Terms (After QM Merging):
+----------------------------------------------------------------------
+  Mean:       381.90 terms
+  Median:     383.0 terms
+  Mode:       390 terms
+  Std Dev:    20.30
+  Range:      [335, 431]
+  Distribution: {335: 1, 337: 1, 338: 1, 343: 1, 345: 1, 346: 1, 347: 1, 350: 1, 353: 1, 356: 1, 358: 2, 359: 1, 360: 2, 364: 2, 365: 2, 366: 2, 367: 1, 368: 3, 369: 3, 371: 2, 372: 1, 373: 1, 374: 2, 375: 1, 376: 3, 377: 3, 378: 1, 379: 2, 380: 3, 381: 1, 383: 4, 384: 1, 385: 3, 386: 4, 387: 3, 388: 1, 389: 2, 390: 4, 391: 1, 392: 4, 393: 1, 395: 3, 396: 1, 397: 1, 398: 1, 400: 1, 401: 1, 404: 1, 407: 3, 408: 1, 409: 2, 410: 1, 411: 1, 412: 1, 417: 1, 418: 1, 419: 1, 422: 1, 429: 1, 431: 1}
+
+Reduction Analysis:
+----------------------------------------------------------------------
+  Mean reduction ratio:   100.00%
+  Median reduction ratio: 100.00%
+  Mean EPIs reduced:      0.00
+
+Function Density:
+----------------------------------------------------------------------
+  Mean density:   90.00%
+  Median density: 90.00%
+======================================================================
+
+Distribution of 4D EPI Counts:
+----------------------------------------------------------------------
+  335 EPIs:  1 cases
+  337 EPIs:  1 cases
+  338 EPIs:  1 cases
+  343 EPIs:  1 cases
+  345 EPIs:  1 cases
+  346 EPIs:  1 cases
+  347 EPIs:  1 cases
+  350 EPIs:  1 cases
+  353 EPIs:  1 cases
+  356 EPIs:  1 cases
+  358 EPIs:  2 cases
+  359 EPIs:  1 cases
+  360 EPIs:  2 cases
+  364 EPIs:  2 cases
+  365 EPIs:  2 cases
+  366 EPIs:  2 cases
+  367 EPIs:  1 cases
+  368 EPIs:  3 cases
+  369 EPIs:  3 cases
+  371 EPIs:  2 cases
+  372 EPIs:  1 cases
+  373 EPIs:  1 cases
+  374 EPIs:  2 cases
+  375 EPIs:  1 cases
+  376 EPIs:  3 cases
+  377 EPIs:  3 cases
+  378 EPIs:  1 cases
+  379 EPIs:  2 cases
+  380 EPIs:  3 cases
+  381 EPIs:  1 cases
+  383 EPIs:  4 cases
+  384 EPIs:  1 cases
+  385 EPIs:  3 cases
+  386 EPIs:  4 cases
+  387 EPIs:  3 cases
+  388 EPIs:  1 cases
+  389 EPIs:  2 cases
+  390 EPIs:  4 cases
+  391 EPIs:  1 cases
+  392 EPIs:  4 cases
+  393 EPIs:  1 cases
+  395 EPIs:  3 cases
+  396 EPIs:  1 cases
+  397 EPIs:  1 cases
+  398 EPIs:  1 cases
+  400 EPIs:  1 cases
+  401 EPIs:  1 cases
+  404 EPIs:  1 cases
+  407 EPIs:  3 cases
+  408 EPIs:  1 cases
+  409 EPIs:  2 cases
+  410 EPIs:  1 cases
+  411 EPIs:  1 cases
+  412 EPIs:  1 cases
+  417 EPIs:  1 cases
+  418 EPIs:  1 cases
+  419 EPIs:  1 cases
+  422 EPIs:  1 cases
+  429 EPIs:  1 cases
+  431 EPIs:  1 cases
+
+Distribution of Merged Term Counts:
+----------------------------------------------------------------------
+  335 terms:  1 cases
+  337 terms:  1 cases
+  338 terms:  1 cases
+  343 terms:  1 cases
+  345 terms:  1 cases
+  346 terms:  1 cases
+  347 terms:  1 cases
+  350 terms:  1 cases
+  353 terms:  1 cases
+  356 terms:  1 cases
+  358 terms:  2 cases
+  359 terms:  1 cases
+  360 terms:  2 cases
+  364 terms:  2 cases
+  365 terms:  2 cases
+  366 terms:  2 cases
+  367 terms:  1 cases
+  368 terms:  3 cases
+  369 terms:  3 cases
+  371 terms:  2 cases
+  372 terms:  1 cases
+  373 terms:  1 cases
+  374 terms:  2 cases
+  375 terms:  1 cases
+  376 terms:  3 cases
+  377 terms:  3 cases
+  378 terms:  1 cases
+  379 terms:  2 cases
+  380 terms:  3 cases
+  381 terms:  1 cases
+  383 terms:  4 cases
+  384 terms:  1 cases
+  385 terms:  3 cases
+  386 terms:  4 cases
+  387 terms:  3 cases
+  388 terms:  1 cases
+  389 terms:  2 cases
+  390 terms:  4 cases
+  391 terms:  1 cases
+  392 terms:  4 cases
+  393 terms:  1 cases
+  395 terms:  3 cases
+  396 terms:  1 cases
+  397 terms:  1 cases
+  398 terms:  1 cases
+  400 terms:  1 cases
+  401 terms:  1 cases
+  404 terms:  1 cases
+  407 terms:  3 cases
+  408 terms:  1 cases
+  409 terms:  2 cases
+  410 terms:  1 cases
+  411 terms:  1 cases
+  412 terms:  1 cases
+  417 terms:  1 cases
+  418 terms:  1 cases
+  419 terms:  1 cases
+  422 terms:  1 cases
+  429 terms:  1 cases
+  431 terms:  1 cases
+
+======================================================================
+
+Analysis Notes:
+----------------------------------------------------------------------
+1. 16-variable K-maps have 2^16 = 65536 cells
+2. Dense functions have 90%-90% of cells as 1s
+3. 4D EPIs are extracted using depth and span-based clustering
+4. QM merging combines 4D EPIs to produce final minimal terms
+5. Reduction ratio shows compression achieved by QM merging
