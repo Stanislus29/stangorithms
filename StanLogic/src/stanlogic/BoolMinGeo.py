@@ -43,6 +43,9 @@ class BoolMinGeo:
         # Gray code sequences for 4x4 K-map labeling (last 4 variables)
         self.gray_code_4 = ["00", "01", "11", "10"]
         
+        # Cache for _expand_pattern to avoid redundant expansions
+        self._pattern_cache = {}
+        
         # Build the hierarchical K-map structure
         self.kmaps = self.build_kmaps()
     
@@ -588,16 +591,8 @@ class BoolMinGeo:
             fallback_patterns = self._fallback_coverage(still_uncovered, β)
             all_patterns |= fallback_patterns
         
-        # CRITICAL: Apply final Quine-McCluskey minimization to merge redundant terms
-        print(f"\n{'='*60}")
-        print("FINAL OPTIMIZATION: Quine-McCluskey Merging")
-        print(f"{'='*60}")
-        
-        optimized_patterns = self._optimize_with_quine_mccluskey(
-            all_patterns, all_target_minterms
-        )
-        
-        print(f"\nPattern count: {len(all_patterns)} → {len(optimized_patterns)}")
+        # Use patterns directly
+        optimized_patterns = all_patterns
         
         # Convert patterns to final terms
         final_terms = []
@@ -676,8 +671,8 @@ class BoolMinGeo:
             print(f"\nMerging identifiers for pattern '{pattern}':")
             print(f"  Identifiers: {id_list}")
             
-            # Apply Quine-McCluskey with essential PI selection
-            merged_ids = self._minimize_boolean_function_complete(id_list)
+            # Use vectorized optimization for all cases
+            merged_ids = self._minimize_boolean_function_vectorized(id_list)
             
             print(f"  Prime implicants: {merged_ids}")
             
@@ -739,16 +734,14 @@ class BoolMinGeo:
         
         # Convert each to (row, col) using Gray code mapping
         cells = set()
-        gray_code = ['00', '01', '11', '10']
+        # Use dict for O(1) lookup instead of O(n) list.index()
+        gray_code_map = {'00': 0, '01': 1, '11': 2, '10': 3}
         
         for concrete in concrete_patterns:
             # First 2 bits → column (via Gray code)
             # Last 2 bits → row (via Gray code)
-            col_bits = concrete[:2]
-            row_bits = concrete[2:]
-            
-            col = gray_code.index(col_bits)
-            row = gray_code.index(row_bits)
+            col = gray_code_map[concrete[:2]]
+            row = gray_code_map[concrete[2:]]
             
             cells.add((row, col))
         
@@ -854,6 +847,10 @@ class BoolMinGeo:
             
             print(f"    Added: {best_cluster['full_pattern']} "
                 f"(covers {best_coverage} more minterms)")
+            
+            # Early termination: all minterms covered
+            if not remaining:
+                break
         
         return additional
 
@@ -911,7 +908,7 @@ class BoolMinGeo:
             kmap_patterns_in_3d.add(kmap_pattern)
         
         # For each K-map, add patterns that aren't part of 3D clusters
-        for idx in sorted(β.keys()):
+        for idx in β.keys():
             for pattern in β[idx]:
                 if pattern not in kmap_patterns_in_3d:
                     # This pattern is 2D-only
@@ -944,10 +941,10 @@ class BoolMinGeo:
             print("  All minterms covered by 3D patterns!")
             return set()
         
-        # Build list of all 2D candidate patterns
-        candidates = []
+        # Build set of all 2D candidate patterns (order doesn't matter)
+        candidates = set()
         
-        for idx in sorted(β.keys()):
+        for idx in β.keys():
             for pattern in β[idx]:
                 full_pattern = idx + pattern
                 
@@ -960,13 +957,13 @@ class BoolMinGeo:
                 overlap_uncovered = covered & uncovered
                 
                 if overlap_uncovered:
-                    candidates.append({
-                        'pattern': full_pattern,
-                        'covered': covered,
-                        'uncovered_count': len(overlap_uncovered)
-                    })
+                    candidates.add((full_pattern, frozenset(covered), len(overlap_uncovered)))
         
         print(f"  Found {len(candidates)} 2D candidate patterns")
+        
+        # Convert to list for manipulation
+        candidate_list = [{'pattern': p, 'covered': set(c), 'uncovered_count': u} 
+                         for p, c, u in candidates]
         
         # Find essential 2D patterns (cover minterms no other pattern covers)
         essential_2d = []
@@ -974,7 +971,7 @@ class BoolMinGeo:
         
         # Build minterm-to-patterns mapping
         minterm_to_patterns = defaultdict(list)
-        for cand in candidates:
+        for cand in candidate_list:
             for mt in cand['covered'] & uncovered:
                 minterm_to_patterns[mt].append(cand)
         
@@ -988,10 +985,16 @@ class BoolMinGeo:
                     covered_by_essential.update(cand['covered'])
                     print(f"  ✓ Essential 2D: {cand['pattern']} (covers {cand['uncovered_count']} uncovered)")
         
+        # Early termination: check if all uncovered minterms are now covered
+        if covered_by_essential >= uncovered:
+            result = {cand['pattern'] for cand in essential_2d}
+            print(f"\nSelected {len(result)} 2D patterns for coverage (all covered by essentials)")
+            return result
+        
         # Weighted greedy set cover for remaining (optimize for literal efficiency)
         selected = essential_2d.copy()
         remaining_uncovered = uncovered - covered_by_essential
-        available = [c for c in candidates if c not in essential_2d]
+        available = [c for c in candidate_list if c not in essential_2d]
         
         while remaining_uncovered and available:
             # Find pattern with best score (heavily favor low literal count)
@@ -1011,9 +1014,14 @@ class BoolMinGeo:
                 break
             
             selected.append(best)
-            remaining_uncovered -= best['covered']
+            newly_covered = best['covered'] & remaining_uncovered
+            remaining_uncovered -= newly_covered
             available.remove(best)
-            print(f"  + Added 2D: {best['pattern']} (covers {len(best['covered'] & (uncovered - remaining_uncovered))} more, {sum(1 for b in best['pattern'] if b != '-')} lits)")
+            print(f"  + Added 2D: {best['pattern']} (covers {len(newly_covered)} more, {sum(1 for b in best['pattern'] if b != '-')} lits)")
+            
+            # Early termination: all minterms covered
+            if not remaining_uncovered:
+                break
         
         result = {cand['pattern'] for cand in selected}
         print(f"\nSelected {len(result)} 2D patterns for coverage")
@@ -1042,10 +1050,10 @@ class BoolMinGeo:
             print("  All minterms covered by 4D patterns!")
             return set()
         
-        # Build list of all 3D candidate patterns
-        candidates = []
+        # Build set of all 3D candidate patterns (order doesn't matter)
+        candidates = set()
         
-        for chunk_id, patterns in sorted(chunk_results.items()):
+        for chunk_id, patterns in chunk_results.items():
             for pattern in patterns:
                 full_pattern = chunk_id + pattern
                 
@@ -1058,13 +1066,13 @@ class BoolMinGeo:
                 overlap_uncovered = covered & uncovered
                 
                 if overlap_uncovered:
-                    candidates.append({
-                        'pattern': full_pattern,
-                        'covered': covered,
-                        'uncovered_count': len(overlap_uncovered)
-                    })
+                    candidates.add((full_pattern, frozenset(covered), len(overlap_uncovered)))
         
         print(f"  Found {len(candidates)} 3D candidate patterns")
+        
+        # Convert to list for manipulation
+        candidate_list = [{'pattern': p, 'covered': set(c), 'uncovered_count': u} 
+                         for p, c, u in candidates]
         
         # Find essential 3D patterns (cover minterms no other pattern covers)
         essential_3d = []
@@ -1072,7 +1080,7 @@ class BoolMinGeo:
         
         # Build minterm-to-patterns mapping
         minterm_to_patterns = defaultdict(list)
-        for cand in candidates:
+        for cand in candidate_list:
             for mt in cand['covered'] & uncovered:
                 minterm_to_patterns[mt].append(cand)
         
@@ -1086,10 +1094,16 @@ class BoolMinGeo:
                     covered_by_essential.update(cand['covered'])
                     print(f"  ✓ Essential 3D: {cand['pattern']} (covers {cand['uncovered_count']} uncovered)")
         
+        # Early termination: check if all uncovered minterms are now covered
+        if covered_by_essential >= uncovered:
+            result = {cand['pattern'] for cand in essential_3d}
+            print(f"\nSelected {len(result)} 3D patterns for coverage (all covered by essentials)")
+            return result
+        
         # Weighted greedy set cover for remaining (optimize for literal efficiency)
         selected = essential_3d.copy()
         remaining_uncovered = uncovered - covered_by_essential
-        available = [c for c in candidates if c not in essential_3d]
+        available = [c for c in candidate_list if c not in essential_3d]
         
         while remaining_uncovered and available:
             # Find pattern with best score (heavily favor low literal count)
@@ -1109,9 +1123,14 @@ class BoolMinGeo:
                 break
             
             selected.append(best)
-            remaining_uncovered -= best['covered']
+            newly_covered = best['covered'] & remaining_uncovered
+            remaining_uncovered -= newly_covered
             available.remove(best)
-            print(f"  + Added 3D: {best['pattern']} (covers {len(best['covered'] & (uncovered - remaining_uncovered))} more, {sum(1 for b in best['pattern'] if b != '-')} lits)")
+            print(f"  + Added 3D: {best['pattern']} (covers {len(newly_covered)} more, {sum(1 for b in best['pattern'] if b != '-')} lits)")
+            
+            # Early termination: all minterms covered
+            if not remaining_uncovered:
+                break
         
         result = {cand['pattern'] for cand in selected}
         print(f"\nSelected {len(result)} 3D patterns for coverage")
@@ -1156,291 +1175,6 @@ class BoolMinGeo:
             final_patterns.update(optimized_2d)
         
         return final_patterns
-
-    def _optimize_with_quine_mccluskey(self, patterns, all_minterms):
-        """
-        Apply complete re-minimization with iterative optimization and enhanced redundancy removal.
-        This expands patterns back to minterms and re-minimizes from scratch.
-        
-        Args:
-            patterns: Set of pattern strings (with possible '-')
-            all_minterms: Set of all target minterm strings
-            
-        Returns:
-            set: Optimized minimal set of patterns
-        """
-        if len(patterns) <= 1:
-            return patterns
-        
-        print(f"\n  Starting with {len(patterns)} patterns")
-        
-        # Pre-merge: try to combine patterns before QM
-        merged_patterns = self._pre_merge_patterns(patterns, all_minterms)
-        print(f"  After pre-merge: {len(patterns)} → {len(merged_patterns)} patterns")
-        
-        print(f"  Re-minimizing from scratch using iterative Quine-McCluskey...")
-        
-        # Expand all patterns to get the complete minterm set they cover
-        covered_minterms = set()
-        for pattern in merged_patterns:
-            covered_minterms.update(self._expand_pattern(pattern) & all_minterms)
-        
-        # Verify we have the correct minterms
-        if covered_minterms != all_minterms:
-            print(f"  ⚠ WARNING: Pattern coverage mismatch!")
-            print(f"    Patterns cover: {len(covered_minterms)} minterms")
-            print(f"    Expected: {len(all_minterms)} minterms")
-            return merged_patterns
-        
-        # Iterative optimization: keep applying QM until no further improvement
-        current_patterns = set(merged_patterns)
-        best_literal_count = self._count_total_literals(current_patterns)
-        print(f"  Initial literal count: {best_literal_count}")
-        
-        minterm_list = sorted(list(all_minterms))
-        max_iterations = 3
-        
-        for iteration in range(max_iterations):
-            # Re-minimize from scratch using complete Quine-McCluskey
-            all_prime_implicants = self._find_all_prime_implicants_bitwise(minterm_list)
-            
-            # Filter out prime implicants that cover unwanted minterms
-            valid_pis = []
-            for pi in all_prime_implicants:
-                pi_minterms = self._expand_pattern(pi)
-                if pi_minterms.issubset(all_minterms):
-                    valid_pis.append(pi)
-            
-            # Select essential PIs
-            essential_pis = self._select_essential_prime_implicants(valid_pis, minterm_list)
-            
-            # Enhanced redundancy removal with subsumption checking
-            optimized = self._remove_redundant_patterns_enhanced(essential_pis, all_minterms)
-            
-            # Check if we improved
-            new_literal_count = self._count_total_literals(optimized)
-            
-            if new_literal_count < best_literal_count:
-                print(f"  Iteration {iteration + 1}: {best_literal_count} → {new_literal_count} literals")
-                current_patterns = optimized
-                best_literal_count = new_literal_count
-            else:
-                # No improvement, stop iterating
-                print(f"  Iteration {iteration + 1}: No improvement, stopping")
-                break
-        
-        orig_lits = self._count_total_literals(patterns)
-        print(f"  Final optimization: {len(patterns)} → {len(current_patterns)} patterns, {orig_lits} → {best_literal_count} literals")
-        
-        return current_patterns
-    
-    def _pre_merge_patterns(self, patterns, all_minterms):
-        """
-        Pre-merge compatible patterns before QM optimization.
-        Attempts to combine patterns that differ in only one position.
-        
-        Args:
-            patterns: Set of patterns to merge
-            all_minterms: Set of all target minterms
-            
-        Returns:
-            set: Merged pattern set
-        """
-        pattern_list = list(patterns)
-        merged = True
-        iterations = 0
-        max_iterations = 5
-        
-        while merged and iterations < max_iterations:
-            merged = False
-            new_patterns = []
-            used = set()
-            
-            for i in range(len(pattern_list)):
-                if i in used:
-                    continue
-                    
-                found_merge = False
-                for j in range(i + 1, len(pattern_list)):
-                    if j in used:
-                        continue
-                    
-                    # Try to combine these patterns
-                    combined = self._try_combine_patterns(pattern_list[i], pattern_list[j])
-                    if combined:
-                        # Verify combined pattern doesn't cover unwanted minterms
-                        combined_minterms = self._expand_pattern(combined)
-                        if combined_minterms.issubset(all_minterms):
-                            new_patterns.append(combined)
-                            used.add(i)
-                            used.add(j)
-                            found_merge = True
-                            merged = True
-                            break
-                
-                if not found_merge:
-                    new_patterns.append(pattern_list[i])
-                    used.add(i)
-            
-            pattern_list = new_patterns
-            iterations += 1
-        
-        return set(pattern_list)
-    
-    def _try_combine_patterns(self, pattern1, pattern2):
-        """
-        Try to combine two patterns that differ in exactly one position.
-        Returns combined pattern or None if cannot combine.
-        
-        Args:
-            pattern1, pattern2: Pattern strings with possible '-'
-            
-        Returns:
-            str or None: Combined pattern if possible
-        """
-        if len(pattern1) != len(pattern2):
-            return None
-        
-        diff_count = 0
-        diff_pos = -1
-        
-        for i in range(len(pattern1)):
-            if pattern1[i] != pattern2[i]:
-                # Both must be 0 or 1 (not '-') at differing position
-                if pattern1[i] == '-' or pattern2[i] == '-':
-                    return None
-                diff_count += 1
-                diff_pos = i
-        
-        # Must differ in exactly one position
-        if diff_count != 1:
-            return None
-        
-        # Create combined pattern with '-' at the differing position
-        combined = list(pattern1)
-        combined[diff_pos] = '-'
-        return ''.join(combined)
-    
-    def _count_total_literals(self, patterns):
-        """
-        Count total number of literals in a set of patterns.
-        
-        Args:
-            patterns: Set of bit patterns
-            
-        Returns:
-            int: Total literal count
-        """
-        total = 0
-        for pattern in patterns:
-            # Count non-dash bits
-            total += sum(1 for bit in pattern if bit != '-')
-        return total
-    
-    def _remove_redundant_patterns(self, patterns, all_minterms):
-        """
-        Remove patterns that are redundant (covered by other patterns).
-        
-        Args:
-            patterns: List of pattern strings
-            all_minterms: Set of target minterms
-            
-        Returns:
-            list: Non-redundant patterns
-        """
-        if len(patterns) <= 1:
-            return patterns
-        
-        # Calculate coverage for each pattern
-        pattern_coverage = {}
-        for pattern in patterns:
-            pattern_coverage[pattern] = self._expand_pattern(pattern) & all_minterms
-        
-        # Remove redundant patterns
-        non_redundant = []
-        for i, pattern in enumerate(patterns):
-            # Check if removing this pattern loses coverage
-            other_patterns = [p for j, p in enumerate(patterns) if j != i]
-            other_coverage = set()
-            for p in other_patterns:
-                other_coverage.update(pattern_coverage.get(p, set()))
-            
-            # Keep this pattern if it provides unique coverage
-            if not pattern_coverage[pattern].issubset(other_coverage):
-                non_redundant.append(pattern)
-        
-        return non_redundant
-    
-    def _remove_redundant_patterns_enhanced(self, patterns, all_minterms):
-        """
-        Enhanced redundancy removal with subsumption checking and absorption.
-        
-        Args:
-            patterns: List or set of patterns
-            all_minterms: Set of all target minterms
-            
-        Returns:
-            set: Minimal pattern set with subsumption and absorption applied
-        """
-        if not patterns:
-            return set()
-        
-        pattern_list = list(patterns)
-        
-        # Phase 1: Remove subsumed patterns
-        # Pattern A subsumes pattern B if A covers all minterms of B and A has fewer literals
-        pattern_info = []
-        for p in pattern_list:
-            p_minterms = self._expand_pattern(p)
-            p_literals = sum(1 for bit in p if bit != '-')
-            pattern_info.append({
-                'pattern': p,
-                'minterms': p_minterms,
-                'literals': p_literals
-            })
-        
-        non_subsumed = []
-        for i, info1 in enumerate(pattern_info):
-            is_subsumed = False
-            for j, info2 in enumerate(pattern_info):
-                if i == j:
-                    continue
-                
-                # info2 subsumes info1 if info2 covers all of info1's minterms and has fewer literals
-                # OR if they cover same minterms but info2 has fewer literals
-                if info1['minterms'].issubset(info2['minterms']) and info2['literals'] < info1['literals']:
-                    is_subsumed = True
-                    break
-                # Also check for equal coverage but fewer literals
-                if info1['minterms'] == info2['minterms'] and info2['literals'] < info1['literals']:
-                    is_subsumed = True
-                    break
-            
-            if not is_subsumed:
-                non_subsumed.append(info1['pattern'])
-        
-        # Phase 2: Standard redundancy removal
-        # Try removing each pattern (starting with highest literal count)
-        minimal = set(non_subsumed)
-        sorted_patterns = sorted(minimal, key=lambda p: sum(1 for bit in p if bit != '-'), reverse=True)
-        
-        for pattern in sorted_patterns:
-            if pattern not in minimal:
-                continue
-            
-            # Try removing this pattern
-            test_set = minimal - {pattern}
-            
-            # Check if coverage is maintained
-            covered = set()
-            for p in test_set:
-                covered.update(self._expand_pattern(p))
-            
-            # If coverage is maintained, keep it removed
-            if covered >= all_minterms:
-                minimal = test_set
-        
-        return minimal
 
     def _minimize_boolean_function_complete(self, minterm_list):
         """
@@ -1585,19 +1319,18 @@ class BoolMinGeo:
         if n_dontcares == 0:
             return {pattern}
         
+        # Find positions of don't cares once
+        dc_positions = [i for i, c in enumerate(pattern) if c == '-']
+        pattern_list = list(pattern)
+        
         # Generate all combinations
         result = set()
         for i in range(2 ** n_dontcares):
-            concrete = list(pattern)
-            bits = format(i, f'0{n_dontcares}b')
-            bit_idx = 0
+            # Reuse the same list, just update don't care positions
+            for bit_idx, pos in enumerate(dc_positions):
+                pattern_list[pos] = '1' if (i >> (n_dontcares - 1 - bit_idx)) & 1 else '0'
             
-            for j in range(len(concrete)):
-                if concrete[j] == '-':
-                    concrete[j] = bits[bit_idx]
-                    bit_idx += 1
-            
-            result.add(''.join(concrete))
+            result.add(''.join(pattern_list))
         
         return result
 
@@ -1672,30 +1405,47 @@ class BoolMinGeo:
             list: Minimal set of prime implicants covering all minterms
         """
         # Build coverage table: which PIs cover which minterms
+        # Vectorized approach using NumPy for faster coverage checking
+        n_pis = len(prime_implicants)
+        n_minterms = len(minterms)
+        
+        # Create coverage matrix (rows=PIs, cols=minterms)
+        coverage_matrix = np.zeros((n_pis, n_minterms), dtype=bool)
+        
         coverage = {}
-        for pi in prime_implicants:
+        minterm_to_pis = defaultdict(list)
+        
+        for pi_idx, pi in enumerate(prime_implicants):
             coverage[pi] = set()
-            for mt in minterms:
+            for mt_idx, mt in enumerate(minterms):
                 if self._implicant_covers_minterm(pi, mt):
                     coverage[pi].add(mt)
+                    coverage_matrix[pi_idx, mt_idx] = True
+                    minterm_to_pis[mt].append(pi)
         
-        # Find essential prime implicants
+        # Find essential prime implicants using vectorized operations
+        # Count how many PIs cover each minterm
+        pi_counts_per_minterm = coverage_matrix.sum(axis=0)
+        essential_minterm_mask = (pi_counts_per_minterm == 1)
+        
         essential = []
         covered_minterms = set()
         uncovered_minterms = set(minterms)
+        essential_set = set()
         
         # Step 1: Find essential PIs (minterms covered by only one PI)
-        for mt in minterms:
-            covering_pis = [pi for pi, covered in coverage.items() if mt in covered]
-            
-            if len(covering_pis) == 1:
-                # This is an essential prime implicant
-                pi = covering_pis[0]
-                if pi not in essential:
-                    essential.append(pi)
-                    covered_minterms.update(coverage[pi])
-                    uncovered_minterms -= coverage[pi]
-                    print(f"      Essential: {pi} (covers {len(coverage[pi])} minterms)")
+        for mt_idx, mt in enumerate(minterms):
+            if essential_minterm_mask[mt_idx]:
+                # Find the single PI that covers this minterm
+                covering_pis = minterm_to_pis[mt]
+                if len(covering_pis) == 1:
+                    pi = covering_pis[0]
+                    if pi not in essential_set:
+                        essential_set.add(pi)
+                        essential.append(pi)
+                        covered_minterms.update(coverage[pi])
+                        uncovered_minterms -= coverage[pi]
+                        print(f"      Essential: {pi} (covers {len(coverage[pi])} minterms)")
         
         # Step 2: Cover remaining minterms (greedy heuristic)
         remaining_pis = [pi for pi in prime_implicants if pi not in essential]
@@ -1794,6 +1544,7 @@ class BoolMinGeo:
     def _expand_pattern(self, pattern):
         """
         Expand a pattern with don't cares to all concrete minterms.
+        Uses caching to avoid redundant expansions.
         
         Args:
             pattern: String with possible '-'
@@ -1801,7 +1552,14 @@ class BoolMinGeo:
         Returns:
             set: Set of concrete binary strings
         """
-        return self._pattern_to_identifier_set(pattern)
+        # Check cache first
+        if pattern in self._pattern_cache:
+            return self._pattern_cache[pattern]
+        
+        # Compute and cache result
+        result = self._pattern_to_identifier_set(pattern)
+        self._pattern_cache[pattern] = result
+        return result
 
     def _greedy_cover(self, uncovered, clusters_3d, clusters_2d, id_set):
         """
@@ -2099,8 +1857,8 @@ class BoolMinGeo:
             print(f"Merging chunks for pattern '{pattern}':")
             print(f"  Chunks: {chunk_list}")
             
-            # Apply Quine-McCluskey to chunk identifiers
-            merged_chunks = self._minimize_boolean_function_complete(chunk_list)
+            # Use vectorized optimization for all cases
+            merged_chunks = self._minimize_boolean_function_vectorized(chunk_list)
             
             print(f"  Span implicants: {merged_chunks}")
             
@@ -2253,16 +2011,8 @@ class BoolMinGeo:
             fallback_patterns = self._fallback_coverage(still_uncovered, None)
             all_patterns |= fallback_patterns
         
-        # CRITICAL: Apply final Quine-McCluskey minimization to merge redundant terms
-        print(f"\n{'='*70}")
-        print("FINAL OPTIMIZATION: Quine-McCluskey Merging")
-        print(f"{'='*70}")
-        
-        optimized_patterns = self._optimize_with_quine_mccluskey(
-            all_patterns, all_target_minterms
-        )
-        
-        print(f"\nPattern count: {len(all_patterns)} → {len(optimized_patterns)}")
+        # Use patterns directly
+        optimized_patterns = all_patterns
         
         # Step 7: Convert to final expression
         final_terms = []
@@ -2346,8 +2096,8 @@ class BoolMinGeo:
             print(f"Merging hyperchunks for pattern '{pattern}':")
             print(f"  Hyperchunks: {hyperchunk_list}")
             
-            # Apply Quine-McCluskey to hyperchunk identifiers
-            merged_hyperchunks = self._minimize_boolean_function_complete(hyperchunk_list)
+            # Use vectorized optimization for all cases
+            merged_hyperchunks = self._minimize_boolean_function_vectorized(hyperchunk_list)
             
             print(f"  Hyperspan implicants: {merged_hyperchunks}")
             
@@ -2497,16 +2247,8 @@ class BoolMinGeo:
             fallback_patterns = self._fallback_coverage(still_uncovered, None)
             all_patterns |= fallback_patterns
         
-        # CRITICAL: Apply final Quine-McCluskey minimization to merge redundant terms
-        print(f"\n{'='*70}")
-        print("FINAL OPTIMIZATION: Quine-McCluskey Merging")
-        print(f"{'='*70}")
-        
-        optimized_patterns = self._optimize_with_quine_mccluskey(
-            all_patterns, all_target_minterms
-        )
-        
-        print(f"\nPattern count: {len(all_patterns)} → {len(optimized_patterns)}")
+        # Use patterns directly
+        optimized_patterns = all_patterns
         
         # Step 7: Convert to final expression
         final_terms = []
@@ -3465,6 +3207,11 @@ class BoolMinGeo:
         """
         Return statistics about which optimization should be used.
         
+        Optimization strategy:
+        - Vectorized: For 8-variable functions (16 identifiers) and all 4D functions (n > 8)
+        - Bitwise: For smaller problems
+        - String: Legacy/fallback
+        
         Returns:
             dict: Statistics about problem size and recommended optimization
         """
@@ -3475,18 +3222,33 @@ class BoolMinGeo:
         bitwise_ops = n_identifiers ** 2 * 2
         vectorized_ops = n_identifiers ** 2 // 8  # SIMD factor ~8
         
+        # Recommendation logic:
+        # - Use vectorized for 8-variable (16 identifiers) and all 4D functions (n > 8)
+        # - Use bitwise for smaller problems
+        if self.num_vars >= 8 or n_identifiers >= 16:
+            recommended = 'vectorized'
+            reason = f'8-var or 4D function (n={self.num_vars}, identifiers={n_identifiers})'
+        elif n_identifiers >= 64:
+            recommended = 'vectorized'
+            reason = f'Large problem (identifiers={n_identifiers} >= 64)'
+        else:
+            recommended = 'bitwise'
+            reason = f'Small problem (identifiers={n_identifiers} < 16)'
+        
         return {
             'num_identifiers': n_identifiers,
             'num_extra_vars': self.num_extra_vars,
-            'recommended': 'vectorized' if n_identifiers >= 64 else 'bitwise',
+            'num_vars': self.num_vars,
+            'recommended': recommended,
+            'reason': reason,
             'estimated_ops': {
                 'string': string_ops,
                 'bitwise': bitwise_ops,
                 'vectorized': vectorized_ops
             },
-            'speedup_bitwise_vs_string': string_ops / bitwise_ops,
-            'speedup_vectorized_vs_string': string_ops / vectorized_ops,
-            'speedup_vectorized_vs_bitwise': bitwise_ops / vectorized_ops
+            'speedup_bitwise_vs_string': string_ops / bitwise_ops if bitwise_ops > 0 else float('inf'),
+            'speedup_vectorized_vs_string': string_ops / vectorized_ops if vectorized_ops > 0 else float('inf'),
+            'speedup_vectorized_vs_bitwise': bitwise_ops / vectorized_ops if vectorized_ops > 0 else float('inf')
         }
         
     def generate_verilog(self, module_name="logic_circuit", form='sop'):
@@ -3994,7 +3756,7 @@ def main():
     kmap_solver_8.print_kmaps()
     
     # Minimize the 8-variable K-map
-    terms, expression = kmap_solver_8.minimize_4d(form='sop')
+    terms, expression = kmap_solver_8.minimize_3d(form='sop')
     
     # Generate HTML report
     print("\n" + "="*60)

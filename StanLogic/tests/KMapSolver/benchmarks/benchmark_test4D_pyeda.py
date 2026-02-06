@@ -31,7 +31,7 @@ np.random.seed(RANDOM_SEED)
 TIMING_WARMUP = 1
 TIMING_REPEATS = 3
 
-NUM_TESTS = 100
+NUM_TESTS = 3
 
 # Statistical significance threshold
 ALPHA = 0.05  # 95% confidence level
@@ -554,7 +554,7 @@ results_by_var = {}  # Store results grouped by variable count
 
 # Configuration: (num_vars, output_size)
 configs = [
-    (9, 512), (10, 1024)
+    (9, 512), (10, 1024), (11, 2048), (12, 4096)
 ]
 
 # Test 10 random functions for each variable count

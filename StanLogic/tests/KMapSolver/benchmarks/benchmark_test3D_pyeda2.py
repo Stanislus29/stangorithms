@@ -31,7 +31,7 @@ np.random.seed(RANDOM_SEED)
 TIMING_WARMUP = 1
 TIMING_REPEATS = 3
 
-NUM_TESTS = 10
+NUM_TESTS = 100
 
 # Statistical significance threshold
 ALPHA = 0.05  # 95% confidence level
