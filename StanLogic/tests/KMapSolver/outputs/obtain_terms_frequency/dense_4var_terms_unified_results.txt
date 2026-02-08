@@ -1,0 +1,32 @@
+================================================================================
+  DENSE 4-VARIABLE K-MAP TERMS ANALYSIS - UNIFIED RESULTS
+================================================================================
+
+Configuration:
+  Random Seed: 42
+  Test Cases per Density: 200
+  Tested Densities: 30%, 50%, 70%, 90%
+  Total Tests: 800
+
+================================================================================
+
+
+================================================================================
+  DENSITY: 30% (0.3 probability of 1s)
+================================================================================
+
+Statistical Summary:
+--------------------------------------------------------------------------------
+  Mean number of terms:         3.10
+  Median number of terms:        3.0
+  Std deviation of terms:       0.96
+  Min number of terms:             1
+  Max number of terms:             5
+  Mode (most frequent):            3 terms (occurred 79 times)
+
+  Mean number of ones:          4.72
+  Median number of ones:         5.0
+  Expected ones:                   4
+
+Term Count Distribution:
+--------------------------------------------------------------------------------

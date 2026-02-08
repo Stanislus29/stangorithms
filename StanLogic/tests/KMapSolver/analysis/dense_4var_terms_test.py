@@ -25,6 +25,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from stanlogic import BoolMin2D
 from tabulate import tabulate
+from matplotlib.backends.backend_pdf import PdfPages
 
 # ============================================================================
 # CONFIGURATION
@@ -34,20 +35,20 @@ from tabulate import tabulate
 RANDOM_SEED = 42
 random.seed(RANDOM_SEED)
 
-# Number of test cases - testing only 4 variables with high density
+# Number of test cases - testing only 4 variables with varying densities
 NUM_TEST_CASES_4VAR = 200  # 4-var has 16 cells
 
-# Density configuration
-DENSITY = 0.90  # 90% probability of 1s, 10% probability of 0s
+# Density configuration - test multiple densities
+DENSITIES = [0.3, 0.5, 0.7, 0.9]  # Test at 30%, 50%, 70%, and 90% densities
 
 # Output directory
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUTS_DIR = os.path.join(SCRIPT_DIR, "..", "outputs", "obtain_terms_frequency")
 os.makedirs(OUTPUTS_DIR, exist_ok=True)
 
-RESULTS_CSV_4VAR = os.path.join(OUTPUTS_DIR, "dense_90pct_4var_terms_results.csv")
-STATS_TXT = os.path.join(OUTPUTS_DIR, "dense_90pct_4var_terms_stats.txt")
-HISTOGRAM_PNG = os.path.join(OUTPUTS_DIR, "dense_90pct_4var_terms_histogram.png")
+# Unified output files
+STATS_TXT = os.path.join(OUTPUTS_DIR, "dense_4var_terms_unified_results.txt")
+HISTOGRAM_PDF = os.path.join(OUTPUTS_DIR, "dense_4var_terms_histograms.pdf")
 
 # ============================================================================
 # TEST DATA GENERATION
@@ -261,85 +262,112 @@ def print_statistics(stats):
 # VISUALIZATION
 # ============================================================================
 
-def create_histogram(results_4var, stats_4var):
-    """Create histogram for dense 4-variable results."""
-    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+def create_histograms_pdf(all_results, all_stats):
+    """Create PDF with histograms for each density."""
+    with PdfPages(HISTOGRAM_PDF) as pdf:
+        for density in DENSITIES:
+            results = all_results[density]
+            stats = all_stats[density]
+            
+            fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+            
+            # Histogram for current density
+            term_counts = [r["num_terms"] for r in results]
+            ax.hist(term_counts, bins=range(min(term_counts), max(term_counts) + 2),
+                     edgecolor='black', alpha=0.7, color='darkgreen')
+            ax.axvline(stats['mean_terms'], color='red', linestyle='--', 
+                        linewidth=2, label=f'Mean: {stats["mean_terms"]:.2f}')
+            ax.axvline(stats['median_terms'], color='blue', linestyle='--', 
+                        linewidth=2, label=f'Median: {stats["median_terms"]:.1f}')
+            ax.set_xlabel('Number of Terms', fontsize=12)
+            ax.set_ylabel('Frequency', fontsize=12)
+            ax.set_title(f'4-Variable K-Maps ({density*100:.0f}% Density, 16 cells)', 
+                         fontsize=13, fontweight='bold')
+            ax.legend(fontsize=10)
+            ax.grid(axis='y', alpha=0.3)
+            
+            plt.tight_layout()
+            pdf.savefig(fig, dpi=150)
+            plt.close()
     
-    # 4-variable histogram
-    term_counts_4 = [r["num_terms"] for r in results_4var]
-    ax.hist(term_counts_4, bins=range(min(term_counts_4), max(term_counts_4) + 2),
-             edgecolor='black', alpha=0.7, color='darkgreen')
-    ax.axvline(stats_4var['mean_terms'], color='red', linestyle='--', 
-                linewidth=2, label=f'Mean: {stats_4var["mean_terms"]:.2f}')
-    ax.axvline(stats_4var['median_terms'], color='blue', linestyle='--', 
-                linewidth=2, label=f'Median: {stats_4var["median_terms"]:.1f}')
-    ax.set_xlabel('Number of Terms', fontsize=12)
-    ax.set_ylabel('Frequency', fontsize=12)
-    ax.set_title(f'Dense 4-Variable K-Maps ({stats_4var["density"]*100:.0f}% Density, 16 cells)', 
-                 fontsize=13, fontweight='bold')
-    ax.legend(fontsize=10)
-    ax.grid(axis='y', alpha=0.3)
-    
-    plt.tight_layout()
-    plt.savefig(HISTOGRAM_PNG, dpi=150)
-    print(f"\nHistogram saved to: {HISTOGRAM_PNG}")
-    plt.close()
+    print(f"\nHistograms saved to: {HISTOGRAM_PDF}")
 
 # ============================================================================
 # RESULTS EXPORT
 # ============================================================================
 
-def save_results_csv(results, filepath):
-    """Save detailed results to CSV."""
-    with open(filepath, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=[
-            "test_num", "num_vars", "num_minterms", "num_ones", "num_terms", 
-            "sop_expression", "minterms"
-        ])
-        writer.writeheader()
-        writer.writerows(results)
-    
-    print(f"Results saved to: {filepath}")
-
-def save_statistics_txt(stats_4var, results_4var):
-    """Save statistical summary to text file."""
+def save_unified_statistics_txt(all_stats, all_results):
+    """Save unified statistical summary to text file for all densities."""
     with open(STATS_TXT, 'w') as f:
-        f.write("Dense 4-Variable K-Map Terms Analysis\n")
-        f.write("=" * 70 + "\n\n")
+        f.write("="*80 + "\n")
+        f.write("  DENSE 4-VARIABLE K-MAP TERMS ANALYSIS - UNIFIED RESULTS\n")
+        f.write("="*80 + "\n\n")
         
-        f.write(f"Configuration:\n")
+        f.write("Configuration:\n")
         f.write(f"  Random Seed: {RANDOM_SEED}\n")
-        f.write(f"  4-Variable Test Cases: {NUM_TEST_CASES_4VAR}\n")
-        f.write(f"  K-Map Type: Dense (p={DENSITY:.2f} for 1s)\n")
-        f.write(f"  Density: {DENSITY*100:.0f}%\n\n")
+        f.write(f"  Test Cases per Density: {NUM_TEST_CASES_4VAR}\n")
+        f.write(f"  Tested Densities: {', '.join([f'{d*100:.0f}%' for d in DENSITIES])}\n")
+        f.write(f"  Total Tests: {NUM_TEST_CASES_4VAR * len(DENSITIES)}\n\n")
+        f.write("="*80 + "\n\n")
         
-        # 4-variable statistics
-        f.write("4-VARIABLE DENSE STATISTICAL SUMMARY:\n")
-        f.write("-" * 70 + "\n")
-        f.write(f"Mean number of terms:     {stats_4var['mean_terms']:.2f}\n")
-        f.write(f"Median number of terms:   {stats_4var['median_terms']:.1f}\n")
-        f.write(f"Std deviation of terms:   {stats_4var['std_terms']:.2f}\n")
-        f.write(f"Min number of terms:      {stats_4var['min_terms']}\n")
-        f.write(f"Max number of terms:      {stats_4var['max_terms']}\n")
+        # Results for each density
+        for density in DENSITIES:
+            stats = all_stats[density]
+            results = all_results[density]
+            
+            f.write(f"\n{'='*80}\n")
+            f.write(f"  DENSITY: {density*100:.0f}% ({density:.1f} probability of 1s)\n")
+            f.write(f"{'='*80}\n\n")
+            
+            f.write("Statistical Summary:\n")
+            f.write("-" * 80 + "\n")
+            f.write(f"  Mean number of terms:     {stats['mean_terms']:8.2f}\n")
+            f.write(f"  Median number of terms:   {stats['median_terms']:8.1f}\n")
+            f.write(f"  Std deviation of terms:   {stats['std_terms']:8.2f}\n")
+            f.write(f"  Min number of terms:      {stats['min_terms']:8d}\n")
+            f.write(f"  Max number of terms:      {stats['max_terms']:8d}\n")
+            
+            if len(stats['mode_terms']) == 1:
+                f.write(f"  Mode (most frequent):     {stats['mode_terms'][0]:8d} terms ")
+                f.write(f"(occurred {stats['mode_frequency']} times)\n")
+            else:
+                mode_str = ", ".join(str(m) for m in sorted(stats['mode_terms']))
+                f.write(f"  Mode (most frequent):     {mode_str} terms ")
+                f.write(f"(each occurred {stats['mode_frequency']} times)\n")
+            
+            f.write(f"\n  Mean number of ones:      {stats['mean_ones']:8.2f}\n")
+            f.write(f"  Median number of ones:    {stats['median_ones']:8.1f}\n")
+            f.write(f"  Expected ones:            {stats['expected_ones']:8d}\n")
+            f.write("\n")
+            
+            # Distribution table
+            f.write("Term Count Distribution:\n")
+            f.write("-" * 80 + "\n")
+            for terms in sorted(stats['term_distribution'].keys()):
+                count = stats['term_distribution'][terms]
+                bar = "█" * min(count, 40)  # Visual bar
+                f.write(f"  {terms:3d} terms: {count:4d} cases  {bar}\n")
+            
+            f.write("\n")
         
-        if len(stats_4var['mode_terms']) == 1:
-            f.write(f"Mode (most frequent):     {stats_4var['mode_terms'][0]} terms (occurred {stats_4var['mode_frequency']} times)\n")
-        else:
-            mode_str = ", ".join(str(m) for m in sorted(stats_4var['mode_terms']))
-            f.write(f"Mode (most frequent):     {mode_str} terms (each occurred {stats_4var['mode_frequency']} times)\n")
+        # Summary comparison table
+        f.write("\n" + "="*80 + "\n")
+        f.write("  DENSITY COMPARISON SUMMARY\n")
+        f.write("="*80 + "\n\n")
         
-        f.write(f"\nMean number of ones:      {stats_4var['mean_ones']:.2f}\n")
-        f.write(f"Median number of ones:    {stats_4var['median_ones']:.1f}\n")
-        f.write(f"Expected ones (dense):    {stats_4var['expected_ones']}\n")
-        f.write("=" * 70 + "\n\n")
+        f.write(f"{'Density':>10} | {'Mean Terms':>12} | {'Median':>9} | {'Std Dev':>9} | ")
+        f.write(f"{'Min':>5} | {'Max':>5}\n")
+        f.write("-" * 80 + "\n")
         
-        # Distribution table
-        f.write("4-VARIABLE Term Count Distribution:\n")
-        f.write("-" * 70 + "\n")
-        for terms in sorted(stats_4var['term_distribution'].keys()):
-            f.write(f"  {terms} terms: {stats_4var['term_distribution'][terms]} cases\n")
+        for density in DENSITIES:
+            stats = all_stats[density]
+            f.write(f"{density*100:>9.0f}% | {stats['mean_terms']:>12.2f} | ")
+            f.write(f"{stats['median_terms']:>9.1f} | {stats['std_terms']:>9.2f} | ")
+            f.write(f"{stats['min_terms']:>5d} | {stats['max_terms']:>5d}\n")
+        
+        f.write("\n" + "="*80 + "\n")
     
-    print(f"Statistics saved to: {STATS_TXT}")
+    print(f"Unified statistics saved to: {STATS_TXT}")
 
 # ============================================================================
 # MAIN EXECUTION
@@ -347,36 +375,47 @@ def save_statistics_txt(stats_4var, results_4var):
 
 def main():
     """Main execution function."""
-    print("\n" + "=" * 70)
-    print("DENSE 4-VARIABLE K-MAP TERMS ANALYSIS")
-    print("=" * 70)
+    print("\n" + "=" * 80)
+    print("DENSE 4-VARIABLE K-MAP TERMS ANALYSIS - MULTIPLE DENSITIES")
+    print("=" * 80)
     print(f"Random Seed: {RANDOM_SEED}")
-    print(f"4-Variable Test Cases: {NUM_TEST_CASES_4VAR}")
-    print(f"Density: {DENSITY*100:.0f}% (probability of 1s)")
+    print(f"Test Cases per Density: {NUM_TEST_CASES_4VAR}")
+    print(f"Densities to Test: {', '.join([f'{d*100:.0f}%' for d in DENSITIES])}")
     print("")
     
-    # Analyze 4-variable dense K-maps
-    print("\n" + "=" * 70)
-    print(f"ANALYZING DENSE 4-VARIABLE K-MAPS ({DENSITY*100:.0f}% DENSITY)")
-    print("=" * 70)
-    results_4var = analyze_dense_kmaps_4var(NUM_TEST_CASES_4VAR, DENSITY)
-    stats_4var = compute_statistics(results_4var, DENSITY)
-    print_statistics(stats_4var)
+    # Store results for all densities
+    all_results = {}
+    all_stats = {}
     
-    # Create visualizations
-    create_histogram(results_4var, stats_4var)
+    # Analyze for each density
+    for density in DENSITIES:
+        print("\n" + "=" * 80)
+        print(f"ANALYZING 4-VARIABLE K-MAPS AT {density*100:.0f}% DENSITY")
+        print("=" * 80)
+        
+        results = analyze_dense_kmaps_4var(NUM_TEST_CASES_4VAR, density)
+        stats = compute_statistics(results, density)
+        
+        all_results[density] = results
+        all_stats[density] = stats
+        
+        print_statistics(stats)
     
-    # Save results
-    save_results_csv(results_4var, RESULTS_CSV_4VAR)
-    save_statistics_txt(stats_4var, results_4var)
+    # Create unified visualizations
+    print("\n" + "=" * 80)
+    print("Creating unified outputs...")
+    print("=" * 80)
+    create_histograms_pdf(all_results, all_stats)
     
-    print("\n" + "=" * 70)
+    # Save unified results
+    save_unified_statistics_txt(all_stats, all_results)
+    
+    print("\n" + "=" * 80)
     print("ANALYSIS COMPLETE")
-    print("=" * 70)
+    print("=" * 80)
     print("\nOutput files:")
-    print(f"  - 4-var CSV: {RESULTS_CSV_4VAR}")
-    print(f"  - Stats: {STATS_TXT}")
-    print(f"  - Histogram: {HISTOGRAM_PNG}")
+    print(f"  - Unified Stats: {STATS_TXT}")
+    print(f"  - Histograms PDF: {HISTOGRAM_PDF}")
     print("")
 
 if __name__ == "__main__":

@@ -238,6 +238,23 @@ def check_coverage(solver, epis, all_target_minterms):
     # Compute uniqueness metrics
     uniqueness_metrics = compute_uniqueness_metrics(cluster_to_minterms, avg_info_density)
     
+    # Classify clusters as mega or micro
+    num_mega_clusters = 0
+    num_micro_clusters = 0
+    
+    for info_size in information_density.values():
+        # Mega cluster: closer to max than to avg
+        deviation_from_max = abs(info_size - max_info_density)
+        deviation_from_avg = abs(info_size - avg_info_density)
+        deviation_from_min = abs(info_size - min_info_density)
+        
+        if deviation_from_max < deviation_from_avg:
+            num_mega_clusters += 1
+        
+        # Micro cluster: closer to min than to avg
+        if deviation_from_min < deviation_from_avg:
+            num_micro_clusters += 1
+    
     return {
         'covered_minterms': covered_by_3d,
         'information_density': information_density,
@@ -248,7 +265,9 @@ def check_coverage(solver, epis, all_target_minterms):
         'max_info_density': max_info_density,
         'avg_uniqueness_ratio': uniqueness_metrics['avg_uniqueness_ratio'],
         'min_uniqueness_ratio': uniqueness_metrics['min_uniqueness_ratio'],
-        'max_uniqueness_ratio': uniqueness_metrics['max_uniqueness_ratio']
+        'max_uniqueness_ratio': uniqueness_metrics['max_uniqueness_ratio'],
+        'num_mega_clusters': num_mega_clusters,
+        'num_micro_clusters': num_micro_clusters
     }
 
 def main():
@@ -296,6 +315,8 @@ def main():
                     'avg_uniqueness_ratio': coverage_info['avg_uniqueness_ratio'],
                     'min_uniqueness_ratio': coverage_info['min_uniqueness_ratio'],
                     'max_uniqueness_ratio': coverage_info['max_uniqueness_ratio'],
+                    'num_mega_clusters': coverage_info['num_mega_clusters'],
+                    'num_micro_clusters': coverage_info['num_micro_clusters'],
                     'num_target_minterms': len(cluster_info['target_minterms']),
                     'num_covered': len(coverage_info['covered_minterms']),
                     'num_uncovered': len(coverage_info['uncovered_minterms'])
@@ -341,6 +362,8 @@ def main():
                 avg_uniqueness = sum(r['avg_uniqueness_ratio'] for r in config_results) / len(config_results)
                 avg_min_uniqueness = sum(r['min_uniqueness_ratio'] for r in config_results) / len(config_results)
                 avg_max_uniqueness = sum(r['max_uniqueness_ratio'] for r in config_results) / len(config_results)
+                avg_mega_clusters = sum(r['num_mega_clusters'] for r in config_results) / len(config_results)
+                avg_micro_clusters = sum(r['num_micro_clusters'] for r in config_results) / len(config_results)
                 
                 aggregated_data.append({
                     'num_vars': num_vars,
@@ -355,7 +378,9 @@ def main():
                     'avg_coverage_ratio': avg_coverage,
                     'avg_uniqueness_ratio': avg_uniqueness,
                     'avg_min_uniqueness_ratio': avg_min_uniqueness,
-                    'avg_max_uniqueness_ratio': avg_max_uniqueness
+                    'avg_max_uniqueness_ratio': avg_max_uniqueness,
+                    'avg_mega_clusters': avg_mega_clusters,
+                    'avg_micro_clusters': avg_micro_clusters
                 })
                 print(f"  Aggregated: {num_vars} vars, density {density} ({len(config_results)} tests)")
     
@@ -367,7 +392,8 @@ def main():
                          'avg_3d_clusters', 'min_3d_clusters', 'max_3d_clusters',
                          'avg_information_density', 'min_information_density', 'max_information_density',
                          'avg_coverage_ratio',
-                         'avg_uniqueness_ratio', 'avg_min_uniqueness_ratio', 'avg_max_uniqueness_ratio']
+                         'avg_uniqueness_ratio', 'avg_min_uniqueness_ratio', 'avg_max_uniqueness_ratio',
+                         'avg_mega_clusters', 'avg_micro_clusters']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             
             writer.writeheader()
@@ -389,16 +415,18 @@ def main():
     print(f"\n{'='*60}")
     print("AGGREGATED RESULTS SUMMARY")
     print(f"{'='*60}\n")
-    print(f"{'Vars':<6} {'Density':<8} {'Clusters':<16} {'Info Dens':<16} {'Coverage':<10} {'Uniqueness':<12}")
+    print(f"{'Vars':<6} {'Density':<8} {'Clusters':<16} {'Info Dens':<16} {'Coverage':<10} {'Uniqueness':<12} {'Mega':<8} {'Micro':<8}")
     print(f"{'':6} {'':8} {'(avg/min/max)':<16} {'(avg/min/max)':<16}")
-    print("-" * 80)
+    print("-" * 90)
     
     for data in aggregated_data:
         print(f"{data['num_vars']:<6} {data['density']:<8.1f} "
               f"{data['avg_3d_clusters']:>5.1f}/{data['min_3d_clusters']:>3.0f}/{data['max_3d_clusters']:>3.0f}  "
               f"{data['avg_information_density']:>5.1f}/{data['min_information_density']:>3.0f}/{data['max_information_density']:>3.0f}  "
               f"{data['avg_coverage_ratio']:<10.2%} "
-              f"{data['avg_uniqueness_ratio']:<12.4f}")
+              f"{data['avg_uniqueness_ratio']:<12.4f} "
+              f"{data['avg_mega_clusters']:<8.2f} "
+              f"{data['avg_micro_clusters']:<8.2f}")
     
     return all_results
 

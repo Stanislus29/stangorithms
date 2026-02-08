@@ -37,7 +37,7 @@ def read_collapse_data(csv_path):
         reader = csv.DictReader(f)
         first_row = next(reader)
         params = {
-            'C_19': float(first_row['C_19']),
+            'C_18': float(first_row['C_18']),
             'geometric_ratio': float(first_row['geometric_ratio']),
             'I_sat': float(first_row['I_sat']),
             'density': float(first_row['density'])
@@ -138,12 +138,12 @@ coverage and begins producing redundant clusters.
 MATHEMATICAL MODEL
 {'='*70}
 
-Coverage(n) = (C₁₉ × r^k × I_sat) / (density × 2^n) × 100
+Coverage(n) = (C₁₈ × r^k × I_sat) / (density × 2^n) × 100
 
 where:
-  • C₁₉   : Number of 4D clusters at n=19
+  • C₁₈   : Number of 4D clusters at n=18
   • r     : Geometric growth ratio (cluster increase rate)
-  • k     : Counter (k = n - 19, starts at 1 for n=20)
+  • k     : Counter (k = n - 18, starts at 1 for n=19)
   • I_sat : Saturation information density (minterms/cluster)
   • n     : Number of variables
 
@@ -156,7 +156,7 @@ PARAMETERS BY DENSITY
     for density in sorted(all_density_data.keys()):
         params = all_density_data[density]['params']
         title_text += f"\nDensity {density}:\n"
-        title_text += f"  C₁₉ = {params['C_19']:.0f} clusters\n"
+        title_text += f"  C₁₈ = {params['C_18']:.0f} clusters\n"
         title_text += f"  r   = {params['geometric_ratio']:.4f}\n"
         title_text += f"  I_sat = {params['I_sat']:.2f} minterms/cluster\n"
     
@@ -197,19 +197,29 @@ PARAMETERS BY DENSITY
                 collapse_idx = i
                 break
         
+        # Determine the range for Plot 1 (up to 10 values after collapse)
+        if collapse_idx is not None:
+            plot1_end_idx = min(collapse_idx + 11, len(n_values))  # +11 to include collapse point + 10 after
+        else:
+            plot1_end_idx = len(n_values)  # Use all data if no collapse
+        
+        # Create sliced data for Plot 1
+        n_values_plot1 = n_values[:plot1_end_idx]
+        raw_coverage_plot1 = raw_coverage[:plot1_end_idx]
+        redundancy_plot1 = [max(0, raw - 100) for raw in raw_coverage_plot1]
+        effective_coverage_plot1 = [min(raw, 100) for raw in raw_coverage_plot1]
+        
         # Create figure with 4 plots
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle(f'4D Cluster Analysis - Density {density}', fontsize=16, fontweight='bold')
         
         # Plot 1: Effective vs Redundant Coverage
         ax1 = axes[0, 0]
-        redundancy = [max(0, raw - 100) for raw in raw_coverage]
-        effective_coverage = [min(raw, 100) for raw in raw_coverage]
         
-        ax1.fill_between(n_values, 0, effective_coverage, color='#2ca02c', alpha=0.6, label='Effective Coverage')
-        ax1.fill_between(n_values, effective_coverage, [eff + red for eff, red in zip(effective_coverage, redundancy)], 
+        ax1.fill_between(n_values_plot1, 0, effective_coverage_plot1, color='#2ca02c', alpha=0.6, label='Effective Coverage')
+        ax1.fill_between(n_values_plot1, effective_coverage_plot1, [eff + red for eff, red in zip(effective_coverage_plot1, redundancy_plot1)], 
                          color='#d62728', alpha=0.6, label='Redundant Clusters')
-        ax1.plot(n_values, raw_coverage, 'ko-', linewidth=2, markersize=5, label='Total Model Output')
+        ax1.plot(n_values_plot1, raw_coverage_plot1, 'ko-', linewidth=2, markersize=5, label='Total Model Output')
         ax1.axhline(y=100, color='black', linestyle='--', linewidth=1.5, label='100% Limit')
         
         if collapse_idx is not None:

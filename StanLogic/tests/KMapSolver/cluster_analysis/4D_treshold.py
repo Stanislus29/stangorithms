@@ -4,8 +4,8 @@ import statistics
 
 # Use script directory as base
 script_dir = os.path.dirname(os.path.abspath(__file__))
-csv_path3d = os.path.join(script_dir, "..", "outputs", "cluster_formation", "cluster_analysis_results_20260130_161443.csv")
-csv_path4d = os.path.join(script_dir, "..", "outputs", "cluster_formation", "merged_4d_results_20260201_005909.csv")
+csv_path3d = os.path.join(script_dir, "..", "outputs", "cluster_formation", "cluster_analysis3d_results_20260206_164938.csv")
+csv_path4d = os.path.join(script_dir, "..", "outputs", "cluster_formation", "cluster_analysis4d_results_20260207_011244.csv")
 output_csv = os.path.join(script_dir, "..", "outputs", "cluster_formation", "4d_threshold_analysis.csv")
 
 def read_csv_with_info_density(csv_path):
@@ -86,7 +86,7 @@ def save_collapse_analysis_to_csv(collapse_data, output_path):
     try:
         with open(output_path, 'w', newline='', encoding='utf-8') as f:
             fieldnames = ['n', 'k', 'raw_coverage', 'capped_coverage', 'status', 
-                         'C_19', 'geometric_ratio', 'I_sat', 'density']
+                         'C_18', 'geometric_ratio', 'I_sat', 'density']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(collapse_data)
@@ -341,8 +341,8 @@ for density in sorted(data_by_density_4d.keys()):
     
     density_data = data_by_density_4d[density]
     
-    # Find n=19 data for this density
-    n19_data = [row for row in density_data if int(row.get('num_vars', 0)) == 19]
+    # Find n=18 data for this density
+    n18_data = [row for row in density_data if int(row.get('num_vars', 0)) == 18]
     
     # Get I_sat for this density
     density_i_sat = None
@@ -358,23 +358,23 @@ for density in sorted(data_by_density_4d.keys()):
             density_ratio = result['avg_geometric_ratio']
             break
     
-    if n19_data and density_i_sat and density_ratio:
-        C_19 = float(n19_data[0].get('avg_4d_clusters', 0))
-        actual_coverage_19 = float(n19_data[0].get('avg_coverage_ratio', 0)) * 100  # Convert to percentage
+    if n18_data and density_i_sat and density_ratio:
+        C_18 = float(n18_data[0].get('avg_4d_clusters', 0))
+        actual_coverage_18 = float(n18_data[0].get('avg_coverage_ratio', 0)) * 100  # Convert to percentage
             
         print(f"Parameters:")
-        print(f"  C_19 (clusters at n=19): {C_19:.2f}")
+        print(f"  C_18 (clusters at n=18): {C_18:.2f}")
         print(f"  r (geometric ratio): {density_ratio:.4f}")
         print(f"  I_sat: {density_i_sat:.2f}")
         print(f"  Density: {density}")
-        print(f"  Actual coverage at n=19: {actual_coverage_19:.2f}%")
-        print(f"\nModeling coverage for n ≥ 20:")
-        print(f"  Formula: coverage = (C_19 * r^k * I_sat) / (density * 2^n) * 100")
+        print(f"  Actual coverage at n=18: {actual_coverage_18:.2f}%")
+        print(f"\nModeling coverage for n ≥ 19:")
+        print(f"  Formula: coverage = (C_18 * r^k * I_sat) / (density * 2^n) * 100")
         print()
         
         # Model coverage for increasing n
-        n_start = 20
-        max_n = 64  # Set a reasonable limit
+        n_start = 19
+        max_n = 50  # Set a reasonable limit
         
         coverages = []
         collapse_data = []  # Store data for CSV export
@@ -385,10 +385,10 @@ for density in sorted(data_by_density_4d.keys()):
         print("-" * 80)
         
         for n in range(n_start, max_n + 1):
-            k = n - 19  # k starts at 1 for n=20
+            k = n - 18  # k starts at 1 for n=19
             
             # Calculate predicted coverage (uncapped)
-            numerator = C_19 * (density_ratio ** k) * density_i_sat
+            numerator = C_18 * (density_ratio ** k) * density_i_sat
             denominator = density * (2 ** n)
             coverage_raw = (numerator / denominator) * 100
                 
@@ -423,7 +423,7 @@ for density in sorted(data_by_density_4d.keys()):
                 'raw_coverage': round(coverage_raw, 4),
                 'capped_coverage': round(coverage_pct, 4),
                 'status': status,
-                'C_19': C_19,
+                'C_18': C_18,
                 'geometric_ratio': round(density_ratio, 4),
                 'I_sat': round(density_i_sat, 2),
                 'density': density
@@ -478,7 +478,7 @@ for density in sorted(data_by_density_4d.keys()):
                                         f"4d_collapse_density_{density}_analysis.csv")
         save_collapse_analysis_to_csv(collapse_data, collapse_csv_path)
     else:
-        print(f"⚠ Skipping density {density}: Missing data (n=19, I_sat, or geometric ratio)")
+        print(f"⚠ Skipping density {density}: Missing data (n=18, I_sat, or geometric ratio)")
 
 # Summary table
 print(f"\n{'='*70}")
