@@ -298,7 +298,7 @@ def create_histograms_pdf(all_results, all_stats):
 
 def save_unified_statistics_txt(all_stats, all_results):
     """Save unified statistical summary to text file for all densities."""
-    with open(STATS_TXT, 'w') as f:
+    with open(STATS_TXT, 'w', encoding='utf-8') as f:
         f.write("="*80 + "\n")
         f.write("  DENSE 4-VARIABLE K-MAP TERMS ANALYSIS - UNIFIED RESULTS\n")
         f.write("="*80 + "\n\n")
